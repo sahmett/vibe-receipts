@@ -48,7 +48,8 @@ the records **you** put in:
 Claude's replies, tool calls and results, subagent traffic, compaction summaries, IDE/system
 injections, background-task notifications and "interrupted" markers are **not** prompts.
 
-Then: if the gap between two consecutive prompts is **≤ 15 min**, it counts as work. In AI-assisted
+Then: if the gap between two consecutive prompts is **within your break threshold** (below), it
+counts as work. In AI-assisted
 coding, waiting for Claude, reviewing its output and deciding what to ask next *is* the work.
 A longer gap is a break and is dropped.
 
@@ -56,19 +57,30 @@ A longer gap is a break and is dropped.
 10:00  you: "add auth"           
 10:03  you: "use magic links"    → +3 min
 10:09  you: answer to a question → +6 min
-10:51  you: "now the tests"      → 42 min gap > 15 → break, not counted
+10:51  you: "now the tests"      → 42 min gap > threshold → break, not counted
 10:54  you: "fix the flaky one"  → +3 min
                                    = 12 min
 ```
 
-### Why 15 minutes? Your rhythm decides
-The threshold is not a guess. The report shows the distribution of your gaps between prompts
-(median, P75, P90) and **your own threshold** by Tukey's outlier rule, `Q3 + 1.5 × IQR`:
-anything above it is unusual *for you*. On the project this tool was built on, 424 gaps had a
-median of 3.2 min and a Tukey limit of **15.2 min**; 87 % of gaps were within 15 min.
+### The break threshold is yours, computed from your rhythm
+How long a pause still counts as work differs per person and per project. So the threshold is
+not hard-coded: vibe-receipts takes every gap between your prompts and applies **Tukey's outlier
+rule**, the same rule box plots use:
 
-A sensitivity table shows how much the total moves if the threshold changes, so you can see the
-choice is not hiding anything. Use `--idle auto` to compute with your own threshold instead of 15.
+```
+Q1, Q3   = 25th and 75th percentile of your gaps    ← the middle half: your normal pace
+IQR      = Q3 − Q1
+threshold = Q3 + 1.5 × IQR                          ← beyond this is unusual for you = a break
+```
+
+Example: Q1 = 1.3 min, Q3 = 6.5 min → IQR = 5.2 → threshold = 6.5 + 1.5 × 5.2 = **14.3 min**.
+A project where Claude runs long autonomous tasks between your prompts gets a higher threshold
+(40+ min), because long waits are normal there.
+
+The report tells you which threshold it used and why, and shows a sensitivity table (5 → 60 min)
+so you can see how much the total moves. Want a different one? `--idle 20` (or just ask Claude:
+*"recalculate with 20 minutes"*). With fewer than 20 gaps there is not enough data, so it falls
+back to 15 min and says so.
 
 ### Commits add context
 Commits don't decide the hours. They give the report its "what got built" side: commit count,
@@ -91,12 +103,12 @@ to overestimate AI-heavy work, because Claude writes many lines fast.
 | `--since / --until` | day range `YYYY-MM-DD`, applied to both prompts and commits |
 | `--author` | only this author's commits (`git log --author` pattern) |
 | `--transcripts DIR` | Claude log folder, overrides auto-detection (repeatable, e.g. for a repo cloned in two places) |
-| `--idle MIN\|auto` | break threshold in minutes (default 15), or `auto` for your own Tukey threshold |
+| `--idle MIN` | fixed break threshold in minutes (default: computed from your rhythm) |
 | `--lang en\|tr` | report language (default: from `$LANG`, else English) |
 | `--name` | project name shown in the report |
 | `--out DIR` | output folder (default `~/vibe-receipts`) |
 
-Constants at the top of `receipts.py`: `IDLE`, `SENS` (thresholds in the sensitivity table),
+Constants at the top of `receipts.py`: `IDLE` (fallback threshold), `MIN_GAPS`, `SENS` (thresholds in the sensitivity table),
 `CODE_W`, `VENDOR_RE` / `GEN_RE` (excluded file patterns), and `BREAK` / `CODE_RATE` for the
 fallback estimate.
 

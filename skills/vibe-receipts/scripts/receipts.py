@@ -2,19 +2,21 @@
 """vibe-receipts — how many hours did you really work on a git repo with Claude?
 
 Working time = sum of the gaps between YOUR consecutive prompts in Claude Code session
-logs (~/.claude/projects), where a gap of at most IDLE minutes (default 15) counts as work
-and anything longer is a break. Commits only add context (what got built). For repos with
+logs (~/.claude/projects). A gap up to your break threshold counts as work, anything longer
+is a break. By default the threshold is computed from your own gaps with Tukey's rule
+(Q3 + 1.5·IQR); pass --idle MIN to use a fixed one. Commits only add context (what got built). For repos with
 no session logs, a rough commit-gap estimate is used as a fallback.
 
 Usage:
   python3 receipts.py /path/to/repo
   python3 receipts.py /path/to/repo --since 2026-06-01 --until 2026-06-30
-  python3 receipts.py /path/to/repo --idle auto     # use your own Tukey threshold
+  python3 receipts.py /path/to/repo --idle 20       # fixed 20-minute break threshold
   python3 receipts.py /path/to/repo --lang tr       # Türkçe rapor
 """
 import argparse, datetime, glob, html, json, os, re, subprocess
 
-IDLE       = 15            # minutes: a gap between prompts up to this = work; above = break
+IDLE       = 15            # minutes: fallback threshold when there are too few gaps for Tukey
+MIN_GAPS   = 20            # fewer gaps than this = Tukey threshold is not reliable
 SENS       = [5,10,15,20,30,45,60]   # thresholds shown in the sensitivity table
 BANDS      = [(0,2),(2,5),(5,15),(15,30),(30,60),(60,None)]
 
@@ -48,11 +50,14 @@ L={
    title='Work Time Receipt',commits='commits',prompts='prompts',
    k_time='Working time',k_prompts='Prompts',k_lph='Lines / hour',k_mpp='Min / prompt',k_mpc='Min / commit',k_com='Commits',
    s_rhythm='🫀 Your rhythm',
-   r_med='Median gap',r_p75='P75',r_p90='P90',r_tukey='Your threshold (Q3+1.5·IQR)',
-   r_note='Your typical gap between prompts is {med}. By Tukey\'s outlier rule anything above {tukey} is unusual for you, i.e. a break. This report uses {idle} ({mode}). {pct}% of your gaps are within it.',
-   mode_fixed='fixed',mode_auto='your own threshold',
+   r_q1='Short gaps (1st quartile, Q1 = P25)',r_med='Typical gap (median, P50)',r_q3='Long gaps (3rd quartile, Q3 = P75)',
+   r_iqr='Normal pace (interquartile range, IQR = Q3 − Q1)',r_p90='Rare long gaps (90th percentile, P90)',
+   r_tukey='Break threshold (Tukey upper fence, Q3 + 1.5·IQR)',
+   r_note='Your typical gap between prompts (median) is {med}; the middle half of your gaps (interquartile range) is {q1}–{q3}. By Tukey\'s outlier rule (Q3 + 1.5·IQR) anything above {tukey} is an outlier for you, i.e. a break. This report uses {idle} ({mode}). {pct}% of your gaps are within it (cumulative share).',
+   mode_fixed='set by you',mode_auto='your own threshold, computed automatically',mode_few='default — too few prompts to compute your own',
+   k_thr='Break threshold (Tukey fence)',p_sens='Sensitivity',
    bands=['quick fix / short answer','normal back-and-forth','waiting + reviewing + deciding','grey zone','probably a break','context switch'],
-   s_sens='🎚️ Threshold sensitivity',sens_c=['Threshold','Gaps covered','Working time'],
+   s_sens='🎚️ Threshold sensitivity',sens_c=['Threshold','Gaps within (cumulative %, CDF)','Working time'],
    sens_note='How much the total moves if the break threshold changes. The result is sensitive to it, which is why the threshold comes from your own gap distribution instead of a guess.',
    s_daily='📅 Daily',c=['Date','Day','Prompts','Working time','Commits','Code lines','Lines/h'],tot='TOTAL',
    s_sum='📝 Daily commit log',
@@ -60,18 +65,21 @@ L={
    fb_note='Without session logs this is a rough estimate from gaps between commits (breaks >{b}m dropped) plus {r} min per effective added line. It tends to overestimate AI-heavy work.',
    k_est='Commit estimate',
    p_repo='Repo',p_range='Range',p_time='Working time',p_prompts='Prompts',p_commits='Commits',p_code='Effective code',p_lines='lines',
-   p_rhythm='Rhythm',p_est='Commit estimate (fallback)',p_none='No prompts in range — using the commit estimate.',
+   p_rhythm='Rhythm',rh='Q1 (1st quartile) {q1} · median (P50) {med} · Q3 (3rd quartile) {q3} · IQR (interquartile range) {iqr} · P90 {p90} · Tukey upper fence (Q3+1.5·IQR) {tk}  ({n} gaps)',p_est='Commit estimate (fallback)',p_none='No prompts in range — using the commit estimate.',
    e_none='No commits or prompts found in this range.'),
  'tr':dict(
    h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
    title='Çalışma Süresi Fişi',commits='commit',prompts='prompt',
    k_time='Çalışma süresi',k_prompts='Prompt',k_lph='Satır / saat',k_mpp='Dk / prompt',k_mpc='Dk / commit',k_com='Commit',
    s_rhythm='🫀 Çalışma ritmin',
-   r_med='Medyan aralık',r_p75='P75',r_p90='P90',r_tukey='Senin eşiğin (Q3+1,5·IQR)',
-   r_note='İki prompt arasındaki tipik aralığın {med}. Tukey aykırı değer kuralına göre {tukey} üstü senin için olağan dışı, yani mola. Bu rapor {idle} eşiğini kullanıyor ({mode}). Aralıklarının %{pct}\'i bu eşiğin içinde.',
-   mode_fixed='sabit',mode_auto='senin kendi eşiğin',
+   r_q1='Kısa aralıklar (1. çeyrek, Q1 = P25)',r_med='Tipik aralık (medyan / ortanca, P50)',r_q3='Uzun aralıklar (3. çeyrek, Q3 = P75)',
+   r_iqr='Normal tempo (çeyrekler arası aralık, IQR = Q3 − Q1)',r_p90='Nadir uzun aralıklar (90. yüzdelik, P90)',
+   r_tukey='Mola sınırı (Tukey üst çiti, Q3 + 1,5·IQR)',
+   r_note='İki prompt arasındaki tipik aralığın (medyan) {med}; aralıklarının ortadaki yarısı (çeyrekler arası aralık) {q1}–{q3}. Tukey aykırı değer kuralına göre (Q3 + 1,5·IQR) {tukey} üstü senin için aykırı değer, yani mola. Bu rapor {idle} eşiğini kullanıyor ({mode}). Aralıklarının %{pct}\'i bu eşiğin içinde (kümülatif oran).',
+   mode_fixed='senin seçtiğin',mode_auto='senin ritminden otomatik hesaplandı',mode_few='varsayılan — kendi eşiğini hesaplamak için prompt az',
+   k_thr='Mola sınırı (Tukey çiti)',p_sens='Duyarlılık',
    bands=['hızlı düzeltme / kısa cevap','normal etkileşim','bekleme + inceleme + karar','gri bölge','muhtemel mola','bağlam kopması'],
-   s_sens='🎚️ Eşik duyarlılığı',sens_c=['Eşik','Kapsanan aralık','Çalışma süresi'],
+   s_sens='🎚️ Eşik duyarlılığı',sens_c=['Eşik','Eşik altındaki aralıklar (kümülatif %, CDF)','Çalışma süresi'],
    sens_note='Mola eşiği değişirse toplam ne kadar oynar. Sonuç eşiğe hassas; bu yüzden eşik tahminle değil, senin kendi aralık dağılımından seçiliyor.',
    s_daily='📅 Günlük',c=['Tarih','Gün','Prompt','Çalışma','Commit','Kod satırı','Satır/s'],tot='TOPLAM',
    s_sum='📝 Günlük commit özeti',
@@ -79,7 +87,7 @@ L={
    fb_note='Oturum kaydı olmadığı için bu, commit\'ler arası süreden (>{b}dk molalar atılır) ve eklenen her etkin satıra {r} dk eklenerek yapılan kaba bir tahmin. AI ağırlıklı işte fazla gösterme eğilimindedir.',
    k_est='Commit tahmini',
    p_repo='Repo',p_range='Aralık',p_time='Çalışma süresi',p_prompts='Prompt',p_commits='Commit',p_code='Etkin kod',p_lines='satır',
-   p_rhythm='Ritim',p_est='Commit tahmini (yedek)',p_none='Aralıkta prompt yok — commit tahmini kullanılıyor.',
+   p_rhythm='Ritim',rh='Q1 (1. çeyrek) {q1} · medyan (P50) {med} · Q3 (3. çeyrek) {q3} · IQR (çeyrekler arası aralık) {iqr} · P90 {p90} · Tukey üst çiti (Q3+1,5·IQR) {tk}  ({n} aralık)',p_est='Commit tahmini (yedek)',p_none='Aralıkta prompt yok — commit tahmini kullanılıyor.',
    e_none='Bu aralıkta commit ya da prompt bulunamadı.'),
 }
 
@@ -175,7 +183,7 @@ def main():
     ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
     ap.add_argument('--author',help='only commits by this author (git --author pattern)')
     ap.add_argument('--transcripts',action='append',help='Claude log folder (overrides auto-detection, repeatable)')
-    ap.add_argument('--idle',default=str(IDLE),help=f'break threshold in minutes, or "auto" for your own Tukey threshold (default {IDLE})')
+    ap.add_argument('--idle',default='auto',help='break threshold in minutes; default "auto" = your own Tukey threshold (Q3+1.5·IQR)')
     ap.add_argument('--lang',choices=sorted(L),default=default_lang(),help='report language (default: from $LANG, else en)')
     ap.add_argument('--name',help='project name shown in the report (default: repo folder name)')
     ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='output folder (default ~/vibe-receipts)')
@@ -199,8 +207,9 @@ def main():
     gaps=sorted((prompts[i]-prompts[i-1])/60 for i in range(1,len(prompts)))
     med,q1,q3,p90=pctl(gaps,50),pctl(gaps,25),pctl(gaps,75),pctl(gaps,90)
     tukey=q3+1.5*(q3-q1)
-    auto=a.idle.strip().lower()=='auto'
-    idle=(round(tukey,1) if gaps else IDLE) if auto else float(a.idle)
+    if a.idle.strip().lower()!='auto': mode,idle='fixed',float(a.idle)
+    elif len(gaps)>=MIN_GAPS:          mode,idle='auto',round(tukey,1)
+    else:                              mode,idle='few',float(IDLE)
 
     def active(thr):
         tot=0; per={}
@@ -242,8 +251,10 @@ def main():
     print(f"{T['p_repo']:<15}: {repo}")
     print(f"{T['p_range']:<15}: {d0} → {d1}")
     if has_p:
-        print(f"{T['p_time']:<15}: {hm(work)}   ({len(prompts)} {T['prompts']}, idle {idle:g}m, {len(dirs)} dir)")
-        print(f"{T['p_rhythm']:<15}: median {med:.1f}m · P75 {q3:.1f}m · P90 {p90:.1f}m · tukey {tukey:.1f}m")
+        print(f"{T['p_time']:<15}: {hm(work)}   ({len(prompts)} {T['prompts']}, {len(dirs)} dir)")
+        print(f"{T['k_thr']}: {mins(idle)}   ({T['mode_'+mode]})")
+        print(f"{T['p_rhythm']:<15}: "+T['rh'].format(q1=mins(q1),med=mins(med),q3=mins(q3),iqr=mins(q3-q1),p90=mins(p90),tk=mins(tukey),n=len(gaps)))
+        print(f"{T['p_sens']:<15}: "+' · '.join(f"{mins(t)} → {hm(active(t)[0])}" for t in sorted(set(SENS+[idle]))))
     else:
         print(T['p_none'])
         print(f"{T['p_est']:<15}: {hm(est)}")
@@ -258,7 +269,7 @@ def main():
     sub=(f'{len(prompts):,} {T["prompts"]} · ' if has_p else '')+f'{len(commits)} {T["commits"]} · {d0} → {d1}'
     P.append(f'<header><h1>🧾 {e(name)} · {T["title"]}</h1><div class="sub">{sub}</div></header>')
     if has_p:
-        K=[(hm(work),T['k_time'],1),(f'{len(prompts):,}',T['k_prompts'],0),(f'{lph:,.0f}',T['k_lph'],0),
+        K=[(hm(work),T['k_time'],1),(mins(idle),T['k_thr'],0),(f'{len(prompts):,}',T['k_prompts'],0),(f'{lph:,.0f}',T['k_lph'],0),
            (mins(mpp),T['k_mpp'],0),(mins(mpc) if commits else '—',T['k_mpc'],0),(str(len(commits)),T['k_com'],0)]
     else:
         K=[(hm(est),T['k_est'],1),(f'{lph:,.0f}',T['k_lph'],0),(mins(mpc),T['k_mpc'],0),(str(len(commits)),T['k_com'],0)]
@@ -268,13 +279,13 @@ def main():
         within=100*sum(1 for g in gaps if g<=idle)/len(gaps)
         P.append(f'<h2>{T["s_rhythm"]}</h2><div class="card">')
         P.append('<div class="stats">'+''.join(f'<div class="st{" hi" if hi else ""}"><div class="v">{mins(v)}</div><div class="l">{l}</div></div>'
-                 for v,l,hi in [(med,T['r_med'],0),(q3,T['r_p75'],0),(p90,T['r_p90'],0),(tukey,T['r_tukey'],1)])+'</div>')
+                 for v,l,hi in [(q1,T['r_q1'],0),(med,T['r_med'],0),(q3,T['r_q3'],0),(q3-q1,T['r_iqr'],0),(p90,T['r_p90'],0),(tukey,T['r_tukey'],1)])+'</div>')
         cnt=[sum(1 for g in gaps if lo<=g<(hi if hi is not None else 1e18)) for lo,hi in BANDS]
         cols=['#34d399','#34d399','#34d399','#fbbf24','#f87171','#f87171']
         for (lo,hi),n,lbl,col in zip(BANDS,cnt,T['bands'],cols):
             rng=f'{lo}–{hi}' if hi is not None else f'{lo}+'
             P.append(f'<div class="scn"><div class="nm"><b>{rng}</b> · {lbl}</div>{bar(n,max(cnt),col)}<div class="vl">{100*n/len(gaps):.0f}%</div></div>')
-        P.append(f'<div class="note">{e(T["r_note"].format(med=mins(med),tukey=mins(tukey),idle=mins(idle),mode=T["mode_auto"] if auto else T["mode_fixed"],pct=f"{within:.0f}"))}</div></div>')
+        P.append(f'<div class="note">{e(T["r_note"].format(q1=mins(q1),q3=mins(q3),med=mins(med),tukey=mins(tukey),idle=mins(idle),mode=T["mode_"+mode],pct=f"{within:.0f}"))}</div></div>')
 
         P.append(f'<h2>{T["s_sens"]}</h2><div class="card"><table>')
         C=T['sens_c']; P.append(f'<tr><th>{C[0]}</th><th class="r">{C[1]}</th><th>{C[2]}</th></tr>')
@@ -325,13 +336,13 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#0f1117;c
 h1{font-size:28px;font-weight:800;letter-spacing:-.5px}
 h2{font-size:19px;margin:36px 0 14px;padding-bottom:8px;border-bottom:1px solid #272b36;color:#fff}
 .sub{color:#8b90a0;margin-top:6px;font-size:14px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-top:26px}
-.kpi{background:#171a23;border:1px solid #242938;border-radius:14px;padding:16px}
-.kpi .v{font-size:22px;font-weight:800;color:#e6e8ee}.kpi .l{font-size:11.5px;color:#8b90a0;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
-.kpi.hero{background:linear-gradient(135deg,#2a2147,#171a23);border-color:#4c3d85}.kpi.hero .v{color:#c4b5fd;font-size:26px}
+.kpis{display:grid;grid-template-columns:1.3fr repeat(3,1fr);gap:10px;margin-top:26px}
+.kpi{background:#171a23;border:1px solid #242938;border-radius:14px;padding:14px}
+.kpi .v{font-size:20px;font-weight:800;color:#e6e8ee}.kpi .l{font-size:10.5px;color:#8b90a0;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.kpi.hero{background:linear-gradient(135deg,#2a2147,#171a23);border-color:#4c3d85}.kpi.hero{grid-row:span 2;display:flex;flex-direction:column;justify-content:center}.kpi.hero .v{color:#c4b5fd;font-size:34px}.kpi .v{white-space:nowrap}
 .card{background:#171a23;border:1px solid #242938;border-radius:14px;padding:22px;margin-top:14px}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
-.st{background:#13161f;border:1px solid #242938;border-radius:10px;padding:12px 14px}.st .v{font-size:19px;font-weight:800}.st .l{font-size:11.5px;color:#8b90a0;text-transform:uppercase;letter-spacing:.4px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-bottom:16px}
+.st{background:#13161f;border:1px solid #242938;border-radius:10px;padding:12px 14px}.st .v{font-size:19px;font-weight:800}.st .l{font-size:12.5px;color:#8b90a0;margin-top:2px}
 .st.hi{border-color:#34d399}.st.hi .v{color:#34d399}
 .scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -347,7 +358,7 @@ tr.sel td{color:#fff;font-weight:700;background:#1c2030}
 .dayblk h3{font-size:15px;color:#fff;display:flex;justify-content:space-between}.dayblk h3 .hrs{font-size:13px;color:#a78bfa;font-weight:700}
 .dayblk ul{margin:8px 0 0 18px}.dayblk li{font-size:13.5px;color:#aeb3c2;margin:5px 0}
 .foot{text-align:center;color:#5d6273;font-size:12px;margin-top:38px}
-@media (max-width:600px){.scn .nm{width:150px}}"""
+@media (max-width:600px){.scn .nm{width:150px}.kpis{grid-template-columns:1fr 1fr}.kpi.hero{grid-row:auto;grid-column:span 2}}"""
 
 if __name__=='__main__':
     main()

@@ -10,9 +10,13 @@ Measures working time on a git repo from the user's own prompts in Claude Code s
 
 - **Prompts** = messages the user typed + answers to `AskUserQuestion`. Claude replies, tool results,
   subagent traffic, compaction summaries and system/IDE injections are excluded.
-- **Working time** = sum of gaps between consecutive prompts that are ≤ 15 min (longer = break).
-- The report also shows the user's rhythm (median / P75 / P90 gap) and their personal threshold
-  by Tukey's rule (Q3 + 1.5·IQR), plus a threshold-sensitivity table.
+- **Working time** = sum of gaps between consecutive prompts that are ≤ the break threshold
+  (longer = break).
+- **Break threshold** is computed automatically from the user's own gaps with Tukey's rule:
+  `Q3 + 1.5 × IQR` (Q1/Q3 = 25th/75th percentile of the gaps, IQR = Q3 − Q1). With fewer than
+  20 gaps it falls back to 15 min. The user can override it with `--idle MIN`.
+- The report shows the rhythm (Q1 / median / Q3 / P90), the threshold used and why, and a
+  threshold-sensitivity table.
 - Commits only add context: lines of code, lines/hour, minutes/commit, a daily commit log.
 - With no session logs, it falls back to a rough commit-gap estimate (clearly labelled).
 
@@ -21,7 +25,7 @@ Measures working time on a git repo from the user's own prompts in Claude Code s
 The script lives next to this file: `scripts/receipts.py` (Python 3 stdlib only).
 
 ```bash
-python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--author PATTERN] [--idle MIN|auto] [--lang en|tr]
+python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--author PATTERN] [--idle MIN] [--lang en|tr]
 ```
 
 - `<repo-path>`: default to the current working directory if the user did not name a repo.
@@ -30,8 +34,8 @@ python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [-
 - Reports go to `~/vibe-receipts/` (`<repo>-report.html` + `<repo>-daily.csv`). Never write them
   inside the analysed repo, and never commit them anywhere — they are personal work data.
 - `--lang tr` when the user writes in Turkish, otherwise `--lang en`.
-- `--idle auto` uses the user's own Tukey threshold instead of 15 min. Offer it when their threshold
-  (printed on the `Rhythm` line) is far from 15, e.g. long autonomous Claude runs between prompts.
+- Leave `--idle` out by default (automatic threshold). Pass `--idle MIN` only when the user asks for
+  a specific threshold ("recalculate with 20 minutes", "15 dk ile hesapla"); re-run and compare.
 - If the same repo lives in two folders (two clones, or a moved folder), pass every matching
   `~/.claude/projects/...` folder with repeated `--transcripts`.
 
@@ -41,11 +45,31 @@ After running, read the printed summary and the CSV, then answer in the user's l
 
 - **The headline number first:** working time from prompts (or say clearly it is the commit
   fallback when there were no session logs).
-- Range, prompt and commit counts, and their rhythm: median gap and personal threshold. If the
-  threshold is far from 15 min, mention how much `--idle auto` would change the total.
+- **The break threshold, always.** Read the `Break threshold` / `Mola sınırı` line: say the value and
+  how it was set (computed from their rhythm / set by them / default because too few prompts).
+  Explain it in one plain sentence from the `Rhythm` line, e.g. "half of your gaps are between
+  Q1 and Q3 min; a gap longer than Q3 + 1.5 × that range is unusual for you, so it counts as a break".
+- Show 2–3 alternatives from the `Sensitivity` line (e.g. 10 / 15 / 30 min) and offer to recompute
+  with any threshold they choose.
+- Range, prompt and commit counts.
 - The busiest days (from the CSV), and a short summary of what was done per day based on the
   commit subjects (`git -C <repo> log --since ... --until ... --pretty='%ad %s' --date=short`).
 - The path to the HTML report, and open it if the environment can show files.
+
+## Name things twice: plain words + the math term
+
+Whenever you mention a statistic, give the everyday meaning and its mathematical name together, in
+the user's language, e.g.:
+
+| Plain | Math term (EN) | Math term (TR) |
+|---|---|---|
+| typical gap | median, P50 | medyan / ortanca, P50 |
+| short gaps / long gaps | 1st / 3rd quartile, Q1 = P25 / Q3 = P75 | 1. / 3. çeyrek |
+| normal pace (middle half of gaps) | interquartile range, IQR = Q3 − Q1 | çeyrekler arası aralık |
+| rare long gaps | 90th percentile, P90 | 90. yüzdelik |
+| break threshold | Tukey upper fence, Q3 + 1.5·IQR | Tukey üst çiti |
+| a break | outlier | aykırı değer |
+| share of gaps under a threshold | cumulative distribution (CDF) | kümülatif dağılım |
 
 ## Caveats to mention when relevant
 
