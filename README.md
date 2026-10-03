@@ -1,11 +1,13 @@
-# ⏳ hourglass-ledger
+# 🧾 vibe-receipts
+
+> **Vibe coding'in fişi.** Claude'la gerçekte kaç saat çalıştın? Commit'ler tahmin eder, loglar kanıtlar.
 
 Bir git reposunda harcanan **gerçek çalışma süresini**, git geçmişinden ve
 Claude Code oturum kayıtlarından tahmin eden küçük bir araç.
 Tek dosya, bağımlılık yok (yalnız Python 3 standart kütüphanesi).
 
 ```bash
-python3 hourglass.py ~/path/to/repo
+python3 receipts.py ~/path/to/repo
 ```
 
 Çıktı: `output/<repo>-rapor.html` (görsel rapor) ve `output/<repo>-gunluk.csv` (günlük döküm).
@@ -51,10 +53,10 @@ edilip çıkarılır. Commit yöntemiyle aynı mantık ama çok daha yoğun veri
 bir projede gerçek değere oturt:
 
 ```bash
-python3 hourglass.py ~/path/to/repo --since 2026-06-01 --until 2026-06-30 --calibrate
+python3 receipts.py ~/path/to/repo --since 2026-06-01 --until 2026-06-30 --calibrate
 ```
 
-Çıkan değeri `hourglass.py` başındaki `KOD_ORANI`'ya yaz. Toplam bu yüzden tasarım
+Çıkan değeri `receipts.py` başındaki `KOD_ORANI`'ya yaz. Toplam bu yüzden tasarım
 gereği transcript'e oturur. Modelin asıl bağımsız testi **günlük dağılımdır**.
 
 ## Parametreler

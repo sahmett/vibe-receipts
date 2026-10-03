@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""hourglass-ledger — bir git reposunda harcanan çalışma süresini tahmin eder.
+"""vibe-receipts — bir git reposunda harcanan çalışma süresini tahmin eder.
 
 İki bağımsız katman:
   1) Tahmin   — commit'ler arası süre × efor oranı (kod yoğunluğundan türer)
   2) Gerçek   — Claude Code oturum kayıtlarındaki (~/.claude/projects) olay zaman damgaları
 
 Kullanım:
-  python3 hourglass.py /path/to/repo
-  python3 hourglass.py /path/to/repo --since 2026-06-01 --until 2026-06-30
-  python3 hourglass.py /path/to/repo --calibrate     # KOD_ORANI'yı transcript'e oturt
+  python3 receipts.py /path/to/repo
+  python3 receipts.py /path/to/repo --since 2026-06-01 --until 2026-06-30
+  python3 receipts.py /path/to/repo --calibrate     # KOD_ORANI'yı transcript'e oturt
 """
 import argparse, datetime, glob, html, json, os, re, subprocess
 
@@ -205,7 +205,7 @@ def main():
         items=''.join(f'<li>{e(s)}</li>' for s in dsubj[d])
         P.append(f'<div class="dayblk"><h3>{d[5:]} · {dow(d)} <span class="hrs">{hm(day_tot[d])} · {dcom[d]} commit</span></h3><ul>{items}</ul></div>')
 
-    P.append(f'<div class="foot">hourglass-ledger · {e(name)} · {datetime.date.today()}</div></div></body></html>')
+    P.append(f'<div class="foot">vibe-receipts · {e(name)} · {datetime.date.today()}</div></div></body></html>')
 
     os.makedirs(a.out,exist_ok=True)
     out=os.path.join(a.out,f'{name}-rapor.html')
