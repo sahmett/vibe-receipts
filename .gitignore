@@ -1,0 +1,8 @@
+# Çıktılar kişisel çalışma verisi içerir — asla commit'leme
+output/
+*.html
+*.jpg
+*.png
+*.csv
+.DS_Store
+__pycache__/
