@@ -2,7 +2,7 @@
 """Builds the README demo from 100% synthetic data.
 
 Creates a throwaway git repo ("pixel-pantry", a made-up recipe app) with back-dated
-commits plus fake Claude Code session logs, then renders the report with receipts.py.
+commits plus fake Claude Code session logs (your prompts + Claude replies), then renders the report with receipts.py.
 No real repo or transcript is read.
 
   python3 demo/make_demo.py            # -> demo/out/pixel-pantry-report.html
@@ -71,17 +71,23 @@ def main():
                      GIT_AUTHOR_NAME='Demo Dev',GIT_AUTHOR_EMAIL='demo@example.com',
                      GIT_COMMITTER_NAME='Demo Dev',GIT_COMMITTER_EMAIL='demo@example.com')
             git(repo,'commit','-q','-m',subj,env=env)
-            # fake Claude session: dense events from shortly before the previous commit to this one
+            # fake Claude session: your prompts every few minutes (sometimes a longer think),
+            # each followed by Claude replies / tool calls that must NOT count as prompts
             start=(prev or t-datetime.timedelta(minutes=random.randint(14,24)))
             if (t-start).total_seconds()>150*60: start=t-datetime.timedelta(minutes=random.randint(14,24))
             cur=start
-            while cur<t+datetime.timedelta(minutes=random.randint(4,9)):
-                events.append(cur)
-                cur+=datetime.timedelta(seconds=random.choice([random.randint(5,90)]*9+[random.randint(240,700)]))
+            while cur<t+datetime.timedelta(minutes=random.randint(2,6)):
+                events.append(('user',cur))
+                for k in range(random.randint(1,4)):
+                    events.append(('assistant',cur+datetime.timedelta(seconds=random.randint(5,90)*(k+1))))
+                gap=random.choices([random.uniform(.3,2),random.uniform(2,5),random.uniform(5,12),random.uniform(16,28)],weights=[30,40,24,6])[0]
+                cur+=datetime.timedelta(minutes=gap)
             prev=t
     with open(os.path.join(logs,'session.jsonl'),'w') as f:
-        for e in events:
-            f.write(json.dumps({'type':'assistant','timestamp':e.astimezone(datetime.timezone.utc).isoformat().replace('+00:00','Z')})+'\n')
+        for kind,e in events:
+            rec={'type':kind,'timestamp':e.astimezone(datetime.timezone.utc).isoformat().replace('+00:00','Z')}
+            rec['message']={'role':kind,'content':'demo prompt' if kind=='user' else [{'type':'text','text':'demo reply'}]}
+            f.write(json.dumps(rec)+'\n')
 
     subprocess.run([sys.executable,os.path.join(ROOT,'skills','vibe-receipts','scripts','receipts.py'),repo,
                     '--transcripts',logs,'--lang','en','--out',OUT],check=True)

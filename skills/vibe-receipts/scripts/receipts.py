@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""vibe-receipts — how many hours did you really work on a git repo?
+"""vibe-receipts — how many hours did you really work on a git repo with Claude?
 
-Two independent layers:
-  1) Estimate      — gaps between commits × an effort ratio derived from code density
-  2) Ground truth  — event timestamps in Claude Code session logs (~/.claude/projects)
+Working time = sum of the gaps between YOUR consecutive prompts in Claude Code session
+logs (~/.claude/projects), where a gap of at most IDLE minutes (default 15) counts as work
+and anything longer is a break. Commits only add context (what got built). For repos with
+no session logs, a rough commit-gap estimate is used as a fallback.
 
 Usage:
   python3 receipts.py /path/to/repo
   python3 receipts.py /path/to/repo --since 2026-06-01 --until 2026-06-30
-  python3 receipts.py /path/to/repo --calibrate     # fit CODE_RATE to the transcript total
+  python3 receipts.py /path/to/repo --idle auto     # use your own Tukey threshold
   python3 receipts.py /path/to/repo --lang tr       # Türkçe rapor
 """
 import argparse, datetime, glob, html, json, os, re, subprocess
 
-# ===== EFFORT RATIO MODEL =====
-# Effort ratio = 1 + (effective added code × CODE_RATE) / Measured
-# TOTAL        = Measured × Effort ratio
-# No fixed "fudge" percentage; the uplift comes entirely from code density.
-BREAK     = 150*60    # a gap longer than this = break (0); every shorter gap counts in full
-CODE_RATE = 0.02      # minutes per effective added line (fit it with --calibrate)
-TR_IDLE   = 15*60     # transcript: gap between events up to this = active; above = away
+IDLE       = 15            # minutes: a gap between prompts up to this = work; above = break
+SENS       = [5,10,15,20,30,45,60]   # thresholds shown in the sensitivity table
+BANDS      = [(0,2),(2,5),(5,15),(15,30),(30,60),(60,None)]
+
+# Fallback commit estimate (only used when there are no session logs)
+BREAK      = 150*60        # gap between commits longer than this = break
+CODE_RATE  = 0.02          # minutes per effective added line
 
 # Weights for added lines (only real code/config; docs/vendor/generated weigh 0)
 CODE_W = {'code':1.0, 'config':0.4, 'arch':0.0, 'doc':0.0, 'vendor':0.0, 'gen':0.0}
@@ -38,40 +39,48 @@ def kind(path):
     return 'code'
 
 NOISE=re.compile(r'^(Merge pull request|Merge branch|Merge remote-tracking|index on |On \S+: )')
+# "user" records you did not type: IDE context, slash-command echoes, system/harness injections
+NOISE_TAG=re.compile(r'<(ide_opened_file|ide_selection|command-name|command-message|command-args|local-command|system-reminder|task-notification)')
 
 L={
  'en':dict(
    h='h',m='m',dow=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
-   title='Work Time Receipt',commits='commits',events='Claude events',
-   k_real='Real (Claude sessions)',k_est='Estimate (commit model)',k_diff='Gap between methods',k_com='Commits',
-   s_verify='🎯 Two-method check',v_real='🟢 Real — Claude transcript active time',v_est='🟣 Estimate — commit effort-ratio model',
-   v_note='Transcript = active time measured from {n} events (gaps ≤{idle}m between events). This is the ground truth; the commit model is a portable approximation for projects without transcripts. Work done outside Claude Code is not in the transcript.',
-   s_time='⏱️ Time breakdown',f_ratio='Effort ratio',f_added='effective added code',f_meas='Measured',f_total='TOTAL',
-   t_meas='Measured (between commits)',t_code='× Effort ratio ({r}) — code effort',
-   t_note='Breaks (>{b}m) and copied/vendor lines excluded. {p}% of raw lines were copied/vendor.',
-   w=['code ×1.0','config ×0.4','docs ×0','copied/vendor ×0','generated ×0'],
-   s_daily='📅 Daily work & code',c=['Date','Day','Commits','Measured','Effort','Estimate','🟢 Real','Lines +/−'],tot='TOTAL',
+   title='Work Time Receipt',commits='commits',prompts='prompts',
+   k_time='Working time',k_prompts='Prompts',k_lph='Lines / hour',k_mpp='Min / prompt',k_mpc='Min / commit',k_com='Commits',
+   s_rhythm='🫀 Your rhythm',
+   r_med='Median gap',r_p75='P75',r_p90='P90',r_tukey='Your threshold (Q3+1.5·IQR)',
+   r_note='Your typical gap between prompts is {med}. By Tukey\'s outlier rule anything above {tukey} is unusual for you, i.e. a break. This report uses {idle} ({mode}). {pct}% of your gaps are within it.',
+   mode_fixed='fixed',mode_auto='your own threshold',
+   bands=['quick fix / short answer','normal back-and-forth','waiting + reviewing + deciding','grey zone','probably a break','context switch'],
+   s_sens='🎚️ Threshold sensitivity',sens_c=['Threshold','Gaps covered','Working time'],
+   sens_note='How much the total moves if the break threshold changes. The result is sensitive to it, which is why the threshold comes from your own gap distribution instead of a guess.',
+   s_daily='📅 Daily',c=['Date','Day','Prompts','Working time','Commits','Code lines','Lines/h'],tot='TOTAL',
    s_sum='📝 Daily commit log',
-   p_repo='Repo',p_range='Range',p_meas='Measured',p_code='Effective code',p_lines='lines',p_eff='Code effort',p_ratio='EFFORT RATIO',p_total='ESTIMATED TOTAL',
-   p_tr='Transcript active (idle {idle}m)',p_ev='events',p_dirs='folders',p_notr='No transcripts found — commit estimate only.',
-   p_cal='Calibrated CODE_RATE: {v:.4f} min/line (write it into CODE_RATE at the top of the script)',
-   e_none='No commits found in this range.',e_cal='Calibration needs both transcripts and added code.'),
+   fb_title='No Claude session logs found — fallback estimate',
+   fb_note='Without session logs this is a rough estimate from gaps between commits (breaks >{b}m dropped) plus {r} min per effective added line. It tends to overestimate AI-heavy work.',
+   k_est='Commit estimate',
+   p_repo='Repo',p_range='Range',p_time='Working time',p_prompts='Prompts',p_commits='Commits',p_code='Effective code',p_lines='lines',
+   p_rhythm='Rhythm',p_est='Commit estimate (fallback)',p_none='No prompts in range — using the commit estimate.',
+   e_none='No commits or prompts found in this range.'),
  'tr':dict(
    h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
-   title='Çalışma Süresi Fişi',commits='commit',events='Claude olayı',
-   k_real='Gerçek (Claude oturumları)',k_est='Tahmin (commit modeli)',k_diff='İki yöntem farkı',k_com='Commit',
-   s_verify='🎯 İki yöntemle doğrulama',v_real='🟢 Gerçek — Claude transcript aktif süresi',v_est='🟣 Tahmin — commit efor-oranı modeli',
-   v_note='Transcript = {n} olaydan ölçülen aktif süre (ardışık olaylar arası ≤{idle}dk). Asıl yer-gerçeği budur; commit modeli transcript\'i olmayan projeler için taşınabilir yaklaşıklıktır. Claude dışında elle yapılan iş transcript\'e girmez.',
-   s_time='⏱️ Süre analizi',f_ratio='Efor oranı',f_added='eklenen etkin kod',f_meas='Ölçülen',f_total='TOPLAM',
-   t_meas='Ölçülen (commit arası)',t_code='× Efor oranı ({r}) — kod eforu',
-   t_note='Molalar (>{b}dk) ve kopya/vendor satırlar dışlandı. Ham satırların %{p}\'i kopya/vendor.',
-   w=['kod ×1.0','config ×0.4','docs ×0','kopya/vendor ×0','üretilmiş ×0'],
-   s_daily='📅 Günlük çalışma & kod',c=['Tarih','Gün','Commit','Ölçülen','Efor','Tahmin','🟢 Gerçek','Satır +/−'],tot='TOPLAM',
+   title='Çalışma Süresi Fişi',commits='commit',prompts='prompt',
+   k_time='Çalışma süresi',k_prompts='Prompt',k_lph='Satır / saat',k_mpp='Dk / prompt',k_mpc='Dk / commit',k_com='Commit',
+   s_rhythm='🫀 Çalışma ritmin',
+   r_med='Medyan aralık',r_p75='P75',r_p90='P90',r_tukey='Senin eşiğin (Q3+1,5·IQR)',
+   r_note='İki prompt arasındaki tipik aralığın {med}. Tukey aykırı değer kuralına göre {tukey} üstü senin için olağan dışı, yani mola. Bu rapor {idle} eşiğini kullanıyor ({mode}). Aralıklarının %{pct}\'i bu eşiğin içinde.',
+   mode_fixed='sabit',mode_auto='senin kendi eşiğin',
+   bands=['hızlı düzeltme / kısa cevap','normal etkileşim','bekleme + inceleme + karar','gri bölge','muhtemel mola','bağlam kopması'],
+   s_sens='🎚️ Eşik duyarlılığı',sens_c=['Eşik','Kapsanan aralık','Çalışma süresi'],
+   sens_note='Mola eşiği değişirse toplam ne kadar oynar. Sonuç eşiğe hassas; bu yüzden eşik tahminle değil, senin kendi aralık dağılımından seçiliyor.',
+   s_daily='📅 Günlük',c=['Tarih','Gün','Prompt','Çalışma','Commit','Kod satırı','Satır/s'],tot='TOPLAM',
    s_sum='📝 Günlük commit özeti',
-   p_repo='Repo',p_range='Aralık',p_meas='Ölçülen',p_code='Eklenen etkin kod',p_lines='satır',p_eff='Kod eforu',p_ratio='EFOR ORANI',p_total='TAHMİN TOPLAM',
-   p_tr='Transcript gerçek aktif (IDLE {idle}dk)',p_ev='olay',p_dirs='klasör',p_notr='Transcript bulunamadı — yalnız commit tahmini raporlanacak.',
-   p_cal='Kalibre CODE_RATE: {v:.4f} dk/satır (script başındaki CODE_RATE\'e yazabilirsin)',
-   e_none='Bu aralıkta commit bulunamadı.',e_cal='Kalibrasyon için transcript ve eklenen kod gerekli.'),
+   fb_title='Claude oturum kaydı yok — yedek tahmin',
+   fb_note='Oturum kaydı olmadığı için bu, commit\'ler arası süreden (>{b}dk molalar atılır) ve eklenen her etkin satıra {r} dk eklenerek yapılan kaba bir tahmin. AI ağırlıklı işte fazla gösterme eğilimindedir.',
+   k_est='Commit tahmini',
+   p_repo='Repo',p_range='Aralık',p_time='Çalışma süresi',p_prompts='Prompt',p_commits='Commit',p_code='Etkin kod',p_lines='satır',
+   p_rhythm='Ritim',p_est='Commit tahmini (yedek)',p_none='Aralıkta prompt yok — commit tahmini kullanılıyor.',
+   e_none='Bu aralıkta commit ya da prompt bulunamadı.'),
 }
 
 def default_lang():
@@ -79,6 +88,11 @@ def default_lang():
     return 'tr' if loc.lower().startswith('tr') else 'en'
 
 def day_of(t): return datetime.datetime.fromtimestamp(t).strftime('%Y-%m-%d')
+
+def pctl(xs,p):
+    if not xs: return 0
+    k=(len(xs)-1)*p/100; f=int(k); c=min(f+1,len(xs)-1)
+    return xs[f]+(xs[c]-xs[f])*(k-f)
 
 def claude_dirs(repo):
     """Claude Code turns every non-alphanumeric character of the project path into '-'.
@@ -89,7 +103,7 @@ def claude_dirs(repo):
             if os.path.basename(d)==enc or os.path.basename(d).startswith(enc+'--claude-worktrees-')]
 
 def load_commits(repo,author,since,until):
-    cmd=['git','-C',repo,'log','--all','--no-merges','--reverse','--pretty=format:C|%at|%s','--numstat']
+    cmd=['git','-C',repo,'log','--all','--no-merges','--pretty=format:C|%at|%s','--numstat']
     if author: cmd.append(f'--author={author}')
     raw=subprocess.check_output(cmd,text=True,errors='ignore')
     commits=[];cur=None
@@ -110,149 +124,188 @@ def load_commits(repo,author,since,until):
         seen.add(k); out.append(c)
     return out
 
-def load_transcript(dirs,since,until):
-    tts=set()
+def parse_ts(o):
+    t=o.get('timestamp')
+    if not t: return None
+    try: return datetime.datetime.fromisoformat(t.replace('Z','+00:00')).timestamp()
+    except Exception: return None
+
+def text_of(c):
+    if isinstance(c,str): return c
+    if isinstance(c,list): return ' '.join(x.get('text','') for x in c if isinstance(x,dict) and x.get('type')=='text')
+    return ''
+
+def load_prompts(dirs,since,until):
+    """Timestamps of what YOU put in: typed messages + answers to Claude's AskUserQuestion.
+    Tool results, Claude's replies, subagent traffic, compaction summaries, IDE/system
+    injections and interrupt markers are not prompts."""
+    recs=[]
     for d in dirs:
         for tf in glob.glob(os.path.join(d,'*.jsonl')):
             for ln in open(tf,errors='ignore'):
-                try: t=json.loads(ln).get('timestamp')
+                try: recs.append(json.loads(ln))
                 except Exception: continue
-                if not t: continue
-                try: ts=datetime.datetime.fromisoformat(t.replace('Z','+00:00')).timestamp()
-                except Exception: continue
-                if since<=day_of(ts)<=until: tts.add(ts)
-    return sorted(tts)
+    ask_ids=set()
+    for o in recs:
+        if o.get('type')=='assistant':
+            c=(o.get('message') or {}).get('content')
+            if isinstance(c,list):
+                for x in c:
+                    if isinstance(x,dict) and x.get('type')=='tool_use' and x.get('name')=='AskUserQuestion':
+                        ask_ids.add(x.get('id'))
+    out=set()
+    for o in recs:
+        if o.get('type')!='user' or o.get('isSidechain') or o.get('isMeta') or o.get('isCompactSummary'): continue
+        ts=parse_ts(o)
+        if ts is None or not since<=day_of(ts)<=until: continue
+        c=(o.get('message') or {}).get('content')
+        results=[x for x in c if isinstance(x,dict) and x.get('type')=='tool_result'] if isinstance(c,list) else []
+        if results:
+            if any(x.get('tool_use_id') in ask_ids for x in results): out.add(ts)   # your decision
+            continue                                                                 # tool output
+        t=text_of(c)
+        if not t.strip() or 'Request interrupted' in t or NOISE_TAG.search(t): continue
+        out.add(ts)
+    return sorted(out)
 
 def main():
-    ap=argparse.ArgumentParser(description='Working-time report from git commits + Claude Code session logs')
+    ap=argparse.ArgumentParser(description='Working time from your Claude Code prompts (+ git commits for context)')
     ap.add_argument('repo',nargs='?',default='.',help='git repo to analyse (default: .)')
     ap.add_argument('--since',default='0000-00-00',help='first day YYYY-MM-DD')
     ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
     ap.add_argument('--author',help='only commits by this author (git --author pattern)')
     ap.add_argument('--transcripts',action='append',help='Claude log folder (overrides auto-detection, repeatable)')
-    ap.add_argument('--calibrate',action='store_true',help='fit CODE_RATE to the transcript measurement')
+    ap.add_argument('--idle',default=str(IDLE),help=f'break threshold in minutes, or "auto" for your own Tukey threshold (default {IDLE})')
     ap.add_argument('--lang',choices=sorted(L),default=default_lang(),help='report language (default: from $LANG, else en)')
     ap.add_argument('--name',help='project name shown in the report (default: repo folder name)')
     ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='output folder (default ~/vibe-receipts)')
     a=ap.parse_args()
-    T=L[a.lang]
+    T=L[a.lang]; e=html.escape
 
     def hm(s):
         mm=int(round(s/60)); return f"{mm//60}{T['h']} {mm%60:02d}{T['m']}"
+    def mins(x): return f"{x:.1f} {'dk' if a.lang=='tr' else 'min'}".replace('.',',' if a.lang=='tr' else '.')
     def dow(d): return T['dow'][datetime.date.fromisoformat(d).weekday()]
 
     repo=os.path.realpath(a.repo)
     name=a.name or os.path.basename(repo)
-    commits=load_commits(repo,a.author,a.since,a.until)
-    if not commits: raise SystemExit(T['e_none'])
+    try: commits=load_commits(repo,a.author,a.since,a.until)
+    except subprocess.CalledProcessError: commits=[]
+    dirs=a.transcripts or claude_dirs(repo)
+    prompts=load_prompts(dirs,a.since,a.until)
+    if not commits and not prompts: raise SystemExit(T['e_none'])
 
-    # --- daily measured (between commits, within a session) + effective added code ---
-    dmeas={};dcode={};dcom={};dadd={};ddel={};dvendor={};dsubj={}
+    # --- your rhythm: distribution of gaps between prompts ---
+    gaps=sorted((prompts[i]-prompts[i-1])/60 for i in range(1,len(prompts)))
+    med,q1,q3,p90=pctl(gaps,50),pctl(gaps,25),pctl(gaps,75),pctl(gaps,90)
+    tukey=q3+1.5*(q3-q1)
+    auto=a.idle.strip().lower()=='auto'
+    idle=(round(tukey,1) if gaps else IDLE) if auto else float(a.idle)
+
+    def active(thr):
+        tot=0; per={}
+        for i in range(1,len(prompts)):
+            g=prompts[i]-prompts[i-1]
+            if g<=thr*60:
+                tot+=g; d=day_of(prompts[i]); per[d]=per.get(d,0)+g
+        return tot,per
+    work,dwork=active(idle)
+
+    # --- commits: context (what got built) + fallback estimate ---
+    dcom={};dcode={};dadd={};ddel={};dsubj={};dmeas={}
     for i,c in enumerate(commits):
         d=day_of(c['t'])
         dcom[d]=dcom.get(d,0)+1; dsubj.setdefault(d,[]).append(c['subj'])
-        if i>0:
-            g=c['t']-commits[i-1]['t']
-            if g<=BREAK: dmeas[d]=dmeas.get(d,0)+g
+        if i>0 and c['t']-commits[i-1]['t']<=BREAK: dmeas[d]=dmeas.get(d,0)+c['t']-commits[i-1]['t']
         for ad,de,path in c['f']:
             if ad=='-' or de=='-': continue
             ad,de=int(ad),int(de)
             dadd[d]=dadd.get(d,0)+ad; ddel[d]=ddel.get(d,0)+de
-            if kind(path)=='vendor': dvendor[d]=dvendor.get(d,0)+ad+de
             if '=>' in path and ad==0 and de==0: continue
-            dcode[d]=dcode.get(d,0)+CODE_W[kind(path)]*ad   # ADDED lines only
+            dcode[d]=dcode.get(d,0)+CODE_W[kind(path)]*ad
+    code=sum(dcode.values())
+    dest={d:dmeas.get(d,0)+dcode.get(d,0)*CODE_RATE*60 for d in dcom}
+    est=sum(dest.values())
 
-    measured=sum(dmeas.values()); added_code=sum(dcode.values())
-
-    # --- transcript (ground truth) ---
-    dirs=a.transcripts or claude_dirs(repo)
-    tts=load_transcript(dirs,a.since,a.until)
-    tr_active=0; dtract={}
-    for i in range(1,len(tts)):
-        g=tts[i]-tts[i-1]
-        if g<=TR_IDLE:
-            tr_active+=g; d=day_of(tts[i]); dtract[d]=dtract.get(d,0)+g
-    has_tr=bool(tts)
-
-    rate=CODE_RATE
-    if a.calibrate:
-        if not has_tr or not added_code: raise SystemExit(T['e_cal'])
-        rate=max(0.0,(tr_active-measured)/60/added_code)
-
-    code_effort=added_code*rate*60
-    effort_ratio=(measured+code_effort)/measured if measured else 0
-    total=measured+code_effort
-
-    days=sorted(dcom)
-    dcodeff={d:dcode.get(d,0)*rate*60 for d in days}
-    dratio={d:(dmeas.get(d,0)+dcodeff[d])/dmeas[d] if dmeas.get(d,0) else 0 for d in days}
-    day_tot={d:dmeas.get(d,0)+dcodeff[d] for d in days}
-    mx=max(day_tot.values()) or 1
-    allrows=sum(dadd.values())+sum(ddel.values())
-    vendor_pct=100*sum(dvendor.values())/allrows if allrows else 0
+    has_p=bool(prompts)
+    total=work if has_p else est
+    dtotal=dwork if has_p else dest
+    dprompt={}
+    for t in prompts: dprompt[day_of(t)]=dprompt.get(day_of(t),0)+1
+    days=sorted(set(dcom)|set(dprompt))
     d0,d1=days[0],days[-1]
+    hours=total/3600
+    lph=code/hours if hours else 0
+    mpp=(work/60)/len(prompts) if prompts else 0
+    mpc=(total/60)/len(commits) if commits else 0
 
-    print(f"{T['p_repo']:<17}: {repo}")
-    print(f"{T['p_range']:<17}: {d0} → {d1}  ({len(commits)} {T['commits']})")
-    print(f"{T['p_meas']:<17}: {hm(measured)}")
-    print(f"{T['p_code']:<17}: {added_code:.0f} {T['p_lines']}")
-    print(f"{T['p_eff']:<17}: {hm(code_effort)}   ({added_code:.0f} × {rate:.4f})")
-    print(f"{T['p_ratio']:<17}: {effort_ratio:.3f}")
-    print(f"{'='*46}\n{T['p_total']} ≈ {hm(total)}   ({total/3600:.1f})\n{'='*46}")
-    if has_tr: print(f"{T['p_tr'].format(idle=TR_IDLE//60)}: {hm(tr_active)}  ({len(tts)} {T['p_ev']}, {len(dirs)} {T['p_dirs']})")
-    else:      print(T['p_notr'])
-    if a.calibrate: print(T['p_cal'].format(v=rate))
+    print(f"{T['p_repo']:<15}: {repo}")
+    print(f"{T['p_range']:<15}: {d0} → {d1}")
+    if has_p:
+        print(f"{T['p_time']:<15}: {hm(work)}   ({len(prompts)} {T['prompts']}, idle {idle:g}m, {len(dirs)} dir)")
+        print(f"{T['p_rhythm']:<15}: median {med:.1f}m · P75 {q3:.1f}m · P90 {p90:.1f}m · tukey {tukey:.1f}m")
+    else:
+        print(T['p_none'])
+        print(f"{T['p_est']:<15}: {hm(est)}")
+    print(f"{T['p_commits']:<15}: {len(commits)}   ({T['p_code']} {code:.0f} {T['p_lines']})")
 
     # ===== HTML REPORT =====
-    e=html.escape
     def bar(v,m,c):
         w=0 if not m else v/m*100
         return f'<div class="bar"><div class="barfill" style="width:{w:.1f}%;background:{c}"></div></div>'
 
     P=[f'<!doctype html><html lang="{a.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(name)} · {T["title"]}</title><style>{CSS}</style></head><body><div class="wrap">']
-    sub=f'{len(commits)} {T["commits"]}' + (f' · {len(tts):,} {T["events"]}' if has_tr else '') + f' · {d0} → {d1}'
+    sub=(f'{len(prompts):,} {T["prompts"]} · ' if has_p else '')+f'{len(commits)} {T["commits"]} · {d0} → {d1}'
     P.append(f'<header><h1>🧾 {e(name)} · {T["title"]}</h1><div class="sub">{sub}</div></header>')
-    P.append('<div class="kpis">'
-        + (f'<div class="kpi"><div class="v">{hm(tr_active)}</div><div class="l">{T["k_real"]}</div></div>' if has_tr else '')
-        + f'<div class="kpi"><div class="v">{hm(total)}</div><div class="l">{T["k_est"]}</div></div>'
-        + (f'<div class="kpi"><div class="v">~{hm(abs(tr_active-total))}</div><div class="l">{T["k_diff"]}</div></div>' if has_tr else '')
-        + f'<div class="kpi"><div class="v">{len(commits)}</div><div class="l">{T["k_com"]}</div></div></div>')
+    if has_p:
+        K=[(hm(work),T['k_time'],1),(f'{len(prompts):,}',T['k_prompts'],0),(f'{lph:,.0f}',T['k_lph'],0),
+           (mins(mpp),T['k_mpp'],0),(mins(mpc) if commits else '—',T['k_mpc'],0),(str(len(commits)),T['k_com'],0)]
+    else:
+        K=[(hm(est),T['k_est'],1),(f'{lph:,.0f}',T['k_lph'],0),(mins(mpc),T['k_mpc'],0),(str(len(commits)),T['k_com'],0)]
+    P.append('<div class="kpis">'+''.join(f'<div class="kpi{" hero" if h else ""}"><div class="v">{v}</div><div class="l">{l}</div></div>' for v,l,h in K)+'</div>')
 
-    if has_tr:
-        mxv=max(tr_active,total) or 1
-        P.append(f'<h2>{T["s_verify"]}</h2><div class="card">')
-        P.append(f'<div class="scn"><div class="nm">{T["v_real"]}</div>{bar(tr_active,mxv,"#34d399")}<div class="vl">{hm(tr_active)}</div></div>')
-        P.append(f'<div class="scn"><div class="nm">{T["v_est"]}</div>{bar(total,mxv,"#a78bfa")}<div class="vl">{hm(total)}</div></div>')
-        P.append(f'<div class="note">{e(T["v_note"].format(n=f"{len(tts):,}",idle=TR_IDLE//60))}</div></div>')
+    if has_p and gaps:
+        within=100*sum(1 for g in gaps if g<=idle)/len(gaps)
+        P.append(f'<h2>{T["s_rhythm"]}</h2><div class="card">')
+        P.append('<div class="stats">'+''.join(f'<div class="st{" hi" if hi else ""}"><div class="v">{mins(v)}</div><div class="l">{l}</div></div>'
+                 for v,l,hi in [(med,T['r_med'],0),(q3,T['r_p75'],0),(p90,T['r_p90'],0),(tukey,T['r_tukey'],1)])+'</div>')
+        cnt=[sum(1 for g in gaps if lo<=g<(hi if hi is not None else 1e18)) for lo,hi in BANDS]
+        cols=['#34d399','#34d399','#34d399','#fbbf24','#f87171','#f87171']
+        for (lo,hi),n,lbl,col in zip(BANDS,cnt,T['bands'],cols):
+            rng=f'{lo}–{hi}' if hi is not None else f'{lo}+'
+            P.append(f'<div class="scn"><div class="nm"><b>{rng}</b> · {lbl}</div>{bar(n,max(cnt),col)}<div class="vl">{100*n/len(gaps):.0f}%</div></div>')
+        P.append(f'<div class="note">{e(T["r_note"].format(med=mins(med),tukey=mins(tukey),idle=mins(idle),mode=T["mode_auto"] if auto else T["mode_fixed"],pct=f"{within:.0f}"))}</div></div>')
 
-    P.append(f'<h2>{T["s_time"]}</h2><div class="card">')
-    P.append(f'<div class="formula">{T["f_ratio"]} = 1 + ({T["f_added"]} × {rate:.4f}) / {T["f_meas"]} = <b>{effort_ratio:.3f}</b><br>{T["f_total"]} = {T["f_meas"]} × {T["f_ratio"]}</div>')
-    P.append(f'<div class="scn"><div class="nm">{T["t_meas"]}</div>{bar(measured,total,"#60a5fa")}<div class="vl">{hm(measured)}</div></div>')
-    P.append(f'<div class="scn"><div class="nm">{T["t_code"].format(r=f"{effort_ratio:.2f}")}</div>{bar(code_effort,total,"#fbbf24")}<div class="vl">+{hm(code_effort)}</div></div>')
-    P.append(f'<div class="scn"><div class="nm"><b>{T["f_total"]}</b></div>{bar(total,total,"#a78bfa")}<div class="vl">{hm(total)}</div></div>')
-    P.append(f'<div class="note">{e(T["t_note"].format(b=BREAK//60,p=f"{vendor_pct:.0f}"))}</div>')
-    P.append('<div style="margin:10px 0">'+''.join(f'<span class="wt">{w}</span>' for w in T['w'])+'</div></div>')
+        P.append(f'<h2>{T["s_sens"]}</h2><div class="card"><table>')
+        C=T['sens_c']; P.append(f'<tr><th>{C[0]}</th><th class="r">{C[1]}</th><th>{C[2]}</th></tr>')
+        rows=[(t,)+active(t)[:1] for t in sorted(set(SENS+[idle]))]
+        mxs=max(r[1] for r in rows) or 1
+        for t,w in rows:
+            cov=100*sum(1 for g in gaps if g<=t)/len(gaps)
+            P.append(f'<tr{" class=\"sel\"" if t==idle else ""}><td>≤ {mins(t)}</td><td class="r">{cov:.0f}%</td>'
+                     f'<td><div style="display:flex;align-items:center;gap:8px">{bar(w,mxs,"#a78bfa" if t==idle else "#3f4560")}<span style="width:64px;text-align:right">{hm(w)}</span></div></td></tr>')
+        P.append(f'</table><div class="note">{e(T["sens_note"])}</div></div>')
+    elif not has_p:
+        P.append(f'<h2>⚠️ {T["fb_title"]}</h2><div class="card"><div class="note">{e(T["fb_note"].format(b=BREAK//60,r=CODE_RATE))}</div></div>')
 
-    trdays=sorted(set(days)|set(dtract))
+    mx=max(dtotal.values(),default=0) or 1
     C=T['c']
     P.append(f'<h2>{T["s_daily"]}</h2><div class="card"><div class="scroll"><table>')
-    P.append(f'<tr><th>{C[0]}</th><th>{C[1]}</th><th class="r">{C[2]}</th><th class="r">{C[3]}</th><th class="r">{C[4]}</th><th>{C[5]}</th>'
-             + (f'<th class="r">{C[6]}</th>' if has_tr else '') + f'<th class="r">{C[7]}</th></tr>')
-    for d in trdays:
-        P.append(f'<tr><td>{d[5:]}</td><td>{dow(d)}</td><td class="r">{dcom.get(d,0)}</td><td class="r">{hm(dmeas.get(d,0))}</td>'
-                 f'<td class="r">{("×"+format(dratio.get(d,0),".2f")) if dratio.get(d,0) else "—"}</td>'
-                 f'<td><div style="display:flex;align-items:center;gap:8px">{bar(day_tot.get(d,0),mx,"#a78bfa")}<span style="font-size:13px;width:52px">{hm(day_tot.get(d,0))}</span></div></td>'
-                 + (f'<td class="r" style="color:#34d399;font-weight:700">{hm(dtract.get(d,0))}</td>' if has_tr else '')
-                 + f'<td class="r" style="color:#86efac">+{dadd.get(d,0):,}<span style="color:#fca5a5"> / −{ddel.get(d,0):,}</span></td></tr>')
-    P.append(f'<tr class="tot"><td colspan="2">{T["tot"]}</td><td class="r">{len(commits)}</td><td class="r">{hm(measured)}</td><td class="r">×{effort_ratio:.2f}</td><td>{hm(total)}</td>'
-             + (f'<td class="r" style="color:#34d399">{hm(tr_active)}</td>' if has_tr else '')
-             + f'<td class="r">+{sum(dadd.values()):,} / −{sum(ddel.values()):,}</td></tr>')
+    P.append(f'<tr><th>{C[0]}</th><th>{C[1]}</th>'+(f'<th class="r">{C[2]}</th>' if has_p else '')+f'<th>{C[3]}</th><th class="r">{C[4]}</th><th class="r">{C[5]}</th><th class="r">{C[6]}</th></tr>')
+    for d in days:
+        w=dtotal.get(d,0); l=dcode.get(d,0)
+        P.append(f'<tr><td>{d[5:]}</td><td>{dow(d)}</td>'+(f'<td class="r">{dprompt.get(d,0)}</td>' if has_p else '')
+                 +f'<td><div style="display:flex;align-items:center;gap:8px">{bar(w,mx,"#a78bfa")}<span style="width:64px;text-align:right">{hm(w)}</span></div></td>'
+                 f'<td class="r">{dcom.get(d,0)}</td><td class="r" style="color:#86efac">+{l:,.0f}</td><td class="r">{(l/(w/3600)) if w else 0:,.0f}</td></tr>')
+    P.append(f'<tr class="tot"><td colspan="2">{T["tot"]}</td>'+(f'<td class="r">{len(prompts):,}</td>' if has_p else '')
+             +f'<td>{hm(total)}</td><td class="r">{len(commits)}</td><td class="r">+{code:,.0f}</td><td class="r">{lph:,.0f}</td></tr>')
     P.append('</table></div></div>')
 
-    P.append(f'<h2>{T["s_sum"]}</h2>')
-    for d in days:
-        items=''.join(f'<li>{e(s)}</li>' for s in dsubj[d])
-        P.append(f'<div class="dayblk"><h3>{d[5:]} · {dow(d)} <span class="hrs">{hm(day_tot[d])} · {dcom[d]} {T["commits"]}</span></h3><ul>{items}</ul></div>')
+    if dsubj:
+        P.append(f'<h2>{T["s_sum"]}</h2>')
+        for d in sorted(dsubj):
+            items=''.join(f'<li>{e(s)}</li>' for s in dsubj[d])
+            P.append(f'<div class="dayblk"><h3>{d[5:]} · {dow(d)} <span class="hrs">{hm(dtotal.get(d,0))} · {dcom[d]} {T["commits"]}</span></h3><ul>{items}</ul></div>')
 
     P.append(f'<div class="foot">🧾 vibe-receipts · {e(name)} · {datetime.date.today()}</div></div></body></html>')
 
@@ -261,9 +314,9 @@ def main():
     open(out,'w',encoding='utf-8').write('\n'.join(P))
     csvp=os.path.join(a.out,f'{name}-daily.csv')
     with open(csvp,'w',encoding='utf-8') as f:
-        f.write('date,commits,measured_min,code_effort_min,estimate_min,real_min,added,deleted\n')
-        for d in trdays:
-            f.write(f'{d},{dcom.get(d,0)},{dmeas.get(d,0)/60:.0f},{dcodeff.get(d,0)/60:.0f},{day_tot.get(d,0)/60:.0f},{dtract.get(d,0)/60:.0f},{dadd.get(d,0)},{ddel.get(d,0)}\n')
+        f.write('date,prompts,work_min,commits,effective_lines,added,deleted,commit_estimate_min\n')
+        for d in days:
+            f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
     print("HTML:",out); print("CSV :",csvp)
 
 CSS="""*{box-sizing:border-box;margin:0;padding:0}
@@ -272,25 +325,29 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#0f1117;c
 h1{font-size:28px;font-weight:800;letter-spacing:-.5px}
 h2{font-size:19px;margin:36px 0 14px;padding-bottom:8px;border-bottom:1px solid #272b36;color:#fff}
 .sub{color:#8b90a0;margin-top:6px;font-size:14px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-top:26px}
-.kpi{background:#171a23;border:1px solid #242938;border-radius:14px;padding:18px}
-.kpi .v{font-size:25px;font-weight:800;color:#a78bfa}.kpi .l{font-size:12px;color:#8b90a0;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-top:26px}
+.kpi{background:#171a23;border:1px solid #242938;border-radius:14px;padding:16px}
+.kpi .v{font-size:22px;font-weight:800;color:#e6e8ee}.kpi .l{font-size:11.5px;color:#8b90a0;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.kpi.hero{background:linear-gradient(135deg,#2a2147,#171a23);border-color:#4c3d85}.kpi.hero .v{color:#c4b5fd;font-size:26px}
 .card{background:#171a23;border:1px solid #242938;border-radius:14px;padding:22px;margin-top:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.st{background:#13161f;border:1px solid #242938;border-radius:10px;padding:12px 14px}.st .v{font-size:19px;font-weight:800}.st .l{font-size:11.5px;color:#8b90a0;text-transform:uppercase;letter-spacing:.4px}
+.st.hi{border-color:#34d399}.st.hi .v{color:#34d399}
 .scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{text-align:left;padding:10px;border-bottom:1px solid #242938;white-space:nowrap}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #242938;white-space:nowrap}
 th{color:#8b90a0;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
 td.r,th.r{text-align:right}tr:last-child td{border-bottom:none}
+tr.sel td{color:#fff;font-weight:700;background:#1c2030}
 .tot{font-weight:700;color:#fff;background:#1c2030}
-.bar{background:#242938;border-radius:6px;height:22px;overflow:hidden;min-width:70px;flex:1}.barfill{height:100%;border-radius:6px}
-.scn{display:flex;align-items:center;gap:12px;margin:10px 0}.scn .nm{width:200px;font-size:13px;color:#c8ccd8}.scn .vl{width:70px;text-align:right;font-weight:700;font-size:14px}
-.note{font-size:12.5px;color:#8b90a0;margin-top:10px;font-style:italic}
-.formula{background:#13161f;border:1px solid #242938;border-radius:10px;padding:14px 16px;font-family:ui-monospace,monospace;font-size:13px;color:#c4b5fd;margin:4px 0 14px}
+.bar{background:#242938;border-radius:6px;height:20px;overflow:hidden;min-width:70px;flex:1}.barfill{height:100%;border-radius:6px}
+.scn{display:flex;align-items:center;gap:12px;margin:8px 0}.scn .nm{width:260px;font-size:13px;color:#c8ccd8}.scn .vl{width:48px;text-align:right;font-weight:700;font-size:14px}
+.note{font-size:12.5px;color:#8b90a0;margin-top:12px;font-style:italic}
 .dayblk{background:#13161f;border:1px solid #242938;border-radius:12px;padding:14px 16px;margin-top:12px}
 .dayblk h3{font-size:15px;color:#fff;display:flex;justify-content:space-between}.dayblk h3 .hrs{font-size:13px;color:#a78bfa;font-weight:700}
 .dayblk ul{margin:8px 0 0 18px}.dayblk li{font-size:13.5px;color:#aeb3c2;margin:5px 0}
 .foot{text-align:center;color:#5d6273;font-size:12px;margin-top:38px}
-.wt{display:inline-block;background:#2a2147;color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600;margin:2px}"""
+@media (max-width:600px){.scn .nm{width:150px}}"""
 
 if __name__=='__main__':
     main()

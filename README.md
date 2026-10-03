@@ -1,14 +1,14 @@
 # 🧾 vibe-receipts
 
 > **Receipts for your vibe coding.** How many hours did you *really* work with Claude?
-> Your commits estimate it. Your session logs prove it.
+> Your prompts are the clock. Your commits are the proof of what you built.
 
 ![vibe-receipts demo report](docs/demo.jpg)
 
 <sub>Demo built from 100% synthetic data with [`demo/make_demo.py`](demo/make_demo.py) · [full report](docs/demo-full.jpg)</sub>
 
 One Python file, zero dependencies. Point it at a git repo and get a dark-mode HTML receipt
-of the hours that went into it, checked two independent ways.
+of the hours you actually spent on it, measured from your own prompts to Claude.
 
 ## Install as a Claude Code plugin (recommended)
 
@@ -24,7 +24,7 @@ Then just ask Claude:
 - *"Make a timesheet of my commits for the client invoice."*
 
 The skill turns your question into the right date range and author filter, runs the script,
-and tells you the headline number, the busiest days, and what got done each day.
+and tells you the headline number, your rhythm, the busiest days, and what got done each day.
 
 ## Or run it directly
 
@@ -38,74 +38,67 @@ Reports are personal work data, so they are never written into the analysed repo
 
 ## How it works
 
-Two independent measurements, side by side:
+### Working time = gaps between *your* prompts
+Claude Code logs every session in `~/.claude/projects/<project>/*.jsonl`. vibe-receipts keeps only
+the records **you** put in:
 
-### 1. Ground truth: Claude Code session logs
-Claude Code keeps a log of every session in `~/.claude/projects/<project>/*.jsonl`.
-Every event has a timestamp. Gaps of **≤ 15 min** between events count as active time;
-anything longer means you walked away and is dropped.
+- messages you typed
+- your answers to Claude's `AskUserQuestion` questions (those are your decisions)
 
-- The log folder is found automatically from the repo path, including sessions in
-  `.claude/worktrees/`. Use `--transcripts <dir>` to point somewhere else.
-- Only sessions opened in that repo count. Work done outside Claude Code (manual edits,
-  meetings, reading) is not in this number.
+Claude's replies, tool calls and results, subagent traffic, compaction summaries, IDE/system
+injections, background-task notifications and "interrupted" markers are **not** prompts.
 
-### 2. Estimate: the commit "effort ratio" model
-Works on any repo, even without session logs.
+Then: if the gap between two consecutive prompts is **≤ 15 min**, it counts as work. In AI-assisted
+coding, waiting for Claude, reviewing its output and deciding what to ask next *is* the work.
+A longer gap is a break and is dropped.
 
 ```
-TOTAL        = Measured × Effort ratio
-Effort ratio = 1 + (effective added code × CODE_RATE) / Measured
+10:00  you: "add auth"           
+10:03  you: "use magic links"    → +3 min
+10:09  you: answer to a question → +6 min
+10:51  you: "now the tests"      → 42 min gap > 15 → break, not counted
+10:54  you: "fix the flaky one"  → +3 min
+                                   = 12 min
 ```
 
-1. **Clean up:** merge and stash commits are dropped.
-2. **Measured:** sum of the gaps between consecutive commits. A gap over **150 min** is a
-   break (sleep, lunch, life) and is dropped; every shorter gap counts in full.
-3. **Effective added code:** added lines weighted by type:
-   `code ×1.0 · config ×0.4 · docs ×0 · copied/vendor ×0 · generated (lockfiles, migrations) ×0`.
-   Bulk-copied files (`vendor/`, `prototypes/`, `_archive/`) would wreck the estimate, so they
-   are excluded. Extend `VENDOR_RE` for your own project.
-4. **Effort ratio:** one coefficient derived purely from code density. No made-up
-   "add 20 %" fudge factor.
+### Why 15 minutes? Your rhythm decides
+The threshold is not a guess. The report shows the distribution of your gaps between prompts
+(median, P75, P90) and **your own threshold** by Tukey's outlier rule, `Q3 + 1.5 × IQR`:
+anything above it is unusual *for you*. On the project this tool was built on, 424 gaps had a
+median of 3.2 min and a Tukey limit of **15.2 min**; 87 % of gaps were within 15 min.
 
-### Calibrate it to your pace
+A sensitivity table shows how much the total moves if the threshold changes, so you can see the
+choice is not hiding anything. Use `--idle auto` to compute with your own threshold instead of 15.
 
-`CODE_RATE` (minutes per effective added line) depends on how you work. If a repo has
-session logs, fit it to the real number:
+### Commits add context
+Commits don't decide the hours. They give the report its "what got built" side: commit count,
+effective lines of code (weighted `code ×1.0 · config ×0.4 · docs ×0 · copied/vendor ×0 ·
+generated ×0`), lines per hour, minutes per commit, and a daily commit log.
 
-```bash
-python3 receipts.py ~/code/my-project --since 2026-06-01 --until 2026-06-30 --calibrate
-```
-
-Write the printed value into `CODE_RATE` at the top of the script. The totals will then match
-by design. The real test of the model is the **per-day distribution**.
+### No session logs? Rough fallback
+For a repo with no Claude logs, the report falls back to an estimate from gaps between commits
+(breaks over 150 min dropped) plus 0.02 min per effective added line, clearly labelled. It tends
+to overestimate AI-heavy work, because Claude writes many lines fast.
 
 > ⚠️ **Claude Code deletes session logs after 30 days by default.**
 > To keep your receipts, add `"cleanupPeriodDays": 36500` to `~/.claude/settings.json`.
-> For days whose logs are gone, only the commit estimate is left.
 
 ## Options
 
 | Flag | Meaning |
 |---|---|
 | `repo` | git repo to analyse (default `.`) |
-| `--since / --until` | day range `YYYY-MM-DD`, applied to both commits and logs |
+| `--since / --until` | day range `YYYY-MM-DD`, applied to both prompts and commits |
 | `--author` | only this author's commits (`git log --author` pattern) |
-| `--transcripts DIR` | Claude log folder, overrides auto-detection (repeatable) |
-| `--calibrate` | fit `CODE_RATE` to the session-log total |
+| `--transcripts DIR` | Claude log folder, overrides auto-detection (repeatable, e.g. for a repo cloned in two places) |
+| `--idle MIN\|auto` | break threshold in minutes (default 15), or `auto` for your own Tukey threshold |
 | `--lang en\|tr` | report language (default: from `$LANG`, else English) |
 | `--name` | project name shown in the report |
 | `--out DIR` | output folder (default `~/vibe-receipts`) |
 
-Constants at the top of `receipts.py`:
-
-| Constant | Default | Meaning |
-|---|---|---|
-| `BREAK` | 150 min | gap between commits that counts as a break |
-| `CODE_RATE` | 0.02 min/line | how much each effective added line adds to the estimate |
-| `TR_IDLE` | 15 min | idle threshold for session logs |
-| `CODE_W` | code 1.0 / config 0.4 / docs 0 | weights for added lines |
-| `VENDOR_RE`, `GEN_RE` | regex | copied/vendor and generated file patterns to exclude |
+Constants at the top of `receipts.py`: `IDLE`, `SENS` (thresholds in the sensitivity table),
+`CODE_W`, `VENDOR_RE` / `GEN_RE` (excluded file patterns), and `BREAK` / `CODE_RATE` for the
+fallback estimate.
 
 ## Export as an image
 
