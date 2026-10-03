@@ -101,7 +101,14 @@ def load_commits(repo,author,since,until):
             p=ln.split('\t')
             if len(p)==3: cur['f'].append(p)
     if cur: commits.append(cur)
-    return [c for c in commits if not NOISE.match(c['subj']) and since<=day_of(c['t'])<=until]
+    # --all does not guarantee time order (rebases, cherry-picks); sort by author time and
+    # drop rebased copies of the same commit (same author time + subject).
+    seen=set(); out=[]
+    for c in sorted(commits,key=lambda c:c['t']):
+        k=(c['t'],c['subj'])
+        if k in seen or NOISE.match(c['subj']) or not since<=day_of(c['t'])<=until: continue
+        seen.add(k); out.append(c)
+    return out
 
 def load_transcript(dirs,since,until):
     tts=set()
