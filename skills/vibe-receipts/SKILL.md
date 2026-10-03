@@ -19,15 +19,16 @@ Two independent measurements of working time on a git repo:
 The script lives next to this file: `scripts/receipts.py` (Python 3 stdlib only).
 
 ```bash
-python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--author PATTERN] [--calibrate]
+python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--author PATTERN] [--calibrate] [--lang en|tr]
 ```
 
 - `<repo-path>`: default to the current working directory if the user did not name a repo.
 - Turn the user's wording into flags: "this week" / "last month" / "in June" → `--since/--until`;
   "just my commits" → `--author "<git user.name>"` (read it with `git -C <repo> config user.name`).
-- Reports go to `~/vibe-receipts/` (`<repo>-rapor.html` + `<repo>-gunluk.csv`). Never write them
+- Reports go to `~/vibe-receipts/` (`<repo>-report.html` + `<repo>-daily.csv`). Never write them
   inside the analysed repo, and never commit them anywhere — they are personal work data.
-- `--calibrate` fits the minutes-per-line constant to the transcript total; offer it when both
+- `--lang tr` when the user writes in Turkish, otherwise `--lang en`.
+- `--calibrate` fits the minutes-per-line constant (`CODE_RATE`) to the transcript total; offer it when both
   sources exist and the user wants the estimate tuned to their pace.
 
 ## Report back
@@ -47,5 +48,5 @@ After running, read the printed summary and the CSV, then answer in the user's l
   transcript number looks too low, say so; the fix for the future is
   `"cleanupPeriodDays": 36500` in `~/.claude/settings.json` (suggest it, don't change it unasked).
 - Work done outside Claude Code (manual edits, meetings, reading) is not in the transcript number.
-- Bulk-copied static files can distort the commit estimate; extend `VENDOR_RE` in the script if a
+- Bulk-copied static files can distort the commit estimate; extend `VENDOR_RE` in `scripts/receipts.py` if a
   project has its own vendored folders.

@@ -6,3 +6,7 @@ output/
 *.csv
 .DS_Store
 __pycache__/
+
+# demo çıktısı (docs/ altındaki görseller hariç)
+demo/out/
+!docs/*.jpg

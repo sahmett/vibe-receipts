@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
-"""vibe-receipts — bir git reposunda harcanan çalışma süresini tahmin eder.
+"""vibe-receipts — how many hours did you really work on a git repo?
 
-İki bağımsız katman:
-  1) Tahmin   — commit'ler arası süre × efor oranı (kod yoğunluğundan türer)
-  2) Gerçek   — Claude Code oturum kayıtlarındaki (~/.claude/projects) olay zaman damgaları
+Two independent layers:
+  1) Estimate      — gaps between commits × an effort ratio derived from code density
+  2) Ground truth  — event timestamps in Claude Code session logs (~/.claude/projects)
 
-Kullanım:
+Usage:
   python3 receipts.py /path/to/repo
   python3 receipts.py /path/to/repo --since 2026-06-01 --until 2026-06-30
-  python3 receipts.py /path/to/repo --calibrate     # KOD_ORANI'yı transcript'e oturt
+  python3 receipts.py /path/to/repo --calibrate     # fit CODE_RATE to the transcript total
+  python3 receipts.py /path/to/repo --lang tr       # Türkçe rapor
 """
 import argparse, datetime, glob, html, json, os, re, subprocess
 
-# ===== EFOR ORANI MODELİ =====
-# Efor oranı = 1 + (eklenen etkin kod × KOD_ORANI) / Ölçülen
-# TOPLAM     = Ölçülen × Efor oranı
-# Sabit "sallama" yüzde yok; uplift tamamen kod yoğunluğundan gelir.
-BREAK     = 150*60    # bunu aşan boşluk = mola (0); altındaki tüm boşluk tam sayılır
-KOD_ORANI = 0.02      # dk / eklenen etkin kod satırı (--calibrate ile transcript'e oturtulabilir)
-TR_IDLE   = 15*60     # transcript: ardışık olay arası bu kadar boşluk = aktif; üstü = uzaklaşma
+# ===== EFFORT RATIO MODEL =====
+# Effort ratio = 1 + (effective added code × CODE_RATE) / Measured
+# TOTAL        = Measured × Effort ratio
+# No fixed "fudge" percentage; the uplift comes entirely from code density.
+BREAK     = 150*60    # a gap longer than this = break (0); every shorter gap counts in full
+CODE_RATE = 0.02      # minutes per effective added line (fit it with --calibrate)
+TR_IDLE   = 15*60     # transcript: gap between events up to this = active; above = away
 
-# Eklenen kod için ağırlık (sadece gerçek kod/config; docs/vendor/generated 0)
+# Weights for added lines (only real code/config; docs/vendor/generated weigh 0)
 CODE_W = {'code':1.0, 'config':0.4, 'arch':0.0, 'doc':0.0, 'vendor':0.0, 'gen':0.0}
 
-# Toplu kopyalanan/taşınan statik içerik — hesaba katılmaz. Projene göre genişlet.
+# Bulk-copied/moved static content — excluded. Extend for your project.
 VENDOR_RE=re.compile(r'(^|/)(prototypes/|_archive/|vendor/|third_party/)|(^|/)(src/)?ui/.*\.(html|css|js)$')
 GEN_RE=re.compile(r'(pnpm-lock|package-lock|yarn\.lock|poetry\.lock|Cargo\.lock|payload-types|/migrations/|\.min\.(js|css)$)')
 
@@ -37,18 +38,51 @@ def kind(path):
     return 'code'
 
 NOISE=re.compile(r'^(Merge pull request|Merge branch|Merge remote-tracking|index on |On \S+: )')
-DOW_TR=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar']
 
-def hm(s):
-    m=int(round(s/60)); return f"{m//60}s {m%60:02d}d"
+L={
+ 'en':dict(
+   h='h',m='m',dow=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
+   title='Work Time Receipt',commits='commits',events='Claude events',
+   k_real='Real (Claude sessions)',k_est='Estimate (commit model)',k_diff='Gap between methods',k_com='Commits',
+   s_verify='🎯 Two-method check',v_real='🟢 Real — Claude transcript active time',v_est='🟣 Estimate — commit effort-ratio model',
+   v_note='Transcript = active time measured from {n} events (gaps ≤{idle}m between events). This is the ground truth; the commit model is a portable approximation for projects without transcripts. Work done outside Claude Code is not in the transcript.',
+   s_time='⏱️ Time breakdown',f_ratio='Effort ratio',f_added='effective added code',f_meas='Measured',f_total='TOTAL',
+   t_meas='Measured (between commits)',t_code='× Effort ratio ({r}) — code effort',
+   t_note='Breaks (>{b}m) and copied/vendor lines excluded. {p}% of raw lines were copied/vendor.',
+   w=['code ×1.0','config ×0.4','docs ×0','copied/vendor ×0','generated ×0'],
+   s_daily='📅 Daily work & code',c=['Date','Day','Commits','Measured','Effort','Estimate','🟢 Real','Lines +/−'],tot='TOTAL',
+   s_sum='📝 Daily commit log',
+   p_repo='Repo',p_range='Range',p_meas='Measured',p_code='Effective code',p_lines='lines',p_eff='Code effort',p_ratio='EFFORT RATIO',p_total='ESTIMATED TOTAL',
+   p_tr='Transcript active (idle {idle}m)',p_ev='events',p_dirs='folders',p_notr='No transcripts found — commit estimate only.',
+   p_cal='Calibrated CODE_RATE: {v:.4f} min/line (write it into CODE_RATE at the top of the script)',
+   e_none='No commits found in this range.',e_cal='Calibration needs both transcripts and added code.'),
+ 'tr':dict(
+   h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
+   title='Çalışma Süresi Fişi',commits='commit',events='Claude olayı',
+   k_real='Gerçek (Claude oturumları)',k_est='Tahmin (commit modeli)',k_diff='İki yöntem farkı',k_com='Commit',
+   s_verify='🎯 İki yöntemle doğrulama',v_real='🟢 Gerçek — Claude transcript aktif süresi',v_est='🟣 Tahmin — commit efor-oranı modeli',
+   v_note='Transcript = {n} olaydan ölçülen aktif süre (ardışık olaylar arası ≤{idle}dk). Asıl yer-gerçeği budur; commit modeli transcript\'i olmayan projeler için taşınabilir yaklaşıklıktır. Claude dışında elle yapılan iş transcript\'e girmez.',
+   s_time='⏱️ Süre analizi',f_ratio='Efor oranı',f_added='eklenen etkin kod',f_meas='Ölçülen',f_total='TOPLAM',
+   t_meas='Ölçülen (commit arası)',t_code='× Efor oranı ({r}) — kod eforu',
+   t_note='Molalar (>{b}dk) ve kopya/vendor satırlar dışlandı. Ham satırların %{p}\'i kopya/vendor.',
+   w=['kod ×1.0','config ×0.4','docs ×0','kopya/vendor ×0','üretilmiş ×0'],
+   s_daily='📅 Günlük çalışma & kod',c=['Tarih','Gün','Commit','Ölçülen','Efor','Tahmin','🟢 Gerçek','Satır +/−'],tot='TOPLAM',
+   s_sum='📝 Günlük commit özeti',
+   p_repo='Repo',p_range='Aralık',p_meas='Ölçülen',p_code='Eklenen etkin kod',p_lines='satır',p_eff='Kod eforu',p_ratio='EFOR ORANI',p_total='TAHMİN TOPLAM',
+   p_tr='Transcript gerçek aktif (IDLE {idle}dk)',p_ev='olay',p_dirs='klasör',p_notr='Transcript bulunamadı — yalnız commit tahmini raporlanacak.',
+   p_cal='Kalibre CODE_RATE: {v:.4f} dk/satır (script başındaki CODE_RATE\'e yazabilirsin)',
+   e_none='Bu aralıkta commit bulunamadı.',e_cal='Kalibrasyon için transcript ve eklenen kod gerekli.'),
+}
+
+def default_lang():
+    loc=os.environ.get('LC_ALL') or os.environ.get('LC_MESSAGES') or os.environ.get('LANG') or ''
+    return 'tr' if loc.lower().startswith('tr') else 'en'
 
 def day_of(t): return datetime.datetime.fromtimestamp(t).strftime('%Y-%m-%d')
 
-def dow(d): return DOW_TR[datetime.date.fromisoformat(d).weekday()]
-
 def claude_dirs(repo):
-    """Claude Code, proje yolundaki alfanümerik olmayan karakterleri '-' yapar.
-    Repo klasörünü ve onun altındaki .claude/worktrees oturumlarını döndürür."""
+    """Claude Code turns every non-alphanumeric character of the project path into '-'.
+    Returns the repo's folder plus sessions under its .claude/worktrees."""
     enc=re.sub(r'[^A-Za-z0-9]','-',repo)
     base=os.path.expanduser('~/.claude/projects')
     return [d for d in glob.glob(os.path.join(base,enc+'*'))
@@ -83,22 +117,29 @@ def load_transcript(dirs,since,until):
     return sorted(tts)
 
 def main():
-    ap=argparse.ArgumentParser(description='Git commit + Claude oturum kayıtlarından çalışma süresi analizi')
-    ap.add_argument('repo',nargs='?',default='.',help='analiz edilecek git reposu (varsayılan: .)')
-    ap.add_argument('--since',default='0000-00-00',help='başlangıç günü YYYY-MM-DD')
-    ap.add_argument('--until',default='9999-99-99',help='bitiş günü YYYY-MM-DD')
-    ap.add_argument('--author',help='sadece bu yazarın commit\'leri (git --author deseni)')
-    ap.add_argument('--transcripts',action='append',help='Claude kayıt klasörü (otomatik bulunanı ezer, birden çok verilebilir)')
-    ap.add_argument('--calibrate',action='store_true',help='KOD_ORANI\'yı transcript ölçümüne göre hesapla')
-    ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='çıktı klasörü (varsayılan ~/vibe-receipts)')
+    ap=argparse.ArgumentParser(description='Working-time report from git commits + Claude Code session logs')
+    ap.add_argument('repo',nargs='?',default='.',help='git repo to analyse (default: .)')
+    ap.add_argument('--since',default='0000-00-00',help='first day YYYY-MM-DD')
+    ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
+    ap.add_argument('--author',help='only commits by this author (git --author pattern)')
+    ap.add_argument('--transcripts',action='append',help='Claude log folder (overrides auto-detection, repeatable)')
+    ap.add_argument('--calibrate',action='store_true',help='fit CODE_RATE to the transcript measurement')
+    ap.add_argument('--lang',choices=sorted(L),default=default_lang(),help='report language (default: from $LANG, else en)')
+    ap.add_argument('--name',help='project name shown in the report (default: repo folder name)')
+    ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='output folder (default ~/vibe-receipts)')
     a=ap.parse_args()
+    T=L[a.lang]
+
+    def hm(s):
+        mm=int(round(s/60)); return f"{mm//60}{T['h']} {mm%60:02d}{T['m']}"
+    def dow(d): return T['dow'][datetime.date.fromisoformat(d).weekday()]
 
     repo=os.path.realpath(a.repo)
-    name=os.path.basename(repo)
+    name=a.name or os.path.basename(repo)
     commits=load_commits(repo,a.author,a.since,a.until)
-    if not commits: raise SystemExit('Bu aralıkta commit bulunamadı.')
+    if not commits: raise SystemExit(T['e_none'])
 
-    # --- günlük ölçülen (commit arası, oturum içi) + eklenen etkin kod ---
+    # --- daily measured (between commits, within a session) + effective added code ---
     dmeas={};dcode={};dcom={};dadd={};ddel={};dvendor={};dsubj={}
     for i,c in enumerate(commits):
         d=day_of(c['t'])
@@ -112,11 +153,11 @@ def main():
             dadd[d]=dadd.get(d,0)+ad; ddel[d]=ddel.get(d,0)+de
             if kind(path)=='vendor': dvendor[d]=dvendor.get(d,0)+ad+de
             if '=>' in path and ad==0 and de==0: continue
-            dcode[d]=dcode.get(d,0)+CODE_W[kind(path)]*ad   # sadece EKLENEN satır
+            dcode[d]=dcode.get(d,0)+CODE_W[kind(path)]*ad   # ADDED lines only
 
     measured=sum(dmeas.values()); added_code=sum(dcode.values())
 
-    # --- transcript (gerçek ölçüm) ---
+    # --- transcript (ground truth) ---
     dirs=a.transcripts or claude_dirs(repo)
     tts=load_transcript(dirs,a.since,a.until)
     tr_active=0; dtract={}
@@ -126,17 +167,17 @@ def main():
             tr_active+=g; d=day_of(tts[i]); dtract[d]=dtract.get(d,0)+g
     has_tr=bool(tts)
 
-    kod_orani=KOD_ORANI
+    rate=CODE_RATE
     if a.calibrate:
-        if not has_tr or not added_code: raise SystemExit('Kalibrasyon için transcript ve eklenen kod gerekli.')
-        kod_orani=max(0.0,(tr_active-measured)/60/added_code)
+        if not has_tr or not added_code: raise SystemExit(T['e_cal'])
+        rate=max(0.0,(tr_active-measured)/60/added_code)
 
-    code_effort=added_code*kod_orani*60
+    code_effort=added_code*rate*60
     effort_ratio=(measured+code_effort)/measured if measured else 0
     total=measured+code_effort
 
     days=sorted(dcom)
-    dcodeff={d:dcode.get(d,0)*kod_orani*60 for d in days}
+    dcodeff={d:dcode.get(d,0)*rate*60 for d in days}
     dratio={d:(dmeas.get(d,0)+dcodeff[d])/dmeas[d] if dmeas.get(d,0) else 0 for d in days}
     day_tot={d:dmeas.get(d,0)+dcodeff[d] for d in days}
     mx=max(day_tot.values()) or 1
@@ -144,75 +185,76 @@ def main():
     vendor_pct=100*sum(dvendor.values())/allrows if allrows else 0
     d0,d1=days[0],days[-1]
 
-    print(f"Repo             : {repo}")
-    print(f"Aralık           : {d0} → {d1}  ({len(commits)} commit)")
-    print(f"Ölçülen          : {hm(measured)}")
-    print(f"Eklenen etkin kod: {added_code:.0f} satır")
-    print(f"Kod eforu        : {hm(code_effort)}   ({added_code:.0f} × {kod_orani:.4f}dk)")
-    print(f"EFOR ORANI       : {effort_ratio:.3f}")
-    print(f"{'='*46}\nTAHMİN TOPLAM ≈ {hm(total)}   ({total/3600:.1f} saat)\n{'='*46}")
-    if has_tr: print(f"Transcript gerçek aktif (IDLE {TR_IDLE//60}dk): {hm(tr_active)}  ({len(tts)} olay, {len(dirs)} klasör)")
-    else:      print("Transcript bulunamadı — yalnız commit tahmini raporlanacak.")
-    if a.calibrate: print(f"Kalibre KOD_ORANI: {kod_orani:.4f} dk/satır  (script başındaki KOD_ORANI'ya yazabilirsin)")
+    print(f"{T['p_repo']:<17}: {repo}")
+    print(f"{T['p_range']:<17}: {d0} → {d1}  ({len(commits)} {T['commits']})")
+    print(f"{T['p_meas']:<17}: {hm(measured)}")
+    print(f"{T['p_code']:<17}: {added_code:.0f} {T['p_lines']}")
+    print(f"{T['p_eff']:<17}: {hm(code_effort)}   ({added_code:.0f} × {rate:.4f})")
+    print(f"{T['p_ratio']:<17}: {effort_ratio:.3f}")
+    print(f"{'='*46}\n{T['p_total']} ≈ {hm(total)}   ({total/3600:.1f})\n{'='*46}")
+    if has_tr: print(f"{T['p_tr'].format(idle=TR_IDLE//60)}: {hm(tr_active)}  ({len(tts)} {T['p_ev']}, {len(dirs)} {T['p_dirs']})")
+    else:      print(T['p_notr'])
+    if a.calibrate: print(T['p_cal'].format(v=rate))
 
-    # ===== HTML RAPOR =====
+    # ===== HTML REPORT =====
     e=html.escape
     def bar(v,m,c):
         w=0 if not m else v/m*100
         return f'<div class="bar"><div class="barfill" style="width:{w:.1f}%;background:{c}"></div></div>'
 
-    P=[f'<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(name)} · Çalışma Analizi</title><style>{CSS}</style></head><body><div class="wrap">']
-    sub=f'{len(commits)} commit' + (f' · {len(tts)} Claude olayı' if has_tr else '') + f' · {d0} → {d1}'
-    P.append(f'<header><h1>📊 {e(name)} · Çalışma Süresi Analizi</h1><div class="sub">{sub}</div></header>')
+    P=[f'<!doctype html><html lang="{a.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(name)} · {T["title"]}</title><style>{CSS}</style></head><body><div class="wrap">']
+    sub=f'{len(commits)} {T["commits"]}' + (f' · {len(tts):,} {T["events"]}' if has_tr else '') + f' · {d0} → {d1}'
+    P.append(f'<header><h1>🧾 {e(name)} · {T["title"]}</h1><div class="sub">{sub}</div></header>')
     P.append('<div class="kpis">'
-        + (f'<div class="kpi"><div class="v">{hm(tr_active)}</div><div class="l">Gerçek (Claude oturumları)</div></div>' if has_tr else '')
-        + f'<div class="kpi"><div class="v">{hm(total)}</div><div class="l">Tahmin (commit modeli)</div></div>'
-        + (f'<div class="kpi"><div class="v">~{hm(abs(tr_active-total))}</div><div class="l">İki yöntem farkı</div></div>' if has_tr else '')
-        + f'<div class="kpi"><div class="v">{len(commits)}</div><div class="l">Commit</div></div></div>')
+        + (f'<div class="kpi"><div class="v">{hm(tr_active)}</div><div class="l">{T["k_real"]}</div></div>' if has_tr else '')
+        + f'<div class="kpi"><div class="v">{hm(total)}</div><div class="l">{T["k_est"]}</div></div>'
+        + (f'<div class="kpi"><div class="v">~{hm(abs(tr_active-total))}</div><div class="l">{T["k_diff"]}</div></div>' if has_tr else '')
+        + f'<div class="kpi"><div class="v">{len(commits)}</div><div class="l">{T["k_com"]}</div></div></div>')
 
     if has_tr:
         mxv=max(tr_active,total) or 1
-        P.append('<h2>🎯 İki Yöntemle Doğrulama</h2><div class="card">')
-        P.append(f'<div class="scn"><div class="nm">🟢 Gerçek — Claude transcript aktif süresi</div>{bar(tr_active,mxv,"#34d399")}<div class="vl">{hm(tr_active)}</div></div>')
-        P.append(f'<div class="scn"><div class="nm">🟣 Tahmin — commit efor-oranı modeli</div>{bar(total,mxv,"#a78bfa")}<div class="vl">{hm(total)}</div></div>')
-        P.append(f'<div class="note">Transcript = {len(tts)} olaydan ölçülen aktif süre (ardışık olaylar arası ≤{TR_IDLE//60}dk). Asıl yer-gerçeği budur; commit modeli transcript\'i olmayan projeler için taşınabilir yaklaşıklıktır. Claude dışında elle yapılan iş transcript\'e girmez.</div></div>')
+        P.append(f'<h2>{T["s_verify"]}</h2><div class="card">')
+        P.append(f'<div class="scn"><div class="nm">{T["v_real"]}</div>{bar(tr_active,mxv,"#34d399")}<div class="vl">{hm(tr_active)}</div></div>')
+        P.append(f'<div class="scn"><div class="nm">{T["v_est"]}</div>{bar(total,mxv,"#a78bfa")}<div class="vl">{hm(total)}</div></div>')
+        P.append(f'<div class="note">{e(T["v_note"].format(n=f"{len(tts):,}",idle=TR_IDLE//60))}</div></div>')
 
-    P.append('<h2>⏱️ Süre Analizi</h2><div class="card">')
-    P.append(f'<div class="formula">Efor oranı = 1 + (eklenen etkin kod × {kod_orani:.4f}dk) / Ölçülen = <b>{effort_ratio:.3f}</b><br>TOPLAM = Ölçülen × Efor oranı</div>')
-    P.append(f'<div class="scn"><div class="nm">Ölçülen (commit arası)</div>{bar(measured,total,"#60a5fa")}<div class="vl">{hm(measured)}</div></div>')
-    P.append(f'<div class="scn"><div class="nm">× Efor oranı ({effort_ratio:.2f}) — kod eforu</div>{bar(code_effort,total,"#fbbf24")}<div class="vl">+{hm(code_effort)}</div></div>')
-    P.append(f'<div class="scn"><div class="nm"><b>TOPLAM</b></div>{bar(total,total,"#a78bfa")}<div class="vl">{hm(total)}</div></div>')
-    P.append(f'<div class="note">Molalar (>{BREAK//60}dk) ve kopya/vendor satırlar dışlandı. Ham satırların %{vendor_pct:.0f}\'i kopya/vendor.</div>')
-    P.append('<div style="margin:10px 0"><span class="wt">kod ×1.0</span><span class="wt">config ×0.4</span><span class="wt">docs ×0</span><span class="wt">kopya/vendor ×0</span><span class="wt">üretilmiş ×0</span></div></div>')
+    P.append(f'<h2>{T["s_time"]}</h2><div class="card">')
+    P.append(f'<div class="formula">{T["f_ratio"]} = 1 + ({T["f_added"]} × {rate:.4f}) / {T["f_meas"]} = <b>{effort_ratio:.3f}</b><br>{T["f_total"]} = {T["f_meas"]} × {T["f_ratio"]}</div>')
+    P.append(f'<div class="scn"><div class="nm">{T["t_meas"]}</div>{bar(measured,total,"#60a5fa")}<div class="vl">{hm(measured)}</div></div>')
+    P.append(f'<div class="scn"><div class="nm">{T["t_code"].format(r=f"{effort_ratio:.2f}")}</div>{bar(code_effort,total,"#fbbf24")}<div class="vl">+{hm(code_effort)}</div></div>')
+    P.append(f'<div class="scn"><div class="nm"><b>{T["f_total"]}</b></div>{bar(total,total,"#a78bfa")}<div class="vl">{hm(total)}</div></div>')
+    P.append(f'<div class="note">{e(T["t_note"].format(b=BREAK//60,p=f"{vendor_pct:.0f}"))}</div>')
+    P.append('<div style="margin:10px 0">'+''.join(f'<span class="wt">{w}</span>' for w in T['w'])+'</div></div>')
 
     trdays=sorted(set(days)|set(dtract))
-    P.append('<h2>📅 Günlük Çalışma & Kod</h2><div class="card"><div class="scroll"><table>')
-    P.append('<tr><th>Tarih</th><th>Gün</th><th class="r">Commit</th><th class="r">Ölçülen</th><th class="r">Efor oranı</th><th>Tahmin</th>'
-             + ('<th class="r">🟢 Gerçek</th>' if has_tr else '') + '<th class="r">Satır +/−</th></tr>')
+    C=T['c']
+    P.append(f'<h2>{T["s_daily"]}</h2><div class="card"><div class="scroll"><table>')
+    P.append(f'<tr><th>{C[0]}</th><th>{C[1]}</th><th class="r">{C[2]}</th><th class="r">{C[3]}</th><th class="r">{C[4]}</th><th>{C[5]}</th>'
+             + (f'<th class="r">{C[6]}</th>' if has_tr else '') + f'<th class="r">{C[7]}</th></tr>')
     for d in trdays:
         P.append(f'<tr><td>{d[5:]}</td><td>{dow(d)}</td><td class="r">{dcom.get(d,0)}</td><td class="r">{hm(dmeas.get(d,0))}</td>'
                  f'<td class="r">{("×"+format(dratio.get(d,0),".2f")) if dratio.get(d,0) else "—"}</td>'
                  f'<td><div style="display:flex;align-items:center;gap:8px">{bar(day_tot.get(d,0),mx,"#a78bfa")}<span style="font-size:13px;width:52px">{hm(day_tot.get(d,0))}</span></div></td>'
                  + (f'<td class="r" style="color:#34d399;font-weight:700">{hm(dtract.get(d,0))}</td>' if has_tr else '')
                  + f'<td class="r" style="color:#86efac">+{dadd.get(d,0):,}<span style="color:#fca5a5"> / −{ddel.get(d,0):,}</span></td></tr>')
-    P.append(f'<tr class="tot"><td colspan="2">TOPLAM</td><td class="r">{len(commits)}</td><td class="r">{hm(measured)}</td><td class="r">×{effort_ratio:.2f}</td><td>{hm(total)}</td>'
+    P.append(f'<tr class="tot"><td colspan="2">{T["tot"]}</td><td class="r">{len(commits)}</td><td class="r">{hm(measured)}</td><td class="r">×{effort_ratio:.2f}</td><td>{hm(total)}</td>'
              + (f'<td class="r" style="color:#34d399">{hm(tr_active)}</td>' if has_tr else '')
              + f'<td class="r">+{sum(dadd.values()):,} / −{sum(ddel.values()):,}</td></tr>')
     P.append('</table></div></div>')
 
-    P.append('<h2>📝 Günlük Commit Özeti</h2>')
+    P.append(f'<h2>{T["s_sum"]}</h2>')
     for d in days:
         items=''.join(f'<li>{e(s)}</li>' for s in dsubj[d])
-        P.append(f'<div class="dayblk"><h3>{d[5:]} · {dow(d)} <span class="hrs">{hm(day_tot[d])} · {dcom[d]} commit</span></h3><ul>{items}</ul></div>')
+        P.append(f'<div class="dayblk"><h3>{d[5:]} · {dow(d)} <span class="hrs">{hm(day_tot[d])} · {dcom[d]} {T["commits"]}</span></h3><ul>{items}</ul></div>')
 
-    P.append(f'<div class="foot">vibe-receipts · {e(name)} · {datetime.date.today()}</div></div></body></html>')
+    P.append(f'<div class="foot">🧾 vibe-receipts · {e(name)} · {datetime.date.today()}</div></div></body></html>')
 
     os.makedirs(a.out,exist_ok=True)
-    out=os.path.join(a.out,f'{name}-rapor.html')
+    out=os.path.join(a.out,f'{name}-report.html')
     open(out,'w',encoding='utf-8').write('\n'.join(P))
-    csvp=os.path.join(a.out,f'{name}-gunluk.csv')
+    csvp=os.path.join(a.out,f'{name}-daily.csv')
     with open(csvp,'w',encoding='utf-8') as f:
-        f.write('tarih,commit,olculen_dk,kod_eforu_dk,tahmin_dk,gercek_dk,eklenen,silinen\n')
+        f.write('date,commits,measured_min,code_effort_min,estimate_min,real_min,added,deleted\n')
         for d in trdays:
             f.write(f'{d},{dcom.get(d,0)},{dmeas.get(d,0)/60:.0f},{dcodeff.get(d,0)/60:.0f},{day_tot.get(d,0)/60:.0f},{dtract.get(d,0)/60:.0f},{dadd.get(d,0)},{ddel.get(d,0)}\n')
     print("HTML:",out); print("CSV :",csvp)
