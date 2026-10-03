@@ -6,12 +6,36 @@ Bir git reposunda harcanan **gerçek çalışma süresini**, git geçmişinden v
 Claude Code oturum kayıtlarından tahmin eden küçük bir araç.
 Tek dosya, bağımlılık yok (yalnız Python 3 standart kütüphanesi).
 
+## Claude Code'a kur (önerilen)
+
+```
+/plugin marketplace add sahmett/vibe-receipts
+/plugin install vibe-receipts@vibe-receipts
+```
+
+Sonra Claude'a sor: *"Bu repoda bu hafta kaç saat çalıştım?"*, *"Haziran'ın fişini çıkar"*.
+Skill script'i çalıştırır, raporu üretir ve günlük ne yapıldığını commit'lerden özetler.
+
+## Ya da doğrudan çalıştır
+
 ```bash
 python3 receipts.py ~/path/to/repo
 ```
 
-Çıktı: `output/<repo>-rapor.html` (görsel rapor) ve `output/<repo>-gunluk.csv` (günlük döküm).
-`output/` git'e girmez. Raporlar kişisel çalışma verisi içerir.
+Çıktı: `~/vibe-receipts/<repo>-rapor.html` (görsel rapor) ve `<repo>-gunluk.csv` (günlük döküm).
+Raporlar kişisel çalışma verisi içerir, analiz edilen repoya yazılmaz.
+
+## Repo yapısı
+
+```
+.claude-plugin/            ← plugin + marketplace manifestleri
+skills/vibe-receipts/
+├── SKILL.md               ← Claude'un ne zaman/nasıl çalıştıracağı
+└── scripts/
+    ├── receipts.py        ← analiz + HTML rapor
+    └── to_jpg.sh          ← raporu JPEG'e çevirir
+receipts.py, to_jpg.sh     ← kısayol (symlink)
+```
 
 ## Yöntem: iki bağımsız katman
 
@@ -68,7 +92,7 @@ gereği transcript'e oturur. Modelin asıl bağımsız testi **günlük dağıl�
 | `--author` | yalnız bu yazarın commit'leri (`git log --author` deseni) |
 | `--transcripts DIR` | Claude kayıt klasörünü elle ver (tekrarlanabilir) |
 | `--calibrate` | `KOD_ORANI`'yı transcript'e göre hesapla |
-| `--out DIR` | çıktı klasörü (varsayılan `./output`) |
+| `--out DIR` | çıktı klasörü (varsayılan `~/vibe-receipts`) |
 
 Script başındaki sabitler:
 
@@ -83,5 +107,5 @@ Script başındaki sabitler:
 ## JPEG'e çevirme (opsiyonel)
 
 ```bash
-bash to_jpg.sh output/<repo>-rapor.html   # macOS + Google Chrome + Pillow
+bash to_jpg.sh ~/vibe-receipts/<repo>-rapor.html   # macOS + Google Chrome + Pillow
 ```

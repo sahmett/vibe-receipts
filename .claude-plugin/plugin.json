@@ -1,0 +1,9 @@
+{
+  "name": "vibe-receipts",
+  "version": "0.1.0",
+  "description": "Receipts for your vibe coding — how many hours did you really work with Claude? Git commits estimate, session logs prove.",
+  "author": { "name": "sahmett" },
+  "repository": "https://github.com/sahmett/vibe-receipts",
+  "license": "MIT",
+  "keywords": ["time-tracking", "productivity", "git", "vibe-coding", "report"]
+}

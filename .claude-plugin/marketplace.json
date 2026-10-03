@@ -1,0 +1,11 @@
+{
+  "name": "vibe-receipts",
+  "owner": { "name": "sahmett" },
+  "plugins": [
+    {
+      "name": "vibe-receipts",
+      "source": "./",
+      "description": "Receipts for your vibe coding — how many hours did you really work with Claude?"
+    }
+  ]
+}
