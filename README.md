@@ -116,6 +116,16 @@ lines per hour, minutes per commit and a daily commit log.
 The report breaks it down and shows what it would have cost without the prompt cache. Responses
 from models missing from `PRICES` are left out and the value is shown as `≥`.
 
+### The full report
+
+Every receipt comes with a full HTML report: your rhythm, the break threshold and why, and how much
+the total moves if the threshold changes. Then the Claude side (tokens, token value, model mix),
+a daily table and a daily commit log.
+
+<p align="center"><img src="docs/report-preview.jpg" alt="Top of the vibe-receipts HTML report: working time, rhythm and threshold sensitivity" width="720"></p>
+
+<p align="center"><sub>Synthetic demo data · <a href="docs/demo-full.jpg">see the whole report</a></sub></p>
+
 ## Privacy
 
 Everything runs locally. vibe-receipts reads your Claude Code transcripts and git history on your
