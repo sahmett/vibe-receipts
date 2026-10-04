@@ -31,6 +31,18 @@ CODE_RATE  = 0.02          # minutes per effective added line
 # Weights for added lines (only real code/config; docs/vendor/generated weigh 0)
 CODE_W = {'code':1.0, 'config':0.4, 'arch':0.0, 'doc':0.0, 'vendor':0.0, 'gen':0.0}
 
+# Token value: Anthropic API list prices, $ per million tokens (input, output, cache read).
+# Cache writes cost 1.25x input (5-minute cache) or 2x input (1-hour cache); fast mode doubles everything.
+# Responses from models not listed here are left out of the value (the receipt then shows it as "≥").
+PRICES_AS_OF = '2026-09'
+PRICES = {
+    'claude-fable-5-1':(10,50,0.25), 'claude-mythos-5-1':(10,50,0.25), 'claude-fable-5':(10,50,1.0),
+    'claude-opus-5-5':(4,20,0.20), 'claude-opus-5':(5,25,0.50), 'claude-opus-4-8':(5,25,0.50),
+    'claude-opus-4-7':(5,25,0.50), 'claude-opus-4-6':(5,25,0.50),
+    'claude-sonnet-5-5':(2,10,0.20), 'claude-sonnet-5':(2,10,0.20), 'claude-sonnet-4-6':(3,15,0.30),
+    'claude-haiku-4-5':(1,5,0.10),
+}
+
 # Bulk-copied/moved static content — excluded. Extend for your project.
 VENDOR_RE=re.compile(r'(^|/)(prototypes/|_archive/|vendor/|third_party/)|(^|/)(src/)?ui/.*\.(html|css|js)$')
 GEN_RE=re.compile(r'(pnpm-lock|package-lock|yarn\.lock|poetry\.lock|Cargo\.lock|payload-types|/migrations/|\.min\.(js|css)$)')
@@ -75,9 +87,12 @@ L={
    s_claude='🤖 Claude side',c_read='Tokens read',c_written='Tokens written',c_total='Tokens total',c_runs='Sessions (runs)',c_subs='Subagents',
    c_rows=['Input (new, not cached)','Cache write (added to the context)','Cache read (context re-read every turn)','Output (written by Claude)'],
    c_note='Claude re-reads the whole conversation on every turn, so tokens read are hundreds of times tokens written. Each response is counted once (Claude Code logs repeat it over several lines); subagents are included.',
+   c_value='Token value',c_nocache='Token value without prompt cache',
+   c_value_note='What these tokens would cost at Anthropic API list prices ({asof}); cache writes are 1.25x input (5-minute cache) or 2x (1-hour cache). Not what a subscription costs you.',
+   c_unpriced=' {n} responses from models with no known price are left out, so the real value is higher.',
    c_model='Model mix (share of tokens written)',c_types='Subagent types',days='days',active='active days',
-   rc_kind='WORK TIME RECEIPT',rc_project='PROJECT',rc_built='BUILT',rc_tokens='TOKENS',rc_agents=('AGENTS','RUNS','SUBAGENTS'),rc_model='MODEL',rc_tok=('READ','WRITTEN','TOTAL'),rc_active='ACTIVE DAYS',rc_days=lambda n:f"{n} DAY{'S'*(n!=1)}",rc_period='PERIOD',rc_qty='QTY',rc_item='ITEM',rc_time='TIME',
-   rc_prompts='PROMPTS',rc_commits='COMMITS',rc_code='CODE LINES',rc_total='TOTAL',
+   rc_kind='WORK TIME RECEIPT',rc_project='PROJECT',rc_built='BUILT',rc_tokens='TOKENS',rc_agents=('AGENTS','RUNS','SUBAGENTS'),rc_model='MODEL',rc_tok=('READ','WRITTEN'),rc_active='ACTIVE DAYS',rc_days=lambda n:f"{n} DAY{'S'*(n!=1)}",rc_period='PERIOD',rc_qty='QTY',rc_item='ITEM',rc_time='TIME',
+   rc_prompts='PROMPTS',rc_commits='COMMITS',rc_code='CODE LINES',rc_total='TOTAL',rc_value='TOKEN VALUE',
    rc_thr='BREAK THRESHOLD',rc_note=dict(auto='Based on your own prompt rhythm. Longer gaps are breaks, not work.',
      fixed='Set by you. Longer gaps are breaks, not work.',capped='Your rhythm gave {tk}, capped at {cap}. Longer gaps are breaks.',few='Default: too few prompts to read your rhythm. Longer gaps are breaks.'),
    rc_est='NO SESSION LOGS',rc_est_note='Rough estimate from the gaps between commits.',
@@ -109,9 +124,12 @@ L={
    s_claude='🤖 Claude tarafı',c_read='Okunan token',c_written='Yazılan token',c_total='Toplam token',c_runs='Oturum',c_subs='Subagent',
    c_rows=['Girdi (yeni, önbelleksiz)','Önbelleğe yazma (bağlama eklenen)','Önbellekten okuma (her turda yeniden okunan bağlam)','Çıktı (Claude\'un yazdığı)'],
    c_note='Claude her turda konuşmanın tamamını yeniden okur; bu yüzden okunan token yazılandan yüzlerce kat fazladır. Her cevap bir kez sayılır (Claude Code kayıtlarında birkaç satıra tekrarlanır); subagent\'lar dahildir.',
+   c_value='Token value',c_nocache='Önbellek olmasaydı token value',
+   c_value_note='Bu token\'ların Anthropic API liste fiyatıyla ({asof}) tutarı; önbelleğe yazma girdinin 1,25 katı (5 dakikalık önbellek) ya da 2 katı (1 saatlik önbellek). Abonelikle ödediğin tutar değil.',
+   c_unpriced=' Fiyatı bilinmeyen modellerden {n} yanıt hesaba katılmadı; gerçek değer daha yüksek.',
    c_model='Model dağılımı (yazılan token payı)',c_types='Subagent türleri',days='gün',active='aktif gün',
-   rc_kind='ÇALIŞMA SÜRESİ FİŞİ',rc_project='PROJE',rc_built='YAPILAN',rc_tokens='TOKEN',rc_agents=('AGENT','OTURUM','SUBAGENT'),rc_model='MODEL',rc_tok=('OKUNAN','YAZILAN','TOPLAM'),rc_active='AKTİF GÜN',rc_days=lambda n:f'{n} GÜN',rc_period='DÖNEM',rc_qty='ADET',rc_item='KALEM',rc_time='SÜRE',
-   rc_prompts='PROMPT',rc_commits='COMMIT',rc_code='KOD SATIRI',rc_total='TOPLAM',
+   rc_kind='ÇALIŞMA SÜRESİ FİŞİ',rc_project='PROJE',rc_built='YAPILAN',rc_tokens='TOKEN',rc_agents=('AGENT','OTURUM','SUBAGENT'),rc_model='MODEL',rc_tok=('OKUNAN','YAZILAN'),rc_active='AKTİF GÜN',rc_days=lambda n:f'{n} GÜN',rc_period='DÖNEM',rc_qty='ADET',rc_item='KALEM',rc_time='SÜRE',
+   rc_prompts='PROMPT',rc_commits='COMMIT',rc_code='KOD SATIRI',rc_total='TOPLAM',rc_value='TOKEN VALUE',
    rc_thr='MOLA SINIRI',rc_note=dict(auto='Kendi prompt ritmine göre. Daha uzun aralıklar mola sayılır, çalışma değil.',
      fixed='Senin seçtiğin eşik. Daha uzun aralıklar mola sayılır, çalışma değil.',capped='Ritminden {tk} çıktı, {cap} üst sınır uygulandı. Daha uzun aralıklar mola sayılır.',few='Varsayılan: ritmini okumak için prompt az. Daha uzun aralıklar mola sayılır.'),
    rc_est='OTURUM KAYDI YOK',rc_est_note="Commit'ler arası süreden kaba tahmin.",
@@ -210,9 +228,10 @@ def load_usage(dirs,since,until):
     (share of output tokens per model family).
     Claude Code writes one response as several lines that repeat its usage, so keep one per
     message id (max per field: output_tokens grows while the response streams). A resumed session
-    copies its history into a new file, so sessions and subagent calls are counted by id."""
+    copies its history into a new file, so sessions and subagent calls are counted by id.
+    Also returns the token value: what these tokens cost at API list prices (see PRICES)."""
     K=('input_tokens','cache_creation_input_tokens','cache_read_input_tokens','output_tokens')
-    per={}; spawned={}; sessions=set(); model={}
+    per={}; spawned={}; sessions=set(); model={}; mid_model={}; w1h={}; fast=set()
     for d in dirs:
         for tf in glob.glob(os.path.join(d,'**','*.jsonl'),recursive=True):
             sub=f'{os.sep}subagents{os.sep}' in tf
@@ -225,9 +244,12 @@ def load_usage(dirs,since,until):
                 ts=parse_ts(o)
                 if ts is None or not since<=day_of(ts)<=until: continue
                 mid=m.get('id') or o.get('uuid'); p=per.setdefault(mid,dict.fromkeys(K,0))
-                for k in K: p[k]=max(p[k],m['usage'].get(k) or 0)
+                u=m['usage']
+                for k in K: p[k]=max(p[k],u.get(k) or 0)
+                w1h[mid]=max(w1h.get(mid,0),(u.get('cache_creation') or {}).get('ephemeral_1h_input_tokens') or 0)
+                if u.get('speed')=='fast': fast.add(mid)
                 fam=re.match(r'claude-([a-z]+)',m.get('model') or '')   # claude-opus-5-5 -> opus; skips <synthetic>
-                if fam: model[mid]=fam.group(1)
+                if fam: model[mid]=fam.group(1); mid_model[mid]=m['model']
                 if not sub and o.get('sessionId'): sessions.add(o['sessionId'])
                 if isinstance(m.get('content'),list):
                     for x in m['content']:
@@ -240,7 +262,26 @@ def load_usage(dirs,since,until):
     mix=sorted(((f,pc) for f,pc in zip(fam_out,shares) if pc),key=lambda x:-x[1])
     types={}
     for t in spawned.values(): types[t]=types.get(t,0)+1
-    return {k:sum(p[k] for p in per.values()) for k in K},len(sessions),len(spawned),mix,sorted(types.items(),key=lambda x:-x[1])
+    return {k:sum(p[k] for p in per.values()) for k in K},len(sessions),len(spawned),mix,sorted(types.items(),key=lambda x:-x[1]),token_value(per,mid_model,w1h,fast)
+
+def token_value(per,mid_model,w1h,fast):
+    """$ value of the tokens at API list prices: per part (input, cache write, cache read, output),
+    the total, what it would have been with no prompt cache, and how many responses had no known price."""
+    v=dict(input=0.0,cache_write=0.0,cache_read=0.0,output=0.0,nocache=0.0,unpriced=0)
+    for mid,p in per.items():
+        mm=mid_model.get(mid)
+        if not mm: continue                                                   # <synthetic> / no model
+        k=re.sub(r'(-\d{8})?([\[@].*)?$','',mm)                              # drop date / [1m] / @version suffixes
+        if k not in PRICES: v['unpriced']+=1; continue
+        inp,out,rd=(x/1e6*(2 if mid in fast else 1) for x in PRICES[k])
+        w1=min(w1h.get(mid,0),p['cache_creation_input_tokens']); w5=p['cache_creation_input_tokens']-w1
+        v['input']+=p['input_tokens']*inp; v['cache_write']+=w5*inp*1.25+w1*inp*2
+        v['cache_read']+=p['cache_read_input_tokens']*rd; v['output']+=p['output_tokens']*out
+        v['nocache']+=(p['input_tokens']+p['cache_creation_input_tokens']+p['cache_read_input_tokens'])*inp+p['output_tokens']*out
+    v['total']=v['input']+v['cache_write']+v['cache_read']+v['output']
+    return v
+
+def usd(x): return f'${x:,.2f}'
 
 def short(n):
     """1234 -> 1.23K, 9_600_000 -> 9.6M, 2_454_000_000 -> 2.45B"""
@@ -276,7 +317,8 @@ def main():
     except subprocess.CalledProcessError: commits=[]
     dirs=a.transcripts or claude_dirs(repo)
     prompts=load_prompts(dirs,a.since,a.until)
-    tok,runs,subagents,mix,subtypes=load_usage(dirs,a.since,a.until)
+    tok,runs,subagents,mix,subtypes,val=load_usage(dirs,a.since,a.until)
+    vtxt=('≥ ' if val['unpriced'] else '')+usd(val['total'])                                     # token value as shown
     tread=tok['input_tokens']+tok['cache_creation_input_tokens']+tok['cache_read_input_tokens']   # context Claude processed
     twrote=tok['output_tokens']                                                                     # what Claude wrote
     if not commits and not prompts: raise SystemExit(T['e_none'])
@@ -345,6 +387,10 @@ def main():
     if tread+twrote:
         print(f"{'Tokens':<15}: {short(tread)} read · {short(twrote)} written · {short(tread+twrote)} total   "
               f"(input {short(tok['input_tokens'])} · cache write {short(tok['cache_creation_input_tokens'])} · cache read {short(tok['cache_read_input_tokens'])} · output {short(twrote)})")
+    if val['total']:
+        print(f"{'Token value':<15}: {vtxt}   (API list prices {PRICES_AS_OF}: input {usd(val['input'])} · cache write {usd(val['cache_write'])} · "
+              f"cache read {usd(val['cache_read'])} · output {usd(val['output'])}; without cache {usd(val['nocache'])}"
+              +(f"; {val['unpriced']} responses unpriced" if val['unpriced'] else '')+")")
 
     # ===== HTML REPORT =====
     def bar(v,m,c):
@@ -393,6 +439,14 @@ def main():
         for lbl,v,col in zip(T['c_rows'],vals,['#8b90a0','#fbbf24','#3f4560','#a78bfa']):
             P.append(f'<div class="scn"><div class="nm">{e(lbl)}</div>{bar(v,max(vals),col)}<div class="vl">{short(v)}</div></div>')
         P.append(f'<div class="note">{e(T["c_note"])}</div>')
+        if val['total']:
+            P.append(f'<h3 class="h3">{T["c_value"]}</h3><div class="stats" style="margin-top:10px">'
+                     f'<div class="st hi"><div class="v">{vtxt}</div><div class="l">{T["c_value"]}</div></div>'
+                     f'<div class="st"><div class="v">{usd(val["nocache"])}</div><div class="l">{T["c_nocache"]}</div></div></div>')
+            vv=[val['input'],val['cache_write'],val['cache_read'],val['output']]
+            for lbl,v,col in zip(T['c_rows'],vv,['#8b90a0','#fbbf24','#3f4560','#a78bfa']):
+                P.append(f'<div class="scn"><div class="nm">{e(lbl)}</div>{bar(v,max(vv),col)}<div class="vl" style="width:84px">{usd(v)}</div></div>')
+            P.append(f'<div class="note">{e(T["c_value_note"].format(asof=PRICES_AS_OF)+(T["c_unpriced"].format(n=val["unpriced"]) if val["unpriced"] else ""))}</div>')
         if mix:
             P.append(f'<h3 class="h3">{T["c_model"]}</h3>'+''.join(f'<div class="scn"><div class="nm"><b>{f.capitalize()}</b></div>{bar(pc,100,"#a78bfa")}<div class="vl">{pc}%</div></div>' for f,pc in mix))
         if subtypes:
@@ -447,14 +501,15 @@ def main():
     # Claude's side (what went in), a blank line, then what came out
     spent=([(T['rc_prompts'],f'{len(prompts):,}')] if has_p else [])+(
            [(T['rc_agents'][0],f"{runs} {T['rc_agents'][1]} · {subagents} {T['rc_agents'][2]}")] if runs else [])+(
-           [(T['rc_tokens'],' · '.join(f'{short(v)} {l}' for v,l in zip((tread,twrote,tread+twrote),T['rc_tok'])))] if tread+twrote else [])+(
+           [(T['rc_tokens'],' · '.join(f'{short(v)} {l}' for v,l in zip((tread,twrote),T['rc_tok'])))] if tread+twrote else [])+(
            [(T['rc_model'],' · '.join(f'{f.upper()} {pc}%' for f,pc in mix[:3]))] if mix else [])
     made=[(T['rc_commits'],str(len(commits))),(T['rc_code'],f'+{code:,.0f}')]
     stats=spent+([None] if spent else [])+made
     thr=(T['rc_thr'],mins(idle),T['rc_note'][mode].format(tk=mins(tukey),cap=mins(CAP))) if has_p else (T['rc_est'],'',T['rc_est_note'])
     period=(d0 if d0==d1 else f"{d0} → {d1[5:] if d0[:4]==d1[:4] else d1}")+f" · {T['rc_days'](span)}"
     quote=next(q for lim,q in T['rc_quote'] if lim is None or hours<lim)
-    card,H=receipt_html(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),thr,quote,T['rc_by'].format(day=dow(d0)))
+    value=(T['rc_value'],vtxt) if val['total'] else None
+    card,H=receipt_html(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),value,thr,quote,T['rc_by'].format(day=dow(d0)))
     cardp=os.path.join(a.out,f'{name}-receipt.html')
     open(cardp,'w',encoding='utf-8').write(card)
     pngp=os.path.join(a.out,f'{name}-receipt.png')
@@ -468,13 +523,13 @@ def split_minutes(secs,total):
     for i in sorted(range(len(raw)),key=lambda i:fl[i]-raw[i])[:int(round(total/60))-sum(fl)]: fl[i]+=1
     return fl
 
-def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,thr,quote,by):
+def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,value,thr,quote,by):
     """The share card: a thermal-paper receipt on a dark 1080px-wide card. Returns (html, height)."""
     e=html.escape
     def up(x): return (x.replace('i','İ').replace('ı','I') if lang=='tr' else x).upper()   # Turkish dotted İ
     rows=''.join(f'<span>{q:,}</span><span>{e(l)}</span><span class="r">{t}</span>' for q,l,t in items)
     srows=''.join('<div class="sp"></div>' if r is None else f'<div class="row"><span>{e(r[0])}</span><span>{r[1]}</span></div>' for r in stats)
-    H=max(1350,378+804+24*(len(stats)-4)+26*len(items)+24*bool(built)+60)   # card padding + quote + receipt body + item/BUILT rows + slack
+    H=max(1350,378+804+24*(len(stats)-4)+26*len(items)+24*bool(built)+46*bool(value)+60)   # card padding + quote + receipt body + item/BUILT/value rows + slack
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(name)} · vibe receipt</title>'
       '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Instrument+Serif:ital@0;1&display=swap">'
       f'<style>{RCSS}</style></head><body><div class="card" style="height:{H}px">'
@@ -490,7 +545,8 @@ def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,
       '<div class="hr"></div>'
       f'<div class="items"><span class="h">{T["rc_qty"]}</span><span class="h">{T["rc_item"]}</span><span class="h r">{T["rc_time"]}</span>{rows}</div>'
       f'<div class="hr"></div>{srows}<div class="hr2"></div>'
-      f'<div class="tot"><span>{T["rc_total"]}</span><span>{total}</span></div>'
+      +(f'<div class="val"><span>{value[0]}</span><span>{e(value[1])}</span></div>' if value else '')+   # the wow metric, mid size
+      f'<div class="tot{" big" if value else ""}"><span>{T["rc_total"]}</span><span>{total}</span></div>'  # the hero: time
 
       '<div class="hr"></div>'
       f'<div class="row thr"><span>{thr[0]}</span><b>{e(thr[1])}</b></div>'+(f'<div class="mute">{e(thr[2])}</div>' if thr[2] else '')+
@@ -572,6 +628,9 @@ body{{background:#0e0f14;color:#ECEAF2;font-family:'JetBrains Mono',ui-monospace
 .items span{{overflow:hidden;text-overflow:ellipsis}}.items .h{{font-size:11px;color:#6b665d;letter-spacing:1.5px}}.items .r{{text-align:right}}
 .tot{{display:flex;justify-content:space-between;align-items:baseline}}
 .tot span:first-child{{font-size:22px;font-weight:800;letter-spacing:3px}}.tot span:last-child{{font-size:40px;line-height:48px;font-weight:800;letter-spacing:-1px}}
+.tot.big span:last-child{{font-size:46px;line-height:54px}}
+.val{{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}}
+.val span:first-child{{font-size:16px;font-weight:800;letter-spacing:2px}}.val span:last-child{{font-size:28px;line-height:34px;font-weight:800}}
 .thr{{font-size:13px;line-height:20px}}.sp{{height:12px}}
 .ft{{padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}}
 .ft .s{{font-size:16px;line-height:24px;font-weight:800;letter-spacing:3px}}

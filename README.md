@@ -92,6 +92,13 @@ Commits don't decide the hours. They give the report its "what got built" side: 
 effective lines of code (weighted `code ×1.0 · config ×0.4 · docs ×0 · copied/vendor ×0 ·
 generated ×0`), lines per hour, minutes per commit, and a daily commit log.
 
+### Token value: what those tokens would cost on the API
+The receipt's `TOKEN VALUE` line prices every Claude response at Anthropic API list prices
+(`PRICES` in `receipts.py`): input, output and cache reads per model, cache writes at 1.25× input
+(5-minute cache) or 2× (1-hour cache), fast mode at 2×. Subagents are included. The report breaks it
+down and shows what it would have been without the prompt cache. It is not what a subscription costs
+you; models missing from `PRICES` are left out and the value is shown as `≥`.
+
 ### No session logs? Rough fallback
 For a repo with no Claude logs, the report falls back to an estimate from gaps between commits
 (breaks over 150 min dropped) plus 0.02 min per effective added line, clearly labelled. It tends

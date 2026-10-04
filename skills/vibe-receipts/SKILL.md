@@ -61,6 +61,11 @@ After running, read the printed summary and the CSV, then answer in the user's l
   conversation) vs written (what Claude actually produced). Subagent usage is included.
 - Agents from the `Agents` line: main Claude Code sessions (runs) and the subagents Claude started.
 - Model mix from the `Model mix` line: which model families wrote the work (share of output tokens).
+- Token value from the `Token value` line: what these tokens would cost at Anthropic API list prices
+  (the `TOKEN VALUE` line on the receipt), which part is the biggest (usually cache reads), and the
+  "without cache" number. Say it is not what a subscription costs them. If the user asks for another
+  currency, convert it with a current exchange rate. A `≥` or "unpriced" note means some models are
+  missing from `PRICES` in `scripts/receipts.py`.
 - The busiest days (from the CSV), and a short summary of what was done per day based on the
   commit subjects (`git -C <repo> log --since ... --until ... --pretty='%ad %s' --date=short`).
 - The path to the HTML report and the receipt PNG, and open them if the environment can show files.
