@@ -77,8 +77,10 @@ threshold = Q3 + 1.5 × IQR                          ← beyond this is unusual 
 ```
 
 Example: Q1 = 1.3 min, Q3 = 6.5 min → IQR = 5.2 → threshold = 6.5 + 1.5 × 5.2 = **14.3 min**.
-A project where Claude runs long autonomous tasks between your prompts gets a higher threshold
-(40+ min), because long waits are normal there.
+A project where Claude runs long autonomous tasks between your prompts gets a higher threshold,
+because long waits are normal there, but never above **30 min**: a 30+ minute gap is a break for
+anyone (the same cut-off web analytics uses to end a session). When the cap kicks in, the report
+and the receipt say so.
 
 The report tells you which threshold it used and why, and shows a sensitivity table (5 → 60 min)
 so you can see how much the total moves. Want a different one? `--idle 20` (or just ask Claude:

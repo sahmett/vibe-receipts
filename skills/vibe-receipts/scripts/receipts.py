@@ -20,6 +20,7 @@ import argparse, datetime, glob, html, json, os, pathlib, re, shutil, subprocess
 
 IDLE       = 15            # minutes: fallback threshold when there are too few gaps for Tukey
 MIN_GAPS   = 20            # fewer gaps than this = Tukey threshold is not reliable
+CAP        = 30            # minutes: the automatic threshold never goes above this (a 30+ min gap is a break)
 SENS       = [5,10,15,20,30,45,60]   # thresholds shown in the sensitivity table
 BANDS      = [(0,2),(2,5),(5,15),(15,30),(30,60),(60,None)]
 
@@ -58,7 +59,7 @@ L={
    r_iqr='Normal pace (interquartile range, IQR = Q3 − Q1)',r_p90='Rare long gaps (90th percentile, P90)',
    r_tukey='Break threshold (Tukey upper fence, Q3 + 1.5·IQR)',
    r_note='Your typical gap between prompts (median) is {med}; the middle half of your gaps (interquartile range) is {q1}–{q3}. By Tukey\'s outlier rule (Q3 + 1.5·IQR) anything above {tukey} is an outlier for you, i.e. a break. This report uses {idle} ({mode}). {pct}% of your gaps are within it (cumulative share).',
-   mode_fixed='set by you',mode_auto='your own threshold, computed automatically',mode_few='default — too few prompts to compute your own',
+   mode_fixed='set by you',mode_auto='your own threshold, computed automatically',mode_few='default — too few prompts to compute your own',mode_capped='your rhythm gave {tk}, capped at {cap}',
    k_thr='Break threshold (Tukey fence)',p_sens='Sensitivity',
    bands=['quick fix / short answer','normal back-and-forth','waiting + reviewing + deciding','grey zone','probably a break','context switch'],
    s_sens='🎚️ Threshold sensitivity',sens_c=['Threshold','Gaps within (cumulative %, CDF)','Working time'],
@@ -71,10 +72,14 @@ L={
    p_repo='Repo',p_range='Range',p_time='Working time',p_prompts='Prompts',p_commits='Commits',p_code='Effective code',p_lines='lines',
    p_rhythm='Rhythm',rh='Q1 (1st quartile) {q1} · median (P50) {med} · Q3 (3rd quartile) {q3} · IQR (interquartile range) {iqr} · P90 {p90} · Tukey upper fence (Q3+1.5·IQR) {tk}  ({n} gaps)',p_est='Commit estimate (fallback)',p_none='No prompts in range — using the commit estimate.',
    e_none='No commits or prompts found in this range.',
-   rc_kind='WORK TIME RECEIPT',rc_project='PROJECT',rc_built='BUILT',rc_active='ACTIVE DAYS',rc_days=lambda n:f"{n} DAY{'S'*(n!=1)}",rc_period='PERIOD',rc_qty='QTY',rc_item='ITEM',rc_time='TIME',
-   rc_prompts='PROMPTS',rc_commits='COMMITS',rc_code='CODE LINES',rc_lph='LINES / HOUR',rc_total='TOTAL',
+   s_claude='🤖 Claude side',c_read='Tokens read',c_written='Tokens written',c_total='Tokens total',c_runs='Sessions (runs)',c_subs='Subagents',
+   c_rows=['Input (new, not cached)','Cache write (added to the context)','Cache read (context re-read every turn)','Output (written by Claude)'],
+   c_note='Claude re-reads the whole conversation on every turn, so tokens read are hundreds of times tokens written. Each response is counted once (Claude Code logs repeat it over several lines); subagents are included.',
+   c_model='Model mix (share of tokens written)',c_types='Subagent types',days='days',active='active days',
+   rc_kind='WORK TIME RECEIPT',rc_project='PROJECT',rc_built='BUILT',rc_tokens='TOKENS',rc_agents=('AGENTS','RUNS','SUBAGENTS'),rc_model='MODEL',rc_tok=('READ','WRITTEN','TOTAL'),rc_active='ACTIVE DAYS',rc_days=lambda n:f"{n} DAY{'S'*(n!=1)}",rc_period='PERIOD',rc_qty='QTY',rc_item='ITEM',rc_time='TIME',
+   rc_prompts='PROMPTS',rc_commits='COMMITS',rc_code='CODE LINES',rc_total='TOTAL',
    rc_thr='BREAK THRESHOLD',rc_note=dict(auto='Based on your own prompt rhythm. Longer gaps are breaks, not work.',
-     fixed='Set by you. Longer gaps are breaks, not work.',few='Default: too few prompts to read your rhythm. Longer gaps are breaks.'),
+     fixed='Set by you. Longer gaps are breaks, not work.',capped='Your rhythm gave {tk}, capped at {cap}. Longer gaps are breaks.',few='Default: too few prompts to read your rhythm. Longer gaps are breaks.'),
    rc_est='NO SESSION LOGS',rc_est_note='Rough estimate from the gaps between commits.',
    rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
@@ -88,7 +93,7 @@ L={
    r_iqr='Normal tempo (çeyrekler arası aralık, IQR = Q3 − Q1)',r_p90='Nadir uzun aralıklar (90. yüzdelik, P90)',
    r_tukey='Mola sınırı (Tukey üst çiti, Q3 + 1,5·IQR)',
    r_note='İki prompt arasındaki tipik aralığın (medyan) {med}; aralıklarının ortadaki yarısı (çeyrekler arası aralık) {q1}–{q3}. Tukey aykırı değer kuralına göre (Q3 + 1,5·IQR) {tukey} üstü senin için aykırı değer, yani mola. Bu rapor {idle} eşiğini kullanıyor ({mode}). Aralıklarının %{pct}\'i bu eşiğin içinde (kümülatif oran).',
-   mode_fixed='senin seçtiğin',mode_auto='senin ritminden otomatik hesaplandı',mode_few='varsayılan — kendi eşiğini hesaplamak için prompt az',
+   mode_fixed='senin seçtiğin',mode_auto='senin ritminden otomatik hesaplandı',mode_few='varsayılan — kendi eşiğini hesaplamak için prompt az',mode_capped='ritminden {tk} çıktı, {cap} üst sınır uygulandı',
    k_thr='Mola sınırı (Tukey çiti)',p_sens='Duyarlılık',
    bands=['hızlı düzeltme / kısa cevap','normal etkileşim','bekleme + inceleme + karar','gri bölge','muhtemel mola','bağlam kopması'],
    s_sens='🎚️ Eşik duyarlılığı',sens_c=['Eşik','Eşik altındaki aralıklar (kümülatif %, CDF)','Çalışma süresi'],
@@ -101,10 +106,14 @@ L={
    p_repo='Repo',p_range='Aralık',p_time='Çalışma süresi',p_prompts='Prompt',p_commits='Commit',p_code='Etkin kod',p_lines='satır',
    p_rhythm='Ritim',rh='Q1 (1. çeyrek) {q1} · medyan (P50) {med} · Q3 (3. çeyrek) {q3} · IQR (çeyrekler arası aralık) {iqr} · P90 {p90} · Tukey üst çiti (Q3+1,5·IQR) {tk}  ({n} aralık)',p_est='Commit tahmini (yedek)',p_none='Aralıkta prompt yok — commit tahmini kullanılıyor.',
    e_none='Bu aralıkta commit ya da prompt bulunamadı.',
-   rc_kind='ÇALIŞMA SÜRESİ FİŞİ',rc_project='PROJE',rc_built='YAPILAN',rc_active='AKTİF GÜN',rc_days=lambda n:f'{n} GÜN',rc_period='DÖNEM',rc_qty='ADET',rc_item='KALEM',rc_time='SÜRE',
-   rc_prompts='PROMPT',rc_commits='COMMIT',rc_code='KOD SATIRI',rc_lph='SATIR / SAAT',rc_total='TOPLAM',
+   s_claude='🤖 Claude tarafı',c_read='Okunan token',c_written='Yazılan token',c_total='Toplam token',c_runs='Oturum',c_subs='Subagent',
+   c_rows=['Girdi (yeni, önbelleksiz)','Önbelleğe yazma (bağlama eklenen)','Önbellekten okuma (her turda yeniden okunan bağlam)','Çıktı (Claude\'un yazdığı)'],
+   c_note='Claude her turda konuşmanın tamamını yeniden okur; bu yüzden okunan token yazılandan yüzlerce kat fazladır. Her cevap bir kez sayılır (Claude Code kayıtlarında birkaç satıra tekrarlanır); subagent\'lar dahildir.',
+   c_model='Model dağılımı (yazılan token payı)',c_types='Subagent türleri',days='gün',active='aktif gün',
+   rc_kind='ÇALIŞMA SÜRESİ FİŞİ',rc_project='PROJE',rc_built='YAPILAN',rc_tokens='TOKEN',rc_agents=('AGENT','OTURUM','SUBAGENT'),rc_model='MODEL',rc_tok=('OKUNAN','YAZILAN','TOPLAM'),rc_active='AKTİF GÜN',rc_days=lambda n:f'{n} GÜN',rc_period='DÖNEM',rc_qty='ADET',rc_item='KALEM',rc_time='SÜRE',
+   rc_prompts='PROMPT',rc_commits='COMMIT',rc_code='KOD SATIRI',rc_total='TOPLAM',
    rc_thr='MOLA SINIRI',rc_note=dict(auto='Kendi prompt ritmine göre. Daha uzun aralıklar mola sayılır, çalışma değil.',
-     fixed='Senin seçtiğin eşik. Daha uzun aralıklar mola sayılır, çalışma değil.',few='Varsayılan: ritmini okumak için prompt az. Daha uzun aralıklar mola sayılır.'),
+     fixed='Senin seçtiğin eşik. Daha uzun aralıklar mola sayılır, çalışma değil.',capped='Ritminden {tk} çıktı, {cap} üst sınır uygulandı. Daha uzun aralıklar mola sayılır.',few='Varsayılan: ritmini okumak için prompt az. Daha uzun aralıklar mola sayılır.'),
    rc_est='OTURUM KAYDI YOK',rc_est_note="Commit'ler arası süreden kaba tahmin.",
    rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
    rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')],rc_by='\u2014 ben, {day} sabahı'),
@@ -195,6 +204,51 @@ def load_prompts(dirs,since,until):
         out.add(ts)
     return sorted(out)
 
+def load_usage(dirs,since,until):
+    """Token usage of every Claude response in range, subagents (<session>/subagents/) included;
+    the main sessions, the subagents Claude started (Task/Agent tool calls) and the model mix
+    (share of output tokens per model family).
+    Claude Code writes one response as several lines that repeat its usage, so keep one per
+    message id (max per field: output_tokens grows while the response streams). A resumed session
+    copies its history into a new file, so sessions and subagent calls are counted by id."""
+    K=('input_tokens','cache_creation_input_tokens','cache_read_input_tokens','output_tokens')
+    per={}; spawned={}; sessions=set(); model={}
+    for d in dirs:
+        for tf in glob.glob(os.path.join(d,'**','*.jsonl'),recursive=True):
+            sub=f'{os.sep}subagents{os.sep}' in tf
+            for ln in open(tf,errors='ignore'):
+                if '"usage"' not in ln: continue
+                try: o=json.loads(ln)
+                except Exception: continue
+                m=o.get('message')
+                if o.get('type')!='assistant' or not isinstance(m,dict) or not isinstance(m.get('usage'),dict): continue
+                ts=parse_ts(o)
+                if ts is None or not since<=day_of(ts)<=until: continue
+                mid=m.get('id') or o.get('uuid'); p=per.setdefault(mid,dict.fromkeys(K,0))
+                for k in K: p[k]=max(p[k],m['usage'].get(k) or 0)
+                fam=re.match(r'claude-([a-z]+)',m.get('model') or '')   # claude-opus-5-5 -> opus; skips <synthetic>
+                if fam: model[mid]=fam.group(1)
+                if not sub and o.get('sessionId'): sessions.add(o['sessionId'])
+                if isinstance(m.get('content'),list):
+                    for x in m['content']:
+                        if isinstance(x,dict) and x.get('type')=='tool_use' and x.get('name') in ('Task','Agent'):
+                            spawned[x.get('id')]=(x.get('input') or {}).get('subagent_type') or 'general-purpose'
+    fam_out={}
+    for mid,f in model.items(): fam_out[f]=fam_out.get(f,0)+per[mid]['output_tokens']
+    tot=sum(fam_out.values()) or 1
+    shares=split_minutes([v/tot*100*60 for v in fam_out.values()],100*60)   # whole percents that add up to 100
+    mix=sorted(((f,pc) for f,pc in zip(fam_out,shares) if pc),key=lambda x:-x[1])
+    types={}
+    for t in spawned.values(): types[t]=types.get(t,0)+1
+    return {k:sum(p[k] for p in per.values()) for k in K},len(sessions),len(spawned),mix,sorted(types.items(),key=lambda x:-x[1])
+
+def short(n):
+    """1234 -> 1.23K, 9_600_000 -> 9.6M, 2_454_000_000 -> 2.45B"""
+    for div,suf in ((1e9,'B'),(1e6,'M'),(1e3,'K')):
+        if n>=div:
+            v=n/div; return (f'{v:.2f}'.rstrip('0').rstrip('.') if v<10 else f'{v:.1f}'.rstrip('0').rstrip('.') if v<100 else f'{v:.0f}')+suf
+    return str(int(n))
+
 def main():
     ap=argparse.ArgumentParser(description='Working time from your Claude Code prompts (+ git commits for context)')
     ap.add_argument('repo',nargs='?',default='.',help='git repo to analyse (default: .)')
@@ -202,7 +256,7 @@ def main():
     ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
     ap.add_argument('--author',help='only commits by this author (git --author pattern)')
     ap.add_argument('--transcripts',action='append',help='Claude log folder (overrides auto-detection, repeatable)')
-    ap.add_argument('--idle',default='auto',help='break threshold in minutes; default "auto" = your own Tukey threshold (Q3+1.5·IQR)')
+    ap.add_argument('--idle',default='auto',help=f'break threshold in minutes; default "auto" = your own Tukey threshold (Q3+1.5·IQR), at most {CAP} min')
     ap.add_argument('--lang',choices=sorted(L),default=default_lang(),help='report language (default: from $LANG, else en)')
     ap.add_argument('--name',help='project name shown in the report (default: repo folder name)')
     ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='output folder (default ~/vibe-receipts)')
@@ -222,6 +276,9 @@ def main():
     except subprocess.CalledProcessError: commits=[]
     dirs=a.transcripts or claude_dirs(repo)
     prompts=load_prompts(dirs,a.since,a.until)
+    tok,runs,subagents,mix,subtypes=load_usage(dirs,a.since,a.until)
+    tread=tok['input_tokens']+tok['cache_creation_input_tokens']+tok['cache_read_input_tokens']   # context Claude processed
+    twrote=tok['output_tokens']                                                                     # what Claude wrote
     if not commits and not prompts: raise SystemExit(T['e_none'])
 
     # --- your rhythm: distribution of gaps between prompts ---
@@ -229,8 +286,9 @@ def main():
     med,q1,q3,p90=pctl(gaps,50),pctl(gaps,25),pctl(gaps,75),pctl(gaps,90)
     tukey=q3+1.5*(q3-q1)
     if a.idle.strip().lower()!='auto': mode,idle='fixed',float(a.idle)
-    elif len(gaps)>=MIN_GAPS:          mode,idle='auto',round(tukey,1)
+    elif len(gaps)>=MIN_GAPS:          mode,idle=('capped',float(CAP)) if tukey>CAP else ('auto',round(tukey,1))
     else:                              mode,idle='few',float(IDLE)
+    modetxt=T['mode_'+mode].format(tk=mins(tukey),cap=mins(CAP))
 
     def active(thr):
         tot=0; per={}
@@ -264,6 +322,8 @@ def main():
     for t in prompts: dprompt[day_of(t)]=dprompt.get(day_of(t),0)+1
     days=sorted(set(dcom)|set(dprompt))
     d0,d1=days[0],days[-1]
+    span=(datetime.date.fromisoformat(d1)-datetime.date.fromisoformat(d0)).days+1   # calendar days
+    active_days=len(dprompt if has_p else dcom)                                       # days you actually worked
     hours=total/3600
     lph=code/hours if hours else 0
     mpp=(work/60)/len(prompts) if prompts else 0
@@ -273,13 +333,18 @@ def main():
     print(f"{T['p_range']:<15}: {d0} → {d1}")
     if has_p:
         print(f"{T['p_time']:<15}: {hm(work)}   ({len(prompts)} {T['prompts']}, {len(dirs)} dir)")
-        print(f"{T['k_thr']}: {mins(idle)}   ({T['mode_'+mode]})")
+        print(f"{T['k_thr']}: {mins(idle)}   ({modetxt})")
         print(f"{T['p_rhythm']:<15}: "+T['rh'].format(q1=mins(q1),med=mins(med),q3=mins(q3),iqr=mins(q3-q1),p90=mins(p90),tk=mins(tukey),n=len(gaps)))
         print(f"{T['p_sens']:<15}: "+' · '.join(f"{mins(t)} → {hm(active(t)[0])}" for t in sorted(set(SENS+[idle]))))
     else:
         print(T['p_none'])
         print(f"{T['p_est']:<15}: {hm(est)}")
     print(f"{T['p_commits']:<15}: {len(commits)}   ({T['p_code']} {code:.0f} {T['p_lines']})")
+    if runs: print(f"{'Agents':<15}: {runs} runs · {subagents} subagents")
+    if mix: print(f"{'Model mix':<15}: "+' · '.join(f'{f} {pc}%' for f,pc in mix)+"   (share of output tokens)")
+    if tread+twrote:
+        print(f"{'Tokens':<15}: {short(tread)} read · {short(twrote)} written · {short(tread+twrote)} total   "
+              f"(input {short(tok['input_tokens'])} · cache write {short(tok['cache_creation_input_tokens'])} · cache read {short(tok['cache_read_input_tokens'])} · output {short(twrote)})")
 
     # ===== HTML REPORT =====
     def bar(v,m,c):
@@ -287,7 +352,8 @@ def main():
         return f'<div class="bar"><div class="barfill" style="width:{w:.1f}%;background:{c}"></div></div>'
 
     P=[f'<!doctype html><html lang="{a.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(name)} · {T["title"]}</title><style>{CSS}</style></head><body><div class="wrap">']
-    sub=(f'{len(prompts):,} {T["prompts"]} · ' if has_p else '')+f'{len(commits)} {T["commits"]} · {d0} → {d1}'
+    sub=(f'<b>{e(a.built)}</b> · ' if a.built else '')+(f'{len(prompts):,} {T["prompts"]} · ' if has_p else '')+f'{len(commits)} {T["commits"]} · {d0} → {d1} · {span} {T["days"]}'+(
+        f', {active_days} {T["active"]}' if active_days!=span else '')
     P.append(f'<header><h1>🧾 {e(name)} · {T["title"]}</h1><div class="sub">{sub}</div></header>')
     if has_p:
         K=[(hm(work),T['k_time'],1),(mins(idle),T['k_thr'],0),(f'{len(prompts):,}',T['k_prompts'],0),(f'{lph:,.0f}',T['k_lph'],0),
@@ -306,7 +372,7 @@ def main():
         for (lo,hi),n,lbl,col in zip(BANDS,cnt,T['bands'],cols):
             rng=f'{lo}–{hi}' if hi is not None else f'{lo}+'
             P.append(f'<div class="scn"><div class="nm"><b>{rng}</b> · {lbl}</div>{bar(n,max(cnt),col)}<div class="vl">{100*n/len(gaps):.0f}%</div></div>')
-        P.append(f'<div class="note">{e(T["r_note"].format(q1=mins(q1),q3=mins(q3),med=mins(med),tukey=mins(tukey),idle=mins(idle),mode=T["mode_"+mode],pct=f"{within:.0f}"))}</div></div>')
+        P.append(f'<div class="note">{e(T["r_note"].format(q1=mins(q1),q3=mins(q3),med=mins(med),tukey=mins(tukey),idle=mins(idle),mode=modetxt,pct=f"{within:.0f}"))}</div></div>')
 
         P.append(f'<h2>{T["s_sens"]}</h2><div class="card"><table>')
         C=T['sens_c']; P.append(f'<tr><th>{C[0]}</th><th class="r">{C[1]}</th><th>{C[2]}</th></tr>')
@@ -319,6 +385,19 @@ def main():
         P.append(f'</table><div class="note">{e(T["sens_note"])}</div></div>')
     elif not has_p:
         P.append(f'<h2>⚠️ {T["fb_title"]}</h2><div class="card"><div class="note">{e(T["fb_note"].format(b=BREAK//60,r=CODE_RATE))}</div></div>')
+
+    if tread+twrote:
+        P.append(f'<h2>{T["s_claude"]}</h2><div class="card"><div class="stats">'+''.join(f'<div class="st"><div class="v">{v}</div><div class="l">{l}</div></div>'
+                 for v,l in [(short(tread),T['c_read']),(short(twrote),T['c_written']),(short(tread+twrote),T['c_total']),(str(runs),T['c_runs']),(str(subagents),T['c_subs'])])+'</div>')
+        vals=[tok['input_tokens'],tok['cache_creation_input_tokens'],tok['cache_read_input_tokens'],twrote]
+        for lbl,v,col in zip(T['c_rows'],vals,['#8b90a0','#fbbf24','#3f4560','#a78bfa']):
+            P.append(f'<div class="scn"><div class="nm">{e(lbl)}</div>{bar(v,max(vals),col)}<div class="vl">{short(v)}</div></div>')
+        P.append(f'<div class="note">{e(T["c_note"])}</div>')
+        if mix:
+            P.append(f'<h3 class="h3">{T["c_model"]}</h3>'+''.join(f'<div class="scn"><div class="nm"><b>{f.capitalize()}</b></div>{bar(pc,100,"#a78bfa")}<div class="vl">{pc}%</div></div>' for f,pc in mix))
+        if subtypes:
+            P.append(f'<h3 class="h3">{T["c_types"]}</h3>'+''.join(f'<div class="scn"><div class="nm">{e(t)}</div>{bar(n,subtypes[0][1],"#34d399")}<div class="vl">{n}</div></div>' for t,n in subtypes))
+        P.append('</div>')
 
     mx=max(dtotal.values(),default=0) or 1
     C=T['c']
@@ -365,12 +444,15 @@ def main():
     unit=T['rc_unit_p'] if has_p else T['rc_unit_c']
     mins_split=split_minutes([v[1] for v in groups.values()],total)
     items=[(q,f"{unit} · {label(k)}",f"{m//60}{T['h']} {m%60:02d}{T['m']}") for (k,(q,_)),m in zip(groups.items(),mins_split)]
-    stats=([(T['rc_prompts'],f'{len(prompts):,}')] if has_p else [])+[(T['rc_commits'],str(len(commits))),
-           (T['rc_code'],f'+{code:,.0f}'),(T['rc_lph'],f'{lph:,.0f}')]
-    thr=(T['rc_thr'],mins(idle),T['rc_note'][mode]) if has_p else (T['rc_est'],'',T['rc_est_note'])
-    span=(datetime.date.fromisoformat(d1)-datetime.date.fromisoformat(d0)).days+1   # calendar days
+    # Claude's side (what went in), a blank line, then what came out
+    spent=([(T['rc_prompts'],f'{len(prompts):,}')] if has_p else [])+(
+           [(T['rc_agents'][0],f"{runs} {T['rc_agents'][1]} · {subagents} {T['rc_agents'][2]}")] if runs else [])+(
+           [(T['rc_tokens'],' · '.join(f'{short(v)} {l}' for v,l in zip((tread,twrote,tread+twrote),T['rc_tok'])))] if tread+twrote else [])+(
+           [(T['rc_model'],' · '.join(f'{f.upper()} {pc}%' for f,pc in mix[:3]))] if mix else [])
+    made=[(T['rc_commits'],str(len(commits))),(T['rc_code'],f'+{code:,.0f}')]
+    stats=spent+([None] if spent else [])+made
+    thr=(T['rc_thr'],mins(idle),T['rc_note'][mode].format(tk=mins(tukey),cap=mins(CAP))) if has_p else (T['rc_est'],'',T['rc_est_note'])
     period=(d0 if d0==d1 else f"{d0} → {d1[5:] if d0[:4]==d1[:4] else d1}")+f" · {T['rc_days'](span)}"
-    active_days=len(dprompt if has_p else dcom)                                       # days you actually worked
     quote=next(q for lim,q in T['rc_quote'] if lim is None or hours<lim)
     card,H=receipt_html(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),thr,quote,T['rc_by'].format(day=dow(d0)))
     cardp=os.path.join(a.out,f'{name}-receipt.html')
@@ -391,8 +473,8 @@ def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,
     e=html.escape
     def up(x): return (x.replace('i','İ').replace('ı','I') if lang=='tr' else x).upper()   # Turkish dotted İ
     rows=''.join(f'<span>{q:,}</span><span>{e(l)}</span><span class="r">{t}</span>' for q,l,t in items)
-    srows=''.join(f'<div class="row"><span>{e(k)}</span><span>{v}</span></div>' for k,v in stats)
-    H=max(1350,378+804+26*len(items)+24*bool(built)+60)   # card padding + quote + receipt body + item/BUILT rows + slack
+    srows=''.join('<div class="sp"></div>' if r is None else f'<div class="row"><span>{e(r[0])}</span><span>{r[1]}</span></div>' for r in stats)
+    H=max(1350,378+804+24*(len(stats)-4)+26*len(items)+24*bool(built)+60)   # card padding + quote + receipt body + item/BUILT rows + slack
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(name)} · vibe receipt</title>'
       '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Instrument+Serif:ital@0;1&display=swap">'
       f'<style>{RCSS}</style></head><body><div class="card" style="height:{H}px">'
@@ -409,6 +491,7 @@ def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,
       f'<div class="items"><span class="h">{T["rc_qty"]}</span><span class="h">{T["rc_item"]}</span><span class="h r">{T["rc_time"]}</span>{rows}</div>'
       f'<div class="hr"></div>{srows}<div class="hr2"></div>'
       f'<div class="tot"><span>{T["rc_total"]}</span><span>{total}</span></div>'
+
       '<div class="hr"></div>'
       f'<div class="row thr"><span>{thr[0]}</span><b>{e(thr[1])}</b></div>'+(f'<div class="mute">{e(thr[2])}</div>' if thr[2] else '')+
       '<div class="ft"><div class="s">* SHOW THE RECEIPTS *</div><div class="bc"></div>'
@@ -458,6 +541,7 @@ tr.sel td{color:#fff;font-weight:700;background:#1c2030}
 .tot{font-weight:700;color:#fff;background:#1c2030}
 .bar{background:#242938;border-radius:6px;height:20px;overflow:hidden;min-width:70px;flex:1}.barfill{height:100%;border-radius:6px}
 .scn{display:flex;align-items:center;gap:12px;margin:8px 0}.scn .nm{width:260px;font-size:13px;color:#c8ccd8}.scn .vl{width:48px;text-align:right;font-weight:700;font-size:14px}
+.h3{font-size:14px;color:#fff;margin:22px 0 4px}
 .note{font-size:12.5px;color:#8b90a0;margin-top:12px;font-style:italic}
 .dayblk{background:#13161f;border:1px solid #242938;border-radius:12px;padding:14px 16px;margin-top:12px}
 .dayblk h3{font-size:15px;color:#fff;display:flex;justify-content:space-between}.dayblk h3 .hrs{font-size:13px;color:#a78bfa;font-weight:700}
@@ -488,7 +572,7 @@ body{{background:#0e0f14;color:#ECEAF2;font-family:'JetBrains Mono',ui-monospace
 .items span{{overflow:hidden;text-overflow:ellipsis}}.items .h{{font-size:11px;color:#6b665d;letter-spacing:1.5px}}.items .r{{text-align:right}}
 .tot{{display:flex;justify-content:space-between;align-items:baseline}}
 .tot span:first-child{{font-size:22px;font-weight:800;letter-spacing:3px}}.tot span:last-child{{font-size:40px;line-height:48px;font-weight:800;letter-spacing:-1px}}
-.thr{{font-size:13px;line-height:20px}}
+.thr{{font-size:13px;line-height:20px}}.sp{{height:12px}}
 .ft{{padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}}
 .ft .s{{font-size:16px;line-height:24px;font-weight:800;letter-spacing:3px}}
 .bc{{width:300px;height:56px;background:repeating-linear-gradient(90deg,{INK} 0 3px,transparent 3px 5px,{INK} 5px 6px,transparent 6px 9px,{INK} 9px 13px,transparent 13px 15px,{INK} 15px 16px,transparent 16px 20px,{INK} 20px 22px,transparent 22px 23px)}}

@@ -14,7 +14,8 @@ Measures working time on a git repo from the user's own prompts in Claude Code s
   (longer = break).
 - **Break threshold** is computed automatically from the user's own gaps with Tukey's rule:
   `Q3 + 1.5 × IQR` (Q1/Q3 = 25th/75th percentile of the gaps, IQR = Q3 − Q1). With fewer than
-  20 gaps it falls back to 15 min. The user can override it with `--idle MIN`.
+  20 gaps it falls back to 15 min. It never goes above 30 min (the line then says "capped at 30 min";
+  tell the user what their rhythm gave and that the cap applied). The user can override it with `--idle MIN`.
 - The report shows the rhythm (Q1 / median / Q3 / P90), the threshold used and why, and a
   threshold-sensitivity table.
 - Commits only add context: lines of code, lines/hour, minutes/commit, a daily commit log.
@@ -56,6 +57,10 @@ After running, read the printed summary and the CSV, then answer in the user's l
 - Show 2–3 alternatives from the `Sensitivity` line (e.g. 10 / 15 / 30 min) and offer to recompute
   with any threshold they choose.
 - Range, prompt and commit counts.
+- Tokens from the `Tokens` line: read (the context Claude processed, mostly cache reads of the same
+  conversation) vs written (what Claude actually produced). Subagent usage is included.
+- Agents from the `Agents` line: main Claude Code sessions (runs) and the subagents Claude started.
+- Model mix from the `Model mix` line: which model families wrote the work (share of output tokens).
 - The busiest days (from the CSV), and a short summary of what was done per day based on the
   commit subjects (`git -C <repo> log --since ... --until ... --pretty='%ad %s' --date=short`).
 - The path to the HTML report and the receipt PNG, and open them if the environment can show files.
