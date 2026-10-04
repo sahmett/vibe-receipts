@@ -98,6 +98,7 @@ L={
    rc_est='NO SESSION LOGS',rc_est_note='Rough estimate from the gaps between commits.',
    rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
+   share='{q} {t} later{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
    rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")],rc_by='\u2014 me, {day} morning'),
  'tr':dict(
    h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
@@ -134,6 +135,7 @@ L={
      fixed='Senin seçtiğin eşik. Daha uzun aralıklar mola sayılır, çalışma değil.',capped='Ritminden {tk} çıktı, {cap} üst sınır uygulandı. Daha uzun aralıklar mola sayılır.',few='Varsayılan: ritmini okumak için prompt az. Daha uzun aralıklar mola sayılır.'),
    rc_est='OTURUM KAYDI YOK',rc_est_note="Commit'ler arası süreden kaba tahmin.",
    rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
+   share='{q} {t} sonra{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
    rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')],rc_by='\u2014 ben, {day} sabahı'),
 }
 
@@ -516,6 +518,8 @@ def main():
     if a.no_png: pass
     elif render_png(cardp,pngp,1080,H): print("PNG :",pngp)
     else: print(f"PNG : skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome). Card HTML: {cardp}")
+    m=int(round(total/60))   # ready-to-post text to go with the PNG
+    print("Share:",T['share'].format(q=quote,t=T['share_t'](m//60,m%60),v=T['share_v'].format(v=vtxt) if val['total'] else ''))
 
 def split_minutes(secs,total):
     """Round each item to whole minutes so the items add up to the rounded total (largest remainder)."""

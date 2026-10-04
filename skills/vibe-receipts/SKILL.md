@@ -69,6 +69,8 @@ After running, read the printed summary and the CSV, then answer in the user's l
 - The busiest days (from the CSV), and a short summary of what was done per day based on the
   commit subjects (`git -C <repo> log --since ... --until ... --pretty='%ad %s' --date=short`).
 - The path to the HTML report and the receipt PNG, and open them if the environment can show files.
+- The `Share:` line, as-is in a code block, as a ready-to-post caption for the receipt PNG. Never post it
+  anywhere yourself. If the project name is private, offer to re-run with `--name` to hide it.
 
 ## Name things twice: plain words + the math term
 

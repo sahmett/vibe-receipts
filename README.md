@@ -1,14 +1,14 @@
 # 🧾 vibe-receipts
 
-> **Receipts for your vibe coding.** How many hours did you *really* work with Claude?
-> Your prompts are the clock. Your commits are the proof of what you built.
+**How long did that "2-hour project" actually take?**
+vibe-receipts turns your Claude Code history into a shareable work-time receipt: the hours you really
+spent, measured from your own prompts, and what those tokens would cost on the API.
 
-![vibe-receipts demo report](docs/demo.jpg)
+<p align="center"><img src="docs/receipt.png" alt="A vibe-receipts receipt card: 11h 05m total, $138.14 token value" width="440"></p>
 
-<sub>Demo built from 100% synthetic data with [`demo/make_demo.py`](demo/make_demo.py) · [full report](docs/demo-full.jpg)</sub>
+<p align="center"><sub>Demo from 100% synthetic data (<a href="demo/make_demo.py"><code>demo/make_demo.py</code></a>) · <a href="docs/demo-full.jpg">full report</a></sub></p>
 
-One Python file, zero dependencies. Point it at a git repo and get a dark-mode HTML receipt
-of the hours you actually spent on it, measured from your own prompts to Claude.
+One Python file, zero dependencies. Your prompts are the clock, your commits are the proof.
 
 ## Install as a Claude Code plugin (recommended)
 
@@ -36,8 +36,19 @@ python3 vibe-receipts/receipts.py ~/code/my-project
 You get `~/vibe-receipts/<repo>-report.html`, `<repo>-daily.csv` and `<repo>-receipt.png`,
 a shareable receipt card. The PNG is rendered with your local Chrome/Chromium in headless mode
 (set `CHROME=/path/to/browser` to pick one, `--no-png` to skip it). Add `--built "mobile app"` to say
-what you built on the receipt; the plugin fills it in from your README.
-Reports are personal work data, so they are never written into the analysed repo.
+what you built on the receipt; the plugin fills it in from your README, and `--name` to show another
+project name (handy for client work). Reports are personal work data, so they are never written into
+the analysed repo.
+
+## Share your receipt
+
+Every run prints a `Share:` line, a ready-made caption for the PNG:
+
+```
+“It's a 2-hour project.” 11h 5m later, $138.14 of tokens. 🧾 github.com/sahmett/vibe-receipts #vibereceipts
+```
+
+Post it with **#vibereceipts**. We'd love to see yours.
 
 ## How it works
 
@@ -142,3 +153,7 @@ skills/vibe-receipts/
 receipts.py, to_jpg.sh     shortcuts (symlinks)
 demo/make_demo.py          rebuilds the synthetic demo above
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).
