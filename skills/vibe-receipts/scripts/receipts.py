@@ -4,13 +4,13 @@
 Working time = sum of the gaps between YOUR consecutive prompts in Claude Code session
 logs (~/.claude/projects). A gap up to your break threshold counts as work, anything longer
 is a break. By default the threshold is computed from your own gaps with Tukey's rule
-(Q3 + 1.5·IQR); pass --idle MIN to use a fixed one. Commits only add context (what got built). For repos with
+(Q3 + 1.5·IQR); pass --break MIN to use a fixed one. Commits only add context (what got built). For repos with
 no session logs, a rough commit-gap estimate is used as a fallback.
 
 Usage:
   python3 receipts.py /path/to/repo
   python3 receipts.py /path/to/repo --since 2026-06-01 --until 2026-06-30
-  python3 receipts.py /path/to/repo --idle 20       # fixed 20-minute break threshold
+  python3 receipts.py /path/to/repo --break 20      # fixed 20-minute break threshold
   python3 receipts.py /path/to/repo --lang tr       # Türkçe rapor
 
 Besides the HTML report and CSV it writes <repo>-receipt.png, a shareable receipt card
@@ -299,7 +299,7 @@ def main():
     ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
     ap.add_argument('--author',help='only commits by this author (git --author pattern)')
     ap.add_argument('--transcripts',action='append',help='Claude log folder (overrides auto-detection, repeatable)')
-    ap.add_argument('--idle',default='auto',help=f'break threshold in minutes; default "auto" = your own Tukey threshold (Q3+1.5·IQR), at most {CAP} min')
+    ap.add_argument('--break','--idle',dest='idle',metavar='MIN',default='auto',help=f'break threshold in minutes (--idle is the old name); default "auto" = your own Tukey threshold (Q3+1.5·IQR), at most {CAP} min')
     ap.add_argument('--lang',choices=sorted(L),default=default_lang(),help='report language (default: from $LANG, else en)')
     ap.add_argument('--name',help='project name shown in the report (default: repo folder name)')
     ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='output folder (default ~/vibe-receipts)')

@@ -8,7 +8,13 @@ spent, measured from your own prompts, and what those tokens would cost on the A
 
 <p align="center"><sub>Demo from 100% synthetic data (<a href="demo/make_demo.py"><code>demo/make_demo.py</code></a>) · <a href="docs/demo-full.jpg">full report</a></sub></p>
 
-One Python file, zero dependencies. Your prompts are the clock, your commits are the proof.
+> **Your prompts are the clock. Your commits are the proof of what you built.**
+
+One Python file, zero dependencies, everything runs on your machine. Point it at a git repo and get:
+
+- **a receipt card** (PNG) to share: working time, prompts, agents, tokens, model mix, commits and the token value
+- **a full HTML report** with your prompt rhythm, the break threshold and why, a sensitivity table and a daily commit log
+- **a daily CSV** for timesheets and invoices
 
 ## Install as a Claude Code plugin (recommended)
 
@@ -26,6 +32,10 @@ Then just ask Claude:
 The skill turns your question into the right date range and author filter, runs the script,
 and tells you the headline number, your rhythm, the busiest days, and what got done each day.
 
+> [!IMPORTANT]
+> **Claude Code deletes session logs after 30 days by default**, and with them your receipts.
+> To keep them, add `"cleanupPeriodDays": 36500` to `~/.claude/settings.json`.
+
 ## Or run it directly
 
 ```bash
@@ -33,12 +43,11 @@ git clone https://github.com/sahmett/vibe-receipts
 python3 vibe-receipts/receipts.py ~/code/my-project
 ```
 
-You get `~/vibe-receipts/<repo>-report.html`, `<repo>-daily.csv` and `<repo>-receipt.png`,
-a shareable receipt card. The PNG is rendered with your local Chrome/Chromium in headless mode
-(set `CHROME=/path/to/browser` to pick one, `--no-png` to skip it). Add `--built "mobile app"` to say
-what you built on the receipt; the plugin fills it in from your README, and `--name` to show another
-project name (handy for client work). Reports are personal work data, so they are never written into
-the analysed repo.
+Outputs go to `~/vibe-receipts/` (`<repo>-receipt.png`, `<repo>-report.html`, `<repo>-daily.csv`),
+never into the analysed repo. The PNG is rendered with your local Chrome/Chromium in headless mode
+(`CHROME=/path/to/browser` to pick one, `--no-png` to skip it). `--built "mobile app"` says what you
+built on the receipt (the plugin fills it in from your README), and `--name` shows another project
+name, handy for client work.
 
 ## Share your receipt
 
@@ -62,13 +71,12 @@ the records **you** put in:
 Claude's replies, tool calls and results, subagent traffic, compaction summaries, IDE/system
 injections, background-task notifications and "interrupted" markers are **not** prompts.
 
-Then: if the gap between two consecutive prompts is **within your break threshold** (below), it
-counts as work. In AI-assisted
-coding, waiting for Claude, reviewing its output and deciding what to ask next *is* the work.
+A gap between two consecutive prompts that is **within your break threshold** counts as work,
+because **waiting for Claude, reviewing its output and deciding what to ask next is the work**.
 A longer gap is a break and is dropped.
 
 ```
-10:00  you: "add auth"           
+10:00  you: "add auth"
 10:03  you: "use magic links"    → +3 min
 10:09  you: answer to a question → +6 min
 10:51  you: "now the tests"      → 42 min gap > threshold → break, not counted
@@ -76,47 +84,44 @@ A longer gap is a break and is dropped.
                                    = 12 min
 ```
 
-### The break threshold is yours, computed from your rhythm
-How long a pause still counts as work differs per person and per project. So the threshold is
-not hard-coded: vibe-receipts takes every gap between your prompts and applies **Tukey's outlier
-rule**, the same rule box plots use:
+### Your break threshold is learned from your rhythm
+There is no fixed idle timeout. vibe-receipts looks at all the gaps between your prompts and applies
+**Tukey's outlier rule**, the rule box plots use:
 
 ```
-Q1, Q3   = 25th and 75th percentile of your gaps    ← the middle half: your normal pace
-IQR      = Q3 − Q1
-threshold = Q3 + 1.5 × IQR                          ← beyond this is unusual for you = a break
+threshold = Q3 + 1.5 × IQR      (Q1, Q3 = 25th / 75th percentile of your gaps, IQR = Q3 − Q1)
 ```
 
-Example: Q1 = 1.3 min, Q3 = 6.5 min → IQR = 5.2 → threshold = 6.5 + 1.5 × 5.2 = **14.3 min**.
-A project where Claude runs long autonomous tasks between your prompts gets a higher threshold,
-because long waits are normal there, but never above **30 min**: a 30+ minute gap is a break for
-anyone (the same cut-off web analytics uses to end a session). When the cap kicks in, the report
-and the receipt say so.
-
-The report tells you which threshold it used and why, and shows a sensitivity table (5 → 60 min)
-so you can see how much the total moves. Want a different one? `--idle 20` (or just ask Claude:
-*"recalculate with 20 minutes"*). With fewer than 20 gaps there is not enough data, so it falls
-back to 15 min and says so.
+A gap that is unusually long *for you* is a break. A project where Claude runs long tasks between
+your prompts gets a higher threshold, but never above **30 min**: past half an hour we count it as a
+break for anyone. With fewer than 20 gaps there is not enough data, so it uses 15 min. The report
+and the receipt say which case applied, and the report shows Q1 / median / Q3 / P90 and a
+sensitivity table (5 → 60 min). Want a fixed one? `--break 20`, or ask Claude to *"recalculate with
+20 minutes"*.
 
 ### Commits add context
-Commits don't decide the hours. They give the report its "what got built" side: commit count,
-effective lines of code (weighted `code ×1.0 · config ×0.4 · docs ×0 · copied/vendor ×0 ·
-generated ×0`), lines per hour, minutes per commit, and a daily commit log.
+Commits don't decide the hours. They show what got built: commit count, **effective lines of code**
+(weighted: `code ×1.0 · config ×0.4 · docs / vendored / generated ×0`; `CODE LINES` on the receipt),
+lines per hour, minutes per commit and a daily commit log.
 
-### Token value: what those tokens would cost on the API
-The receipt's `TOKEN VALUE` line prices every Claude response at Anthropic API list prices
-(`PRICES` in `receipts.py`): input, output and cache reads per model, cache writes at 1.25× input
-(5-minute cache) or 2× (1-hour cache), fast mode at 2×. Subagents are included. The report breaks it
-down and shows what it would have been without the prompt cache. It is not what a subscription costs
-you; models missing from `PRICES` are left out and the value is shown as `≥`.
+### Token value ≠ what you paid
+`TOKEN VALUE` estimates what the recorded usage would cost at **Anthropic API list prices**
+(`PRICES` in `receipts.py`). It is **not** your Claude subscription cost. It covers:
 
-### No session logs? Rough fallback
-For a repo with no Claude logs, the report falls back to an estimate from gaps between commits
-(breaks over 150 min dropped) plus 0.02 min per effective added line, clearly labelled. It tends
-to overestimate AI-heavy work, because Claude writes many lines fast.
+- input and output, per model
+- cache reads, and cache writes at 1.25× input (5-minute cache) or 2× (1-hour cache)
+- fast mode at 2×
+- subagents
 
-> ⚠️ **Claude Code deletes session logs after 30 days by default.**
-> To keep your receipts, add `"cleanupPeriodDays": 36500` to `~/.claude/settings.json`.
+The report breaks it down and shows what it would have cost without the prompt cache. Responses
+from models missing from `PRICES` are left out and the value is shown as `≥`.
+
+## Privacy
+
+Everything runs locally. vibe-receipts reads your Claude Code transcripts and git history on your
+machine and writes its outputs to `~/vibe-receipts/`. It never uploads your prompts, code, logs or
+reports. The only network request is the receipt card loading its two fonts from Google Fonts while
+it is rendered.
 
 ## Options
 
@@ -125,17 +130,26 @@ to overestimate AI-heavy work, because Claude writes many lines fast.
 | `repo` | git repo to analyse (default `.`) |
 | `--since / --until` | day range `YYYY-MM-DD`, applied to both prompts and commits |
 | `--author` | only this author's commits (`git log --author` pattern) |
-| `--transcripts DIR` | Claude log folder, overrides auto-detection (repeatable, e.g. for a repo cloned in two places) |
-| `--idle MIN` | fixed break threshold in minutes (default: computed from your rhythm) |
+| `--break MIN` | fixed break threshold in minutes (default: learned from your rhythm); `--idle` is the old name |
+| `--built` | what the project is, 1–3 words, shown on the receipt |
+| `--name` | project name shown in the report and on the receipt |
 | `--lang en\|tr` | report language (default: from `$LANG`, else English) |
-| `--name` | project name shown in the report |
+| `--transcripts DIR` | Claude log folder, overrides auto-detection (repeatable, e.g. for a repo cloned in two places) |
 | `--out DIR` | output folder (default `~/vibe-receipts`) |
+| `--no-png` | skip the receipt PNG |
 
-Constants at the top of `receipts.py`: `IDLE` (fallback threshold), `MIN_GAPS`, `SENS` (thresholds in the sensitivity table),
-`CODE_W`, `VENDOR_RE` / `GEN_RE` (excluded file patterns), and `BREAK` / `CODE_RATE` for the
-fallback estimate.
+Constants at the top of `receipts.py`: `IDLE` (fallback threshold), `CAP`, `MIN_GAPS`, `SENS`
+(thresholds in the sensitivity table), `PRICES`, `CODE_W`, `VENDOR_RE` / `GEN_RE` (excluded file
+patterns), and `BREAK` / `CODE_RATE` for the fallback estimate.
 
-## Export as an image
+## No session logs? Rough fallback
+For a repo with no Claude logs, the report falls back to an estimate from gaps between commits
+(breaks over 150 min dropped) plus 0.02 min per effective added line, clearly labelled. It tends
+to overestimate AI-heavy work, because Claude writes many lines fast.
+
+## Full report as an image
+
+The receipt PNG is made for you. To turn the full HTML report into a long JPEG too:
 
 ```bash
 bash to_jpg.sh ~/vibe-receipts/<repo>-report.html   # macOS + Google Chrome + Pillow
@@ -148,7 +162,7 @@ bash to_jpg.sh ~/vibe-receipts/<repo>-report.html   # macOS + Google Chrome + Pi
 skills/vibe-receipts/
 ├── SKILL.md               when and how Claude runs it
 └── scripts/
-    ├── receipts.py        analysis + HTML report
+    ├── receipts.py        analysis, HTML report, receipt card
     └── to_jpg.sh          report → JPEG
 receipts.py, to_jpg.sh     shortcuts (symlinks)
 demo/make_demo.py          rebuilds the synthetic demo above

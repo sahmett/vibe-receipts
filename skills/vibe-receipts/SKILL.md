@@ -15,7 +15,7 @@ Measures working time on a git repo from the user's own prompts in Claude Code s
 - **Break threshold** is computed automatically from the user's own gaps with Tukey's rule:
   `Q3 + 1.5 × IQR` (Q1/Q3 = 25th/75th percentile of the gaps, IQR = Q3 − Q1). With fewer than
   20 gaps it falls back to 15 min. It never goes above 30 min (the line then says "capped at 30 min";
-  tell the user what their rhythm gave and that the cap applied). The user can override it with `--idle MIN`.
+  tell the user what their rhythm gave and that the cap applied). The user can override it with `--break MIN`.
 - The report shows the rhythm (Q1 / median / Q3 / P90), the threshold used and why, and a
   threshold-sensitivity table.
 - Commits only add context: lines of code, lines/hour, minutes/commit, a daily commit log.
@@ -26,7 +26,7 @@ Measures working time on a git repo from the user's own prompts in Claude Code s
 The script lives next to this file: `scripts/receipts.py` (Python 3 stdlib only).
 
 ```bash
-python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--author PATTERN] [--idle MIN] [--lang en|tr]
+python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--author PATTERN] [--break MIN] [--lang en|tr]
 ```
 
 - `<repo-path>`: default to the current working directory if the user did not name a repo.
@@ -39,7 +39,7 @@ python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [-
 - `--built "<what it is>"`: 1–3 words saying what the project is, for the `BUILT` line on the receipt
   (e.g. "e-commerce site", "mobile app", "CLI tool", "admin panel"). Infer it from the repo's README and
   manifest (`package.json`, `pyproject.toml`, …), in the report language. If you can't tell, leave it out.
-- Leave `--idle` out by default (automatic threshold). Pass `--idle MIN` only when the user asks for
+- Leave `--break` out by default (automatic threshold). Pass `--break MIN` only when the user asks for
   a specific threshold ("recalculate with 20 minutes", "15 dk ile hesapla"); re-run and compare.
 - If the same repo lives in two folders (two clones, or a moved folder), pass every matching
   `~/.claude/projects/...` folder with repeated `--transcripts`.
