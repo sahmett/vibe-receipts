@@ -33,7 +33,10 @@ git clone https://github.com/sahmett/vibe-receipts
 python3 vibe-receipts/receipts.py ~/code/my-project
 ```
 
-You get `~/vibe-receipts/<repo>-report.html` and `<repo>-daily.csv`.
+You get `~/vibe-receipts/<repo>-report.html`, `<repo>-daily.csv` and `<repo>-receipt.png`,
+a shareable receipt card. The PNG is rendered with your local Chrome/Chromium in headless mode
+(set `CHROME=/path/to/browser` to pick one, `--no-png` to skip it). Add `--built "mobile app"` to say
+what you built on the receipt; the plugin fills it in from your README.
 Reports are personal work data, so they are never written into the analysed repo.
 
 ## How it works
@@ -74,8 +77,10 @@ threshold = Q3 + 1.5 × IQR                          ← beyond this is unusual 
 ```
 
 Example: Q1 = 1.3 min, Q3 = 6.5 min → IQR = 5.2 → threshold = 6.5 + 1.5 × 5.2 = **14.3 min**.
-A project where Claude runs long autonomous tasks between your prompts gets a higher threshold
-(40+ min), because long waits are normal there.
+A project where Claude runs long autonomous tasks between your prompts gets a higher threshold,
+because long waits are normal there, but never above **30 min**: a 30+ minute gap is a break for
+anyone (the same cut-off web analytics uses to end a session). When the cap kicks in, the report
+and the receipt say so.
 
 The report tells you which threshold it used and why, and shows a sensitivity table (5 → 60 min)
 so you can see how much the total moves. Want a different one? `--idle 20` (or just ask Claude:
@@ -86,6 +91,13 @@ back to 15 min and says so.
 Commits don't decide the hours. They give the report its "what got built" side: commit count,
 effective lines of code (weighted `code ×1.0 · config ×0.4 · docs ×0 · copied/vendor ×0 ·
 generated ×0`), lines per hour, minutes per commit, and a daily commit log.
+
+### Token value: what those tokens would cost on the API
+The receipt's `TOKEN VALUE` line prices every Claude response at Anthropic API list prices
+(`PRICES` in `receipts.py`): input, output and cache reads per model, cache writes at 1.25× input
+(5-minute cache) or 2× (1-hour cache), fast mode at 2×. Subagents are included. The report breaks it
+down and shows what it would have been without the prompt cache. It is not what a subscription costs
+you; models missing from `PRICES` are left out and the value is shown as `≥`.
 
 ### No session logs? Rough fallback
 For a repo with no Claude logs, the report falls back to an estimate from gaps between commits
