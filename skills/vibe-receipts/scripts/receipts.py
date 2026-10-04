@@ -38,6 +38,7 @@ def kind(path):
     p=path.lower()
     if VENDOR_RE.search(p): return 'vendor'
     if GEN_RE.search(p): return 'gen'
+    if re.search(r'(^|/)docs?/',p): return 'doc'   # everything under docs/: notes, exports, screenshots data
     if any(x in p for x in ['/specs/','/adr/','-prd','architecture','constitution','/plan']) and p.endswith(('.md','.pages')): return 'arch'
     if p.endswith(('.md','.mdx','.pages','.txt','.rst')): return 'doc'
     if p.endswith(('.json','.yaml','.yml','.toml','.mjs','.npmrc','.nvmrc','.ini','.env.example')): return 'config'
@@ -371,7 +372,7 @@ def main():
     period=(d0 if d0==d1 else f"{d0} → {d1[5:] if d0[:4]==d1[:4] else d1}")+f" · {T['rc_days'](span)}"
     active_days=len(dprompt if has_p else dcom)                                       # days you actually worked
     quote=next(q for lim,q in T['rc_quote'] if lim is None or hours<lim)
-    card,H=receipt_html(T,a.lang,name,a.built,period,active_days,d1,items,stats,hm(total),thr,quote,T['rc_by'].format(day=dow(d0)))
+    card,H=receipt_html(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),thr,quote,T['rc_by'].format(day=dow(d0)))
     cardp=os.path.join(a.out,f'{name}-receipt.html')
     open(cardp,'w',encoding='utf-8').write(card)
     pngp=os.path.join(a.out,f'{name}-receipt.png')
@@ -385,7 +386,7 @@ def split_minutes(secs,total):
     for i in sorted(range(len(raw)),key=lambda i:fl[i]-raw[i])[:int(round(total/60))-sum(fl)]: fl[i]+=1
     return fl
 
-def receipt_html(T,lang,name,built,period,active_days,d1,items,stats,total,thr,quote,by):
+def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,thr,quote,by):
     """The share card: a thermal-paper receipt on a dark 1080px-wide card. Returns (html, height)."""
     e=html.escape
     def up(x): return (x.replace('i','İ').replace('ı','I') if lang=='tr' else x).upper()   # Turkish dotted İ
@@ -403,7 +404,7 @@ def receipt_html(T,lang,name,built,period,active_days,d1,items,stats,total,thr,q
       f'<div class="row"><span>{T["rc_project"]}</span><span class="nm">{e(name)}</span></div>'
       +(f'<div class="row"><span>{T["rc_built"]}</span><span class="nm">{e(up(built))}</span></div>' if built else '')+
       f'<div class="row"><span>{T["rc_period"]}</span><span>{period}</span></div>'
-      f'<div class="row"><span>{T["rc_active"]}</span><span>{active_days}</span></div>'
+      +(f'<div class="row"><span>{T["rc_active"]}</span><span>{active_days}</span></div>' if active_days!=span else '')+
       '<div class="hr"></div>'
       f'<div class="items"><span class="h">{T["rc_qty"]}</span><span class="h">{T["rc_item"]}</span><span class="h r">{T["rc_time"]}</span>{rows}</div>'
       f'<div class="hr"></div>{srows}<div class="hr2"></div>'
