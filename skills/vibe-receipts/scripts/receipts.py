@@ -12,8 +12,11 @@ Usage:
   python3 receipts.py /path/to/repo --since 2026-06-01 --until 2026-06-30
   python3 receipts.py /path/to/repo --idle 20       # fixed 20-minute break threshold
   python3 receipts.py /path/to/repo --lang tr       # Türkçe rapor
+
+Besides the HTML report and CSV it writes <repo>-receipt.png, a shareable receipt card
+(rendered with a local Chrome/Chromium in headless mode; skipped if none is found).
 """
-import argparse, datetime, glob, html, json, os, re, subprocess
+import argparse, datetime, glob, html, json, os, pathlib, re, shutil, subprocess
 
 IDLE       = 15            # minutes: fallback threshold when there are too few gaps for Tukey
 MIN_GAPS   = 20            # fewer gaps than this = Tukey threshold is not reliable
@@ -66,7 +69,15 @@ L={
    k_est='Commit estimate',
    p_repo='Repo',p_range='Range',p_time='Working time',p_prompts='Prompts',p_commits='Commits',p_code='Effective code',p_lines='lines',
    p_rhythm='Rhythm',rh='Q1 (1st quartile) {q1} · median (P50) {med} · Q3 (3rd quartile) {q3} · IQR (interquartile range) {iqr} · P90 {p90} · Tukey upper fence (Q3+1.5·IQR) {tk}  ({n} gaps)',p_est='Commit estimate (fallback)',p_none='No prompts in range — using the commit estimate.',
-   e_none='No commits or prompts found in this range.'),
+   e_none='No commits or prompts found in this range.',
+   rc_kind='WORK TIME RECEIPT',rc_project='PROJECT',rc_built='BUILT',rc_active='ACTIVE DAYS',rc_days=lambda n:f"{n} DAY{'S'*(n!=1)}",rc_period='PERIOD',rc_qty='QTY',rc_item='ITEM',rc_time='TIME',
+   rc_prompts='PROMPTS',rc_commits='COMMITS',rc_code='CODE LINES',rc_lph='LINES / HOUR',rc_total='TOTAL',
+   rc_thr='BREAK THRESHOLD',rc_note=dict(auto='Based on your own prompt rhythm. Longer gaps are breaks, not work.',
+     fixed='Set by you. Longer gaps are breaks, not work.',few='Default: too few prompts to read your rhythm. Longer gaps are breaks.'),
+   rc_est='NO SESSION LOGS',rc_est_note='Rough estimate from the gaps between commits.',
+   rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+   # the joke: what you said before you started; picked so the receipt's TOTAL is always more
+   rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")],rc_by='\u2014 me, {day} morning'),
  'tr':dict(
    h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
    title='Çalışma Süresi Fişi',commits='commit',prompts='prompt',
@@ -88,7 +99,14 @@ L={
    k_est='Commit tahmini',
    p_repo='Repo',p_range='Aralık',p_time='Çalışma süresi',p_prompts='Prompt',p_commits='Commit',p_code='Etkin kod',p_lines='satır',
    p_rhythm='Ritim',rh='Q1 (1. çeyrek) {q1} · medyan (P50) {med} · Q3 (3. çeyrek) {q3} · IQR (çeyrekler arası aralık) {iqr} · P90 {p90} · Tukey üst çiti (Q3+1,5·IQR) {tk}  ({n} aralık)',p_est='Commit tahmini (yedek)',p_none='Aralıkta prompt yok — commit tahmini kullanılıyor.',
-   e_none='Bu aralıkta commit ya da prompt bulunamadı.'),
+   e_none='Bu aralıkta commit ya da prompt bulunamadı.',
+   rc_kind='ÇALIŞMA SÜRESİ FİŞİ',rc_project='PROJE',rc_built='YAPILAN',rc_active='AKTİF GÜN',rc_days=lambda n:f'{n} GÜN',rc_period='DÖNEM',rc_qty='ADET',rc_item='KALEM',rc_time='SÜRE',
+   rc_prompts='PROMPT',rc_commits='COMMIT',rc_code='KOD SATIRI',rc_lph='SATIR / SAAT',rc_total='TOPLAM',
+   rc_thr='MOLA SINIRI',rc_note=dict(auto='Kendi prompt ritmine göre. Daha uzun aralıklar mola sayılır, çalışma değil.',
+     fixed='Senin seçtiğin eşik. Daha uzun aralıklar mola sayılır, çalışma değil.',few='Varsayılan: ritmini okumak için prompt az. Daha uzun aralıklar mola sayılır.'),
+   rc_est='OTURUM KAYDI YOK',rc_est_note="Commit'ler arası süreden kaba tahmin.",
+   rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
+   rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')],rc_by='\u2014 ben, {day} sabahı'),
 }
 
 def default_lang():
@@ -187,6 +205,8 @@ def main():
     ap.add_argument('--lang',choices=sorted(L),default=default_lang(),help='report language (default: from $LANG, else en)')
     ap.add_argument('--name',help='project name shown in the report (default: repo folder name)')
     ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='output folder (default ~/vibe-receipts)')
+    ap.add_argument('--built',help='what the project is, 1-3 words (e.g. "e-commerce site"), shown on the receipt')
+    ap.add_argument('--no-png',action='store_true',help='skip the receipt PNG (needs Chrome/Chromium; set CHROME=path to choose one)')
     a=ap.parse_args()
     T=L[a.lang]; e=html.escape
 
@@ -330,6 +350,90 @@ def main():
             f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
     print("HTML:",out); print("CSV :",csvp)
 
+    # ===== SHARE CARD: <repo>-receipt.png =====
+    # Line items: one per day; per week or per month when there are too many days for a receipt.
+    qty=dprompt if has_p else dcom
+    if len(days)<=7: key=lambda d:d; label=lambda k:f"{T['rc_dow'][datetime.date.fromisoformat(k).weekday()]} {k[5:]}"
+    else:
+        def wk(d): x=datetime.date.fromisoformat(d); return (x-datetime.timedelta(days=x.weekday())).isoformat()
+        if len({wk(d) for d in days})<=7: key=wk; label=lambda k:f"{T['rc_wk']} {k[5:]}"
+        else: key=lambda d:d[:7]; label=lambda k:k
+    groups={}
+    for d in days:
+        g=groups.setdefault(key(d),[0,0]); g[0]+=qty.get(d,0); g[1]+=dtotal.get(d,0)
+    unit=T['rc_unit_p'] if has_p else T['rc_unit_c']
+    mins_split=split_minutes([v[1] for v in groups.values()],total)
+    items=[(q,f"{unit} · {label(k)}",f"{m//60}{T['h']} {m%60:02d}{T['m']}") for (k,(q,_)),m in zip(groups.items(),mins_split)]
+    stats=([(T['rc_prompts'],f'{len(prompts):,}')] if has_p else [])+[(T['rc_commits'],str(len(commits))),
+           (T['rc_code'],f'+{code:,.0f}'),(T['rc_lph'],f'{lph:,.0f}')]
+    thr=(T['rc_thr'],mins(idle),T['rc_note'][mode]) if has_p else (T['rc_est'],'',T['rc_est_note'])
+    span=(datetime.date.fromisoformat(d1)-datetime.date.fromisoformat(d0)).days+1   # calendar days
+    period=(d0 if d0==d1 else f"{d0} → {d1[5:] if d0[:4]==d1[:4] else d1}")+f" · {T['rc_days'](span)}"
+    active_days=len(dprompt if has_p else dcom)                                       # days you actually worked
+    quote=next(q for lim,q in T['rc_quote'] if lim is None or hours<lim)
+    card,H=receipt_html(T,a.lang,name,a.built,period,active_days,d1,items,stats,hm(total),thr,quote,T['rc_by'].format(day=dow(d0)))
+    cardp=os.path.join(a.out,f'{name}-receipt.html')
+    open(cardp,'w',encoding='utf-8').write(card)
+    pngp=os.path.join(a.out,f'{name}-receipt.png')
+    if a.no_png: pass
+    elif render_png(cardp,pngp,1080,H): print("PNG :",pngp)
+    else: print(f"PNG : skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome). Card HTML: {cardp}")
+
+def split_minutes(secs,total):
+    """Round each item to whole minutes so the items add up to the rounded total (largest remainder)."""
+    raw=[s/60 for s in secs]; fl=[int(r) for r in raw]
+    for i in sorted(range(len(raw)),key=lambda i:fl[i]-raw[i])[:int(round(total/60))-sum(fl)]: fl[i]+=1
+    return fl
+
+def receipt_html(T,lang,name,built,period,active_days,d1,items,stats,total,thr,quote,by):
+    """The share card: a thermal-paper receipt on a dark 1080px-wide card. Returns (html, height)."""
+    e=html.escape
+    def up(x): return (x.replace('i','İ').replace('ı','I') if lang=='tr' else x).upper()   # Turkish dotted İ
+    rows=''.join(f'<span>{q:,}</span><span>{e(l)}</span><span class="r">{t}</span>' for q,l,t in items)
+    srows=''.join(f'<div class="row"><span>{e(k)}</span><span>{v}</span></div>' for k,v in stats)
+    H=max(1350,378+804+26*len(items)+24*bool(built)+60)   # card padding + quote + receipt body + item/BUILT rows + slack
+    return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(name)} · vibe receipt</title>'
+      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Instrument+Serif:ital@0;1&display=swap">'
+      f'<style>{RCSS}</style></head><body><div class="card" style="height:{H}px">'
+      '<div class="brand"><b>VIBE RECEIPTS</b><span>github.com/sahmett/vibe-receipts</span></div>'
+      f'<div class="stage"><div class="quote">{e(quote)}</div><div class="by">{e(by)}</div>'
+      '<div class="rc"><div class="tear t"></div><div class="paper">'
+      f'<div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mute">github.com/sahmett/vibe-receipts</div><div class="mute ls">{T["rc_kind"]}</div></div>'
+      '<div class="hr"></div>'
+      f'<div class="row"><span>{T["rc_project"]}</span><span class="nm">{e(name)}</span></div>'
+      +(f'<div class="row"><span>{T["rc_built"]}</span><span class="nm">{e(up(built))}</span></div>' if built else '')+
+      f'<div class="row"><span>{T["rc_period"]}</span><span>{period}</span></div>'
+      f'<div class="row"><span>{T["rc_active"]}</span><span>{active_days}</span></div>'
+      '<div class="hr"></div>'
+      f'<div class="items"><span class="h">{T["rc_qty"]}</span><span class="h">{T["rc_item"]}</span><span class="h r">{T["rc_time"]}</span>{rows}</div>'
+      f'<div class="hr"></div>{srows}<div class="hr2"></div>'
+      f'<div class="tot"><span>{T["rc_total"]}</span><span>{total}</span></div>'
+      '<div class="hr"></div>'
+      f'<div class="row thr"><span>{thr[0]}</span><b>{e(thr[1])}</b></div>'+(f'<div class="mute">{e(thr[2])}</div>' if thr[2] else '')+
+      '<div class="ft"><div class="s">* SHOW THE RECEIPTS *</div><div class="bc"></div>'
+      f'<div class="mute bn">{e(up(name))} · {d1}</div><div class="ty">THANK YOU FOR VIBING</div></div>'
+      '</div><div class="tear b"></div></div></div></div></body></html>'),H
+
+def find_chrome():
+    if os.environ.get('CHROME'): return os.environ['CHROME']
+    for p in ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/Applications/Chromium.app/Contents/MacOS/Chromium',
+              '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge','/Applications/Brave Browser.app/Contents/MacOS/Brave Browser']:
+        if os.path.exists(p): return p
+    for n in ['google-chrome','google-chrome-stable','chromium','chromium-browser','microsoft-edge','brave-browser']:
+        if shutil.which(n): return shutil.which(n)
+
+def render_png(src,dst,w,h):
+    """Screenshot the card with headless Chrome at 2x. Returns True if the PNG was written."""
+    chrome=find_chrome()
+    if not chrome: return False
+    if os.path.exists(dst): os.remove(dst)
+    try:
+        subprocess.run([chrome,'--headless','--disable-gpu','--hide-scrollbars','--no-sandbox','--force-device-scale-factor=2',
+                        f'--window-size={w},{h}','--virtual-time-budget=5000',f'--screenshot={dst}',pathlib.Path(src).as_uri()],
+                       capture_output=True,timeout=120)
+    except (OSError,subprocess.SubprocessError): return False
+    return os.path.exists(dst)
+
 CSS="""*{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#0f1117;color:#e6e8ee;line-height:1.55;padding:40px 16px}
 .wrap{max-width:920px;margin:0 auto}
@@ -359,6 +463,36 @@ tr.sel td{color:#fff;font-weight:700;background:#1c2030}
 .dayblk ul{margin:8px 0 0 18px}.dayblk li{font-size:13.5px;color:#aeb3c2;margin:5px 0}
 .foot{text-align:center;color:#5d6273;font-size:12px;margin-top:38px}
 @media (max-width:600px){.scn .nm{width:150px}.kpis{grid-template-columns:1fr 1fr}.kpi.hero{grid-row:auto;grid-column:span 2}}"""
+
+PAPER,INK='#F3F0E8','#1d1c1a'
+RCSS=f"""*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0e0f14;color:#ECEAF2;font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}}
+.card{{width:1080px;padding:64px 72px;display:flex;flex-direction:column;align-items:center;overflow:hidden}}
+.brand{{width:100%;display:flex;justify-content:space-between;font-size:15px;line-height:22px}}
+.brand b{{color:#a78bfa;font-weight:800;letter-spacing:3px}}.brand span{{color:#9A98A6}}
+.stage{{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center}}
+.quote{{margin-top:52px;font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-size:84px;line-height:88px;letter-spacing:-1px;text-align:center}}
+.by{{margin-top:10px;font-size:16px;line-height:22px;color:#9A98A6}}
+.rc{{margin-top:56px;width:520px;transform:rotate(-2deg);filter:drop-shadow(0 30px 40px rgba(0,0,0,.55)) drop-shadow(0 4px 8px rgba(0,0,0,.4));color:{INK}}}
+.tear{{height:10px;background-size:20px 20px;background-repeat:repeat-x}}
+.tear.t{{background-image:linear-gradient(45deg,{PAPER} 50%,transparent 50%),linear-gradient(-45deg,{PAPER} 50%,transparent 50%);background-position:0 0}}
+.tear.b{{background-image:linear-gradient(135deg,{PAPER} 50%,transparent 50%),linear-gradient(-135deg,{PAPER} 50%,transparent 50%);background-position:0 100%}}
+.paper{{background:{PAPER};padding:28px 36px 32px;font-size:15px;line-height:24px}}
+.hd{{text-align:center}}.hd .t{{font-size:26px;line-height:32px;font-weight:800;letter-spacing:5px}}.hd .mute{{margin-top:2px}}
+.mute{{font-size:12px;line-height:18px;color:#6b665d}}.ls{{letter-spacing:2px}}
+.hr{{border-top:2px dashed #9b958a;margin:16px 0}}.hr2{{border-top:4px double {INK};margin:16px 0}}
+.row{{display:flex;justify-content:space-between;gap:16px;white-space:nowrap}}
+.row .nm{{font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}}
+.items{{display:grid;grid-template-columns:56px minmax(0,1fr) auto;row-gap:2px;white-space:nowrap}}
+.items span{{overflow:hidden;text-overflow:ellipsis}}.items .h{{font-size:11px;color:#6b665d;letter-spacing:1.5px}}.items .r{{text-align:right}}
+.tot{{display:flex;justify-content:space-between;align-items:baseline}}
+.tot span:first-child{{font-size:22px;font-weight:800;letter-spacing:3px}}.tot span:last-child{{font-size:40px;line-height:48px;font-weight:800;letter-spacing:-1px}}
+.thr{{font-size:13px;line-height:20px}}
+.ft{{padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}}
+.ft .s{{font-size:16px;line-height:24px;font-weight:800;letter-spacing:3px}}
+.bc{{width:300px;height:56px;background:repeating-linear-gradient(90deg,{INK} 0 3px,transparent 3px 5px,{INK} 5px 6px,transparent 6px 9px,{INK} 9px 13px,transparent 13px 15px,{INK} 15px 16px,transparent 16px 20px,{INK} 20px 22px,transparent 22px 23px)}}
+.ft .bn{{font-size:11px;line-height:14px;letter-spacing:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.ft .ty{{font-size:12px;line-height:18px;letter-spacing:2px}}"""
 
 if __name__=='__main__':
     main()

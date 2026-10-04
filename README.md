@@ -33,7 +33,10 @@ git clone https://github.com/sahmett/vibe-receipts
 python3 vibe-receipts/receipts.py ~/code/my-project
 ```
 
-You get `~/vibe-receipts/<repo>-report.html` and `<repo>-daily.csv`.
+You get `~/vibe-receipts/<repo>-report.html`, `<repo>-daily.csv` and `<repo>-receipt.png`,
+a shareable receipt card. The PNG is rendered with your local Chrome/Chromium in headless mode
+(set `CHROME=/path/to/browser` to pick one, `--no-png` to skip it). Add `--built "mobile app"` to say
+what you built on the receipt; the plugin fills it in from your README.
 Reports are personal work data, so they are never written into the analysed repo.
 
 ## How it works
