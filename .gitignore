@@ -10,3 +10,4 @@ __pycache__/
 # demo çıktısı (docs/ altındaki görseller hariç)
 demo/out/
 !docs/*.jpg
+!docs/*.png

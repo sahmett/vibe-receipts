@@ -2,10 +2,11 @@
 """Builds the README demo from 100% synthetic data.
 
 Creates a throwaway git repo ("pixel-pantry", a made-up recipe app) with back-dated
-commits plus fake Claude Code session logs (your prompts + Claude replies), then renders the report with receipts.py.
+commits plus fake Claude Code session logs (your prompts + Claude replies with made-up token
+usage), then renders the report and the receipt card with receipts.py.
 No real repo or transcript is read.
 
-  python3 demo/make_demo.py            # -> demo/out/pixel-pantry-report.html
+  python3 demo/make_demo.py            # -> demo/out/pixel-pantry-report.html + -receipt.png
   bash to_jpg.sh demo/out/pixel-pantry-report.html
 """
 import datetime, json, os, random, shutil, subprocess, sys, tempfile
@@ -78,19 +79,31 @@ def main():
             cur=start
             while cur<t+datetime.timedelta(minutes=random.randint(2,6)):
                 events.append(('user',cur))
-                for k in range(random.randint(1,4)):
-                    events.append(('assistant',cur+datetime.timedelta(seconds=random.randint(5,90)*(k+1))))
+                for k in range(random.randint(3,14)):                     # Claude works in tool loops
+                    events.append(('assistant',cur+datetime.timedelta(seconds=random.randint(4,20)*(k+1))))
                 gap=random.choices([random.uniform(.3,2),random.uniform(2,5),random.uniform(5,12),random.uniform(16,28)],weights=[30,40,24,6])[0]
                 cur+=datetime.timedelta(minutes=gap)
             prev=t
+    # one session per day; every Claude reply re-reads the growing context (cache read), adds to it
+    # (cache write, 1-hour cache like Claude Code) and writes some output
     with open(os.path.join(logs,'session.jsonl'),'w') as f:
-        for kind,e in events:
-            rec={'type':kind,'timestamp':e.astimezone(datetime.timezone.utc).isoformat().replace('+00:00','Z')}
-            rec['message']={'role':kind,'content':'demo prompt' if kind=='user' else [{'type':'text','text':'demo reply'}]}
+        ctx={}
+        for i,(kind,e) in enumerate(events):
+            day=e.date().isoformat()
+            rec={'type':kind,'sessionId':f'demo-{day}','timestamp':e.astimezone(datetime.timezone.utc).isoformat().replace('+00:00','Z')}
+            if kind=='user':
+                rec['message']={'role':'user','content':'demo prompt'}
+            else:
+                cr=ctx.setdefault(day,30000); cw=random.randint(600,5000); out=random.randint(120,2400)
+                ctx[day]=cr+cw+out if cr<240000 else 60000             # pretend auto-compact
+                rec['message']={'id':f'msg_{i}','role':'assistant','model':'claude-sonnet-5-5' if random.random()<.06 else 'claude-opus-5-5',
+                    'content':[{'type':'text','text':'demo reply'}],
+                    'usage':{'input_tokens':random.randint(2,40),'cache_creation_input_tokens':cw,'cache_read_input_tokens':cr,'output_tokens':out,
+                             'cache_creation':{'ephemeral_5m_input_tokens':0,'ephemeral_1h_input_tokens':cw}}}
             f.write(json.dumps(rec)+'\n')
 
     subprocess.run([sys.executable,os.path.join(ROOT,'skills','vibe-receipts','scripts','receipts.py'),repo,
-                    '--transcripts',logs,'--lang','en','--out',OUT],check=True)
+                    '--transcripts',logs,'--lang','en','--out',OUT,'--built','recipe app'],check=True)
     shutil.rmtree(tmp)
 
 if __name__=='__main__':

@@ -4,13 +4,13 @@
 Working time = sum of the gaps between YOUR consecutive prompts in Claude Code session
 logs (~/.claude/projects). A gap up to your break threshold counts as work, anything longer
 is a break. By default the threshold is computed from your own gaps with Tukey's rule
-(Q3 + 1.5·IQR); pass --idle MIN to use a fixed one. Commits only add context (what got built). For repos with
+(Q3 + 1.5·IQR); pass --break MIN to use a fixed one. Commits only add context (what got built). For repos with
 no session logs, a rough commit-gap estimate is used as a fallback.
 
 Usage:
   python3 receipts.py /path/to/repo
   python3 receipts.py /path/to/repo --since 2026-06-01 --until 2026-06-30
-  python3 receipts.py /path/to/repo --idle 20       # fixed 20-minute break threshold
+  python3 receipts.py /path/to/repo --break 20      # fixed 20-minute break threshold
   python3 receipts.py /path/to/repo --lang tr       # Türkçe rapor
 
 Besides the HTML report and CSV it writes <repo>-receipt.png, a shareable receipt card
@@ -98,6 +98,7 @@ L={
    rc_est='NO SESSION LOGS',rc_est_note='Rough estimate from the gaps between commits.',
    rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
+   share='{q} {t} later{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
    rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")],rc_by='\u2014 me, {day} morning'),
  'tr':dict(
    h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
@@ -134,6 +135,7 @@ L={
      fixed='Senin seçtiğin eşik. Daha uzun aralıklar mola sayılır, çalışma değil.',capped='Ritminden {tk} çıktı, {cap} üst sınır uygulandı. Daha uzun aralıklar mola sayılır.',few='Varsayılan: ritmini okumak için prompt az. Daha uzun aralıklar mola sayılır.'),
    rc_est='OTURUM KAYDI YOK',rc_est_note="Commit'ler arası süreden kaba tahmin.",
    rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
+   share='{q} {t} sonra{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
    rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')],rc_by='\u2014 ben, {day} sabahı'),
 }
 
@@ -297,7 +299,7 @@ def main():
     ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
     ap.add_argument('--author',help='only commits by this author (git --author pattern)')
     ap.add_argument('--transcripts',action='append',help='Claude log folder (overrides auto-detection, repeatable)')
-    ap.add_argument('--idle',default='auto',help=f'break threshold in minutes; default "auto" = your own Tukey threshold (Q3+1.5·IQR), at most {CAP} min')
+    ap.add_argument('--break','--idle',dest='idle',metavar='MIN',default='auto',help=f'break threshold in minutes (--idle is the old name); default "auto" = your own Tukey threshold (Q3+1.5·IQR), at most {CAP} min')
     ap.add_argument('--lang',choices=sorted(L),default=default_lang(),help='report language (default: from $LANG, else en)')
     ap.add_argument('--name',help='project name shown in the report (default: repo folder name)')
     ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='output folder (default ~/vibe-receipts)')
@@ -516,6 +518,8 @@ def main():
     if a.no_png: pass
     elif render_png(cardp,pngp,1080,H): print("PNG :",pngp)
     else: print(f"PNG : skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome). Card HTML: {cardp}")
+    m=int(round(total/60))   # ready-to-post text to go with the PNG
+    print("Share:",T['share'].format(q=quote,t=T['share_t'](m//60,m%60),v=T['share_v'].format(v=vtxt) if val['total'] else ''))
 
 def split_minutes(secs,total):
     """Round each item to whole minutes so the items add up to the rounded total (largest remainder)."""
