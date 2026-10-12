@@ -4,7 +4,7 @@
 vibe-receipts turns your Claude Code history into a shareable work-time receipt: the hours you really
 spent, measured from your own prompts, and what those tokens would cost on the API.
 
-<p align="center"><img src="docs/receipt.png" alt="A vibe-receipts receipt card: 11h 05m total, $138.14 token value" width="440"></p>
+<p align="center"><img src="docs/receipt.png" alt="A vibe-receipts receipt: 11h 05m total, $138.14 token value" width="380"></p>
 
 <p align="center"><sub>Demo from 100% synthetic data (<a href="demo/make_demo.py"><code>demo/make_demo.py</code></a>) · <a href="docs/demo-full.jpg">full report</a></sub></p>
 
@@ -118,13 +118,13 @@ from models missing from `PRICES` are left out and the value is shown as `≥`.
 
 ### The full report
 
-Every receipt comes with a full HTML report: your rhythm, the break threshold and why, and how much
-the total moves if the threshold changes. Then the Claude side (tokens, token value, model mix),
-a daily table and a daily commit log.
+Every receipt comes with a full HTML report: the headline numbers, how your gaps between prompts
+spread out, how much the total moves if the break threshold changes, what the tokens are worth and
+which models wrote them, a daily table and a daily commit log.
 
-<p align="center"><img src="docs/report-preview.jpg" alt="Top of the vibe-receipts HTML report: working time, rhythm and threshold sensitivity" width="720"></p>
+<p align="center"><img src="docs/report-preview.jpg" alt="Highlights of the vibe-receipts HTML report: working time, gap rhythm, threshold sensitivity, token value, model mix, daily table and a day of the commit log" width="720"></p>
 
-<p align="center"><sub>Synthetic demo data · <a href="docs/demo-full.jpg">see the whole report</a></sub></p>
+<p align="center"><sub>Highlights from the synthetic demo report · <a href="docs/demo-full.jpg">see the whole report</a></sub></p>
 
 ## Privacy
 
