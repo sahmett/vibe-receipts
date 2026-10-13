@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""vibe-receipts — how many hours did you really work on a git repo with Claude?
+"""vibe-receipts — how many hours did you really work on a project with Claude?
 
 Working time = sum of the gaps between YOUR consecutive prompts in Claude Code session
 logs (~/.claude/projects). A gap up to your break threshold counts as work, anything longer
@@ -84,6 +84,8 @@ L={
    p_repo='Repo',p_range='Range',p_time='Working time',p_prompts='Prompts',p_commits='Commits',p_code='Effective code',p_lines='lines',
    p_rhythm='Rhythm',rh='Q1 (1st quartile) {q1} · median (P50) {med} · Q3 (3rd quartile) {q3} · IQR (interquartile range) {iqr} · P90 {p90} · Tukey upper fence (Q3+1.5·IQR) {tk}  ({n} gaps)',p_est='Commit estimate (fallback)',p_none='No prompts in range — using the commit estimate.',
    e_none='No commits or prompts found in this range.',
+   g_why=dict(nogit='git is not installed, so commits are left out',norepo='No git history here, so commits are left out',none='No commits in this range'),
+   g_tail='Working time comes from your prompts.',
    s_claude='🤖 Claude side',c_read='Tokens read',c_written='Tokens written',c_total='Tokens total',c_runs='Sessions (runs)',c_subs='Subagents',
    c_rows=['Input (new, not cached)','Cache write (added to the context)','Cache read (context re-read every turn)','Output (written by Claude)'],
    c_note='Claude re-reads the whole conversation on every turn, so tokens read are hundreds of times tokens written. Each response is counted once (Claude Code logs repeat it over several lines); subagents are included.',
@@ -122,6 +124,8 @@ L={
    p_repo='Repo',p_range='Aralık',p_time='Çalışma süresi',p_prompts='Prompt',p_commits='Commit',p_code='Etkin kod',p_lines='satır',
    p_rhythm='Ritim',rh='Q1 (1. çeyrek) {q1} · medyan (P50) {med} · Q3 (3. çeyrek) {q3} · IQR (çeyrekler arası aralık) {iqr} · P90 {p90} · Tukey üst çiti (Q3+1,5·IQR) {tk}  ({n} aralık)',p_est='Commit tahmini (yedek)',p_none='Aralıkta prompt yok — commit tahmini kullanılıyor.',
    e_none='Bu aralıkta commit ya da prompt bulunamadı.',
+   g_why=dict(nogit="git kurulu değil, commit'ler dahil edilmedi",norepo="Burada git geçmişi yok, commit'ler dahil edilmedi",none='Bu aralıkta commit yok'),
+   g_tail="Çalışma süresi prompt'lardan hesaplanıyor.",
    s_claude='🤖 Claude tarafı',c_read='Okunan token',c_written='Yazılan token',c_total='Toplam token',c_runs='Oturum',c_subs='Subagent',
    c_rows=['Girdi (yeni, önbelleksiz)','Önbelleğe yazma (bağlama eklenen)','Önbellekten okuma (her turda yeniden okunan bağlam)','Çıktı (Claude\'un yazdığı)'],
    c_note='Claude her turda konuşmanın tamamını yeniden okur; bu yüzden okunan token yazılandan yüzlerce kat fazladır. Her cevap bir kez sayılır (Claude Code kayıtlarında birkaç satıra tekrarlanır); subagent\'lar dahildir.',
@@ -161,7 +165,7 @@ def claude_dirs(repo):
 def load_commits(repo,author,since,until):
     cmd=['git','-C',repo,'log','--all','--no-merges','--pretty=format:C|%at|%s','--numstat']
     if author: cmd.append(f'--author={author}')
-    raw=subprocess.check_output(cmd,text=True,errors='ignore')
+    raw=subprocess.check_output(cmd,text=True,errors='ignore',stderr=subprocess.DEVNULL)
     commits=[];cur=None
     for ln in raw.splitlines():
         if ln.startswith('C|'):
@@ -294,7 +298,7 @@ def short(n):
 
 def main():
     ap=argparse.ArgumentParser(description='Working time from your Claude Code prompts (+ git commits for context)')
-    ap.add_argument('repo',nargs='?',default='.',help='git repo to analyse (default: .)')
+    ap.add_argument('repo',nargs='?',default='.',help='folder to analyse, git repo or not (default: .)')
     ap.add_argument('--since',default='0000-00-00',help='first day YYYY-MM-DD')
     ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
     ap.add_argument('--author',help='only commits by this author (git --author pattern)')
@@ -306,6 +310,7 @@ def main():
     ap.add_argument('--built',help='what the project is, 1-3 words (e.g. "e-commerce site"), shown on the receipt')
     ap.add_argument('--no-png',action='store_true',help='skip the receipt PNG (needs Chrome/Chromium; set CHROME=path to choose one)')
     a=ap.parse_args()
+    a.out=os.path.abspath(os.path.expanduser(a.out))
     T=L[a.lang]; e=html.escape
 
     def hm(s):
@@ -316,7 +321,10 @@ def main():
     repo=os.path.realpath(a.repo)
     name=a.name or os.path.basename(repo)
     try: commits=load_commits(repo,a.author,a.since,a.until)
-    except subprocess.CalledProcessError: commits=[]
+    except subprocess.CalledProcessError: commits=[]   # not a git repo, or no commits yet
+    except FileNotFoundError: commits=[]               # git is not installed
+    gitst='ok' if commits else ('nogit' if not shutil.which('git') else 'norepo' if subprocess.run(['git','-C',repo,'rev-parse','--git-dir'],capture_output=True).returncode else 'none')
+    gitmsg=f"{T['g_why'][gitst]}. {T['g_tail']}" if gitst!='ok' else ''
     dirs=a.transcripts or claude_dirs(repo)
     prompts=load_prompts(dirs,a.since,a.until)
     tok,runs,subagents,mix,subtypes,val=load_usage(dirs,a.since,a.until)
@@ -383,7 +391,8 @@ def main():
     else:
         print(T['p_none'])
         print(f"{T['p_est']:<15}: {hm(est)}")
-    print(f"{T['p_commits']:<15}: {len(commits)}   ({T['p_code']} {code:.0f} {T['p_lines']})")
+    if commits: print(f"{T['p_commits']:<15}: {len(commits)}   ({T['p_code']} {code:.0f} {T['p_lines']})")
+    else:       print(f"{T['p_commits']:<15}: {gitmsg}")
     if runs: print(f"{'Agents':<15}: {runs} runs · {subagents} subagents")
     if mix: print(f"{'Model mix':<15}: "+' · '.join(f'{f} {pc}%' for f,pc in mix)+"   (share of output tokens)")
     if tread+twrote:
@@ -400,15 +409,17 @@ def main():
         return f'<div class="bar"><div class="barfill" style="width:{w:.1f}%;background:{c}"></div></div>'
 
     P=[f'<!doctype html><html lang="{a.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(name)} · {T["title"]}</title><style>{CSS}</style></head><body><div class="wrap">']
-    sub=(f'<b>{e(a.built)}</b> · ' if a.built else '')+(f'{len(prompts):,} {T["prompts"]} · ' if has_p else '')+f'{len(commits)} {T["commits"]} · {d0} → {d1} · {span} {T["days"]}'+(
+    sub=(f'<b>{e(a.built)}</b> · ' if a.built else '')+(f'{len(prompts):,} {T["prompts"]} · ' if has_p else '')+(f'{len(commits)} {T["commits"]} · ' if commits else '')+f'{d0} → {d1} · {span} {T["days"]}'+(
         f', {active_days} {T["active"]}' if active_days!=span else '')
     P.append(f'<header><h1>🧾 {e(name)} · {T["title"]}</h1><div class="sub">{sub}</div></header>')
     if has_p:
-        K=[(hm(work),T['k_time'],1),(mins(idle),T['k_thr'],0),(f'{len(prompts):,}',T['k_prompts'],0),(f'{lph:,.0f}',T['k_lph'],0),
-           (mins(mpp),T['k_mpp'],0),(mins(mpc) if commits else '—',T['k_mpc'],0),(str(len(commits)),T['k_com'],0)]
+        K=[(hm(work),T['k_time'],1),(mins(idle),T['k_thr'],0),(f'{len(prompts):,}',T['k_prompts'],0)]+(
+          [(f'{lph:,.0f}',T['k_lph'],0),(mins(mpp),T['k_mpp'],0),(mins(mpc),T['k_mpc'],0),(str(len(commits)),T['k_com'],0)] if commits else
+          [(mins(mpp),T['k_mpp'],0)])
     else:
         K=[(hm(est),T['k_est'],1),(f'{lph:,.0f}',T['k_lph'],0),(mins(mpc),T['k_mpc'],0),(str(len(commits)),T['k_com'],0)]
-    P.append('<div class="kpis">'+''.join(f'<div class="kpi{" hero" if h else ""}"><div class="v">{v}</div><div class="l">{l}</div></div>' for v,l,h in K)+'</div>')
+    P.append('<div class="kpis">'+''.join(f'<div class="kpi{" hero" if h else ""}"{" style=\"grid-row:auto\"" if h and len(K)<=4 else ""}><div class="v">{v}</div><div class="l">{l}</div></div>' for v,l,h in K)+'</div>')
+    if gitmsg: P.append(f'<div class="note">ℹ️ {e(gitmsg)}</div>')
 
     if has_p and gaps:
         within=100*sum(1 for g in gaps if g<=idle)/len(gaps)
@@ -458,14 +469,14 @@ def main():
     mx=max(dtotal.values(),default=0) or 1
     C=T['c']
     P.append(f'<h2>{T["s_daily"]}</h2><div class="card"><div class="scroll"><table>')
-    P.append(f'<tr><th>{C[0]}</th><th>{C[1]}</th>'+(f'<th class="r">{C[2]}</th>' if has_p else '')+f'<th>{C[3]}</th><th class="r">{C[4]}</th><th class="r">{C[5]}</th><th class="r">{C[6]}</th></tr>')
+    P.append(f'<tr><th>{C[0]}</th><th>{C[1]}</th>'+(f'<th class="r">{C[2]}</th>' if has_p else '')+f'<th>{C[3]}</th>'+(f'<th class="r">{C[4]}</th><th class="r">{C[5]}</th><th class="r">{C[6]}</th>' if commits else '')+'</tr>')
     for d in days:
         w=dtotal.get(d,0); l=dcode.get(d,0)
         P.append(f'<tr><td>{d[5:]}</td><td>{dow(d)}</td>'+(f'<td class="r">{dprompt.get(d,0)}</td>' if has_p else '')
                  +f'<td><div style="display:flex;align-items:center;gap:8px">{bar(w,mx,"#a78bfa")}<span style="width:64px;text-align:right">{hm(w)}</span></div></td>'
-                 f'<td class="r">{dcom.get(d,0)}</td><td class="r" style="color:#86efac">+{l:,.0f}</td><td class="r">{(l/(w/3600)) if w else 0:,.0f}</td></tr>')
+                 +(f'<td class="r">{dcom.get(d,0)}</td><td class="r" style="color:#86efac">+{l:,.0f}</td><td class="r">{(l/(w/3600)) if w else 0:,.0f}</td>' if commits else '')+'</tr>')
     P.append(f'<tr class="tot"><td colspan="2">{T["tot"]}</td>'+(f'<td class="r">{len(prompts):,}</td>' if has_p else '')
-             +f'<td>{hm(total)}</td><td class="r">{len(commits)}</td><td class="r">+{code:,.0f}</td><td class="r">{lph:,.0f}</td></tr>')
+             +f'<td>{hm(total)}</td>'+(f'<td class="r">{len(commits)}</td><td class="r">+{code:,.0f}</td><td class="r">{lph:,.0f}</td>' if commits else '')+'</tr>')
     P.append('</table></div></div>')
 
     if dsubj:
@@ -505,8 +516,8 @@ def main():
            [(T['rc_agents'][0],f"{runs} {T['rc_agents'][1]} · {subagents} {T['rc_agents'][2]}")] if runs else [])+(
            [(T['rc_tokens'],' · '.join(f'{short(v)} {l}' for v,l in zip((tread,twrote),T['rc_tok'])))] if tread+twrote else [])+(
            [(T['rc_model'],' · '.join(f'{f.upper()} {pc}%' for f,pc in mix[:3]))] if mix else [])
-    made=[(T['rc_commits'],str(len(commits))),(T['rc_code'],f'+{code:,.0f}')]
-    stats=spent+([None] if spent else [])+made
+    made=[(T['rc_commits'],str(len(commits))),(T['rc_code'],f'+{code:,.0f}')] if commits else []   # no git: the receipt just leaves commits out
+    stats=spent+([None] if spent and made else [])+made
     thr=(T['rc_thr'],mins(idle),T['rc_note'][mode].format(tk=mins(tukey),cap=mins(CAP))) if has_p else (T['rc_est'],'',T['rc_est_note'])
     period=(d0 if d0==d1 else f"{d0} → {d1[5:] if d0[:4]==d1[:4] else d1}")+f" · {T['rc_days'](span)}"
     quote=next(q for lim,q in T['rc_quote'] if lim is None or hours<lim)
