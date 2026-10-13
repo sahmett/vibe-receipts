@@ -1,11 +1,11 @@
 ---
 name: vibe-receipts
-description: Measure how many hours were really spent on a git repo, from the gaps between the user's own prompts in Claude Code session logs (~/.claude/projects), with commits as context, and produce a visual HTML report. Use when the user asks how long they worked on a project, how many hours a repo / feature / week took, wants a timesheet or work-hours report for a client or invoice, or says "receipts", "kaç saat çalıştım", "çalışma süresi", "efor analizi".
+description: Measure how many hours were really spent on a project folder (git repo or not), from the gaps between the user's own prompts in Claude Code session logs (~/.claude/projects), with commits as context, and produce a visual HTML report. Use when the user asks how long they worked on a project, how many hours a repo / feature / week took, wants a timesheet or work-hours report for a client or invoice, or says "receipts", "kaç saat çalıştım", "çalışma süresi", "efor analizi".
 ---
 
 # vibe-receipts
 
-Measures working time on a git repo from the user's own prompts in Claude Code session logs
+Measures working time on a project folder from the user's own prompts in Claude Code session logs
 (`~/.claude/projects/<encoded-repo-path>/*.jsonl`):
 
 - **Prompts** = messages the user typed + answers to `AskUserQuestion`. Claude replies, tool results,
@@ -19,6 +19,9 @@ Measures working time on a git repo from the user's own prompts in Claude Code s
 - The report shows the rhythm (Q1 / median / Q3 / P90), the threshold used and why, and a
   threshold-sensitivity table.
 - Commits only add context: lines of code, lines/hour, minutes/commit, a daily commit log.
+  Git is optional: with no repo, no commits in range or no git installed, the `Commits` line says
+  why and the hours are unaffected. Pass that reason on to the user in one sentence; the tool never
+  connects to GitHub, it only reads local git history.
 - With no session logs, it falls back to a rough commit-gap estimate (clearly labelled).
 
 ## Run it
@@ -29,7 +32,7 @@ The script lives next to this file: `scripts/receipts.py` (Python 3 stdlib only)
 python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--author PATTERN] [--break MIN] [--lang en|tr]
 ```
 
-- `<repo-path>`: default to the current working directory if the user did not name a repo.
+- `<repo-path>`: default to the current working directory if the user did not name a folder.
 - Turn the user's wording into flags: "this week" / "last month" / "in June" → `--since/--until`;
   "just my commits" → `--author "<git user.name>"` (read it with `git -C <repo> config user.name`).
 - Reports go to `~/vibe-receipts/` (`<repo>-report.html` + `<repo>-daily.csv` + `<repo>-receipt.png`,

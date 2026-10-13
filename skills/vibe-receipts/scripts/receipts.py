@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""vibe-receipts — how many hours did you really work on a git repo with Claude?
+"""vibe-receipts — how many hours did you really work on a project with Claude?
 
 Working time = sum of the gaps between YOUR consecutive prompts in Claude Code session
 logs (~/.claude/projects). A gap up to your break threshold counts as work, anything longer
@@ -16,7 +16,7 @@ Usage:
 Besides the HTML report and CSV it writes <repo>-receipt.png, a shareable receipt card
 (rendered with a local Chrome/Chromium in headless mode; skipped if none is found).
 """
-import argparse, datetime, glob, html, json, os, pathlib, re, shutil, subprocess
+import argparse, base64, datetime, glob, html, json, os, pathlib, re, shutil, subprocess
 
 IDLE       = 15            # minutes: fallback threshold when there are too few gaps for Tukey
 MIN_GAPS   = 20            # fewer gaps than this = Tukey threshold is not reliable
@@ -77,13 +77,15 @@ L={
    s_sens='🎚️ Threshold sensitivity',sens_c=['Threshold','Gaps within (cumulative %, CDF)','Working time'],
    sens_note='How much the total moves if the break threshold changes. The result is sensitive to it, which is why the threshold comes from your own gap distribution instead of a guess.',
    s_daily='📅 Daily',c=['Date','Day','Prompts','Working time','Commits','Code lines','Lines/h'],tot='TOTAL',
-   s_sum='📝 Daily commit log',
+   s_sum='📝 Daily commit log',s_receipt='🧾 Your receipt',rc_share_note='Ready to post with the image:',
    fb_title='No Claude session logs found — fallback estimate',
    fb_note='Without session logs this is a rough estimate from gaps between commits (breaks >{b}m dropped) plus {r} min per effective added line. It tends to overestimate AI-heavy work.',
    k_est='Commit estimate',
    p_repo='Repo',p_range='Range',p_time='Working time',p_prompts='Prompts',p_commits='Commits',p_code='Effective code',p_lines='lines',
    p_rhythm='Rhythm',rh='Q1 (1st quartile) {q1} · median (P50) {med} · Q3 (3rd quartile) {q3} · IQR (interquartile range) {iqr} · P90 {p90} · Tukey upper fence (Q3+1.5·IQR) {tk}  ({n} gaps)',p_est='Commit estimate (fallback)',p_none='No prompts in range — using the commit estimate.',
    e_none='No commits or prompts found in this range.',
+   g_why=dict(nogit='git is not installed, so commits are left out',norepo='No git history here, so commits are left out',none='No commits in this range'),
+   g_tail='Working time comes from your prompts.',
    s_claude='🤖 Claude side',c_read='Tokens read',c_written='Tokens written',c_total='Tokens total',c_runs='Sessions (runs)',c_subs='Subagents',
    c_rows=['Input (new, not cached)','Cache write (added to the context)','Cache read (context re-read every turn)','Output (written by Claude)'],
    c_note='Claude re-reads the whole conversation on every turn, so tokens read are hundreds of times tokens written. Each response is counted once (Claude Code logs repeat it over several lines); subagents are included.',
@@ -99,7 +101,7 @@ L={
    rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
    share='{q} {t} later{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
-   rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")],rc_by='\u2014 me, {day} morning'),
+   rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")]),
  'tr':dict(
    h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
    title='Çalışma Süresi Fişi',commits='commit',prompts='prompt',
@@ -115,13 +117,15 @@ L={
    s_sens='🎚️ Eşik duyarlılığı',sens_c=['Eşik','Eşik altındaki aralıklar (kümülatif %, CDF)','Çalışma süresi'],
    sens_note='Mola eşiği değişirse toplam ne kadar oynar. Sonuç eşiğe hassas; bu yüzden eşik tahminle değil, senin kendi aralık dağılımından seçiliyor.',
    s_daily='📅 Günlük',c=['Tarih','Gün','Prompt','Çalışma','Commit','Kod satırı','Satır/s'],tot='TOPLAM',
-   s_sum='📝 Günlük commit özeti',
+   s_sum='📝 Günlük commit özeti',s_receipt='🧾 Fişin',rc_share_note='Görselle birlikte paylaşmak için hazır metin:',
    fb_title='Claude oturum kaydı yok — yedek tahmin',
    fb_note='Oturum kaydı olmadığı için bu, commit\'ler arası süreden (>{b}dk molalar atılır) ve eklenen her etkin satıra {r} dk eklenerek yapılan kaba bir tahmin. AI ağırlıklı işte fazla gösterme eğilimindedir.',
    k_est='Commit tahmini',
    p_repo='Repo',p_range='Aralık',p_time='Çalışma süresi',p_prompts='Prompt',p_commits='Commit',p_code='Etkin kod',p_lines='satır',
    p_rhythm='Ritim',rh='Q1 (1. çeyrek) {q1} · medyan (P50) {med} · Q3 (3. çeyrek) {q3} · IQR (çeyrekler arası aralık) {iqr} · P90 {p90} · Tukey üst çiti (Q3+1,5·IQR) {tk}  ({n} aralık)',p_est='Commit tahmini (yedek)',p_none='Aralıkta prompt yok — commit tahmini kullanılıyor.',
    e_none='Bu aralıkta commit ya da prompt bulunamadı.',
+   g_why=dict(nogit="git kurulu değil, commit'ler dahil edilmedi",norepo="Burada git geçmişi yok, commit'ler dahil edilmedi",none='Bu aralıkta commit yok'),
+   g_tail="Çalışma süresi prompt'lardan hesaplanıyor.",
    s_claude='🤖 Claude tarafı',c_read='Okunan token',c_written='Yazılan token',c_total='Toplam token',c_runs='Oturum',c_subs='Subagent',
    c_rows=['Girdi (yeni, önbelleksiz)','Önbelleğe yazma (bağlama eklenen)','Önbellekten okuma (her turda yeniden okunan bağlam)','Çıktı (Claude\'un yazdığı)'],
    c_note='Claude her turda konuşmanın tamamını yeniden okur; bu yüzden okunan token yazılandan yüzlerce kat fazladır. Her cevap bir kez sayılır (Claude Code kayıtlarında birkaç satıra tekrarlanır); subagent\'lar dahildir.',
@@ -136,7 +140,7 @@ L={
    rc_est='OTURUM KAYDI YOK',rc_est_note="Commit'ler arası süreden kaba tahmin.",
    rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
    share='{q} {t} sonra{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
-   rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')],rc_by='\u2014 ben, {day} sabahı'),
+   rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')]),
 }
 
 def default_lang():
@@ -161,7 +165,7 @@ def claude_dirs(repo):
 def load_commits(repo,author,since,until):
     cmd=['git','-C',repo,'log','--all','--no-merges','--pretty=format:C|%at|%s','--numstat']
     if author: cmd.append(f'--author={author}')
-    raw=subprocess.check_output(cmd,text=True,errors='ignore')
+    raw=subprocess.check_output(cmd,text=True,errors='ignore',stderr=subprocess.DEVNULL)
     commits=[];cur=None
     for ln in raw.splitlines():
         if ln.startswith('C|'):
@@ -294,7 +298,7 @@ def short(n):
 
 def main():
     ap=argparse.ArgumentParser(description='Working time from your Claude Code prompts (+ git commits for context)')
-    ap.add_argument('repo',nargs='?',default='.',help='git repo to analyse (default: .)')
+    ap.add_argument('repo',nargs='?',default='.',help='folder to analyse, git repo or not (default: .)')
     ap.add_argument('--since',default='0000-00-00',help='first day YYYY-MM-DD')
     ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
     ap.add_argument('--author',help='only commits by this author (git --author pattern)')
@@ -306,6 +310,7 @@ def main():
     ap.add_argument('--built',help='what the project is, 1-3 words (e.g. "e-commerce site"), shown on the receipt')
     ap.add_argument('--no-png',action='store_true',help='skip the receipt PNG (needs Chrome/Chromium; set CHROME=path to choose one)')
     a=ap.parse_args()
+    a.out=os.path.abspath(os.path.expanduser(a.out))
     T=L[a.lang]; e=html.escape
 
     def hm(s):
@@ -316,7 +321,10 @@ def main():
     repo=os.path.realpath(a.repo)
     name=a.name or os.path.basename(repo)
     try: commits=load_commits(repo,a.author,a.since,a.until)
-    except subprocess.CalledProcessError: commits=[]
+    except subprocess.CalledProcessError: commits=[]   # not a git repo, or no commits yet
+    except FileNotFoundError: commits=[]               # git is not installed
+    gitst='ok' if commits else ('nogit' if not shutil.which('git') else 'norepo' if subprocess.run(['git','-C',repo,'rev-parse','--git-dir'],capture_output=True).returncode else 'none')
+    gitmsg=f"{T['g_why'][gitst]}. {T['g_tail']}" if gitst!='ok' else ''
     dirs=a.transcripts or claude_dirs(repo)
     prompts=load_prompts(dirs,a.since,a.until)
     tok,runs,subagents,mix,subtypes,val=load_usage(dirs,a.since,a.until)
@@ -383,7 +391,8 @@ def main():
     else:
         print(T['p_none'])
         print(f"{T['p_est']:<15}: {hm(est)}")
-    print(f"{T['p_commits']:<15}: {len(commits)}   ({T['p_code']} {code:.0f} {T['p_lines']})")
+    if commits: print(f"{T['p_commits']:<15}: {len(commits)}   ({T['p_code']} {code:.0f} {T['p_lines']})")
+    else:       print(f"{T['p_commits']:<15}: {gitmsg}")
     if runs: print(f"{'Agents':<15}: {runs} runs · {subagents} subagents")
     if mix: print(f"{'Model mix':<15}: "+' · '.join(f'{f} {pc}%' for f,pc in mix)+"   (share of output tokens)")
     if tread+twrote:
@@ -400,15 +409,17 @@ def main():
         return f'<div class="bar"><div class="barfill" style="width:{w:.1f}%;background:{c}"></div></div>'
 
     P=[f'<!doctype html><html lang="{a.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(name)} · {T["title"]}</title><style>{CSS}</style></head><body><div class="wrap">']
-    sub=(f'<b>{e(a.built)}</b> · ' if a.built else '')+(f'{len(prompts):,} {T["prompts"]} · ' if has_p else '')+f'{len(commits)} {T["commits"]} · {d0} → {d1} · {span} {T["days"]}'+(
+    sub=(f'<b>{e(a.built)}</b> · ' if a.built else '')+(f'{len(prompts):,} {T["prompts"]} · ' if has_p else '')+(f'{len(commits)} {T["commits"]} · ' if commits else '')+f'{d0} → {d1} · {span} {T["days"]}'+(
         f', {active_days} {T["active"]}' if active_days!=span else '')
     P.append(f'<header><h1>🧾 {e(name)} · {T["title"]}</h1><div class="sub">{sub}</div></header>')
     if has_p:
-        K=[(hm(work),T['k_time'],1),(mins(idle),T['k_thr'],0),(f'{len(prompts):,}',T['k_prompts'],0),(f'{lph:,.0f}',T['k_lph'],0),
-           (mins(mpp),T['k_mpp'],0),(mins(mpc) if commits else '—',T['k_mpc'],0),(str(len(commits)),T['k_com'],0)]
+        K=[(hm(work),T['k_time'],1),(mins(idle),T['k_thr'],0),(f'{len(prompts):,}',T['k_prompts'],0)]+(
+          [(f'{lph:,.0f}',T['k_lph'],0),(mins(mpp),T['k_mpp'],0),(mins(mpc),T['k_mpc'],0),(str(len(commits)),T['k_com'],0)] if commits else
+          [(mins(mpp),T['k_mpp'],0)])
     else:
         K=[(hm(est),T['k_est'],1),(f'{lph:,.0f}',T['k_lph'],0),(mins(mpc),T['k_mpc'],0),(str(len(commits)),T['k_com'],0)]
-    P.append('<div class="kpis">'+''.join(f'<div class="kpi{" hero" if h else ""}"><div class="v">{v}</div><div class="l">{l}</div></div>' for v,l,h in K)+'</div>')
+    P.append('<div class="kpis">'+''.join(f'<div class="kpi{" hero" if h else ""}"{" style=\"grid-row:auto\"" if h and len(K)<=4 else ""}><div class="v">{v}</div><div class="l">{l}</div></div>' for v,l,h in K)+'</div>')
+    if gitmsg: P.append(f'<div class="note">ℹ️ {e(gitmsg)}</div>')
 
     if has_p and gaps:
         within=100*sum(1 for g in gaps if g<=idle)/len(gaps)
@@ -458,14 +469,14 @@ def main():
     mx=max(dtotal.values(),default=0) or 1
     C=T['c']
     P.append(f'<h2>{T["s_daily"]}</h2><div class="card"><div class="scroll"><table>')
-    P.append(f'<tr><th>{C[0]}</th><th>{C[1]}</th>'+(f'<th class="r">{C[2]}</th>' if has_p else '')+f'<th>{C[3]}</th><th class="r">{C[4]}</th><th class="r">{C[5]}</th><th class="r">{C[6]}</th></tr>')
+    P.append(f'<tr><th>{C[0]}</th><th>{C[1]}</th>'+(f'<th class="r">{C[2]}</th>' if has_p else '')+f'<th>{C[3]}</th>'+(f'<th class="r">{C[4]}</th><th class="r">{C[5]}</th><th class="r">{C[6]}</th>' if commits else '')+'</tr>')
     for d in days:
         w=dtotal.get(d,0); l=dcode.get(d,0)
         P.append(f'<tr><td>{d[5:]}</td><td>{dow(d)}</td>'+(f'<td class="r">{dprompt.get(d,0)}</td>' if has_p else '')
                  +f'<td><div style="display:flex;align-items:center;gap:8px">{bar(w,mx,"#a78bfa")}<span style="width:64px;text-align:right">{hm(w)}</span></div></td>'
-                 f'<td class="r">{dcom.get(d,0)}</td><td class="r" style="color:#86efac">+{l:,.0f}</td><td class="r">{(l/(w/3600)) if w else 0:,.0f}</td></tr>')
+                 +(f'<td class="r">{dcom.get(d,0)}</td><td class="r" style="color:#86efac">+{l:,.0f}</td><td class="r">{(l/(w/3600)) if w else 0:,.0f}</td>' if commits else '')+'</tr>')
     P.append(f'<tr class="tot"><td colspan="2">{T["tot"]}</td>'+(f'<td class="r">{len(prompts):,}</td>' if has_p else '')
-             +f'<td>{hm(total)}</td><td class="r">{len(commits)}</td><td class="r">+{code:,.0f}</td><td class="r">{lph:,.0f}</td></tr>')
+             +f'<td>{hm(total)}</td>'+(f'<td class="r">{len(commits)}</td><td class="r">+{code:,.0f}</td><td class="r">{lph:,.0f}</td>' if commits else '')+'</tr>')
     P.append('</table></div></div>')
 
     if dsubj:
@@ -476,17 +487,8 @@ def main():
 
     P.append(f'<div class="foot">🧾 vibe-receipts · {e(name)} · {datetime.date.today()}</div></div></body></html>')
 
+    # ===== SHARE CARD: <repo>-receipt.png (rendered first so the report can show it) =====
     os.makedirs(a.out,exist_ok=True)
-    out=os.path.join(a.out,f'{name}-report.html')
-    open(out,'w',encoding='utf-8').write('\n'.join(P))
-    csvp=os.path.join(a.out,f'{name}-daily.csv')
-    with open(csvp,'w',encoding='utf-8') as f:
-        f.write('date,prompts,work_min,commits,effective_lines,added,deleted,commit_estimate_min\n')
-        for d in days:
-            f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
-    print("HTML:",out); print("CSV :",csvp)
-
-    # ===== SHARE CARD: <repo>-receipt.png =====
     # Line items: one per day; per week or per month when there are too many days for a receipt.
     qty=dprompt if has_p else dcom
     if len(days)<=7: key=lambda d:d; label=lambda k:f"{T['rc_dow'][datetime.date.fromisoformat(k).weekday()]} {k[5:]}"
@@ -505,21 +507,37 @@ def main():
            [(T['rc_agents'][0],f"{runs} {T['rc_agents'][1]} · {subagents} {T['rc_agents'][2]}")] if runs else [])+(
            [(T['rc_tokens'],' · '.join(f'{short(v)} {l}' for v,l in zip((tread,twrote),T['rc_tok'])))] if tread+twrote else [])+(
            [(T['rc_model'],' · '.join(f'{f.upper()} {pc}%' for f,pc in mix[:3]))] if mix else [])
-    made=[(T['rc_commits'],str(len(commits))),(T['rc_code'],f'+{code:,.0f}')]
-    stats=spent+([None] if spent else [])+made
+    made=[(T['rc_commits'],str(len(commits))),(T['rc_code'],f'+{code:,.0f}')] if commits else []   # no git: the receipt just leaves commits out
+    stats=spent+([None] if spent and made else [])+made
     thr=(T['rc_thr'],mins(idle),T['rc_note'][mode].format(tk=mins(tukey),cap=mins(CAP))) if has_p else (T['rc_est'],'',T['rc_est_note'])
     period=(d0 if d0==d1 else f"{d0} → {d1[5:] if d0[:4]==d1[:4] else d1}")+f" · {T['rc_days'](span)}"
     quote=next(q for lim,q in T['rc_quote'] if lim is None or hours<lim)
     value=(T['rc_value'],vtxt) if val['total'] else None
-    card,H=receipt_html(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),value,thr,quote,T['rc_by'].format(day=dow(d0)))
+    card,H=receipt_html(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),value,thr)
     cardp=os.path.join(a.out,f'{name}-receipt.html')
     open(cardp,'w',encoding='utf-8').write(card)
     pngp=os.path.join(a.out,f'{name}-receipt.png')
     if a.no_png: pass
-    elif render_png(cardp,pngp,1080,H): print("PNG :",pngp)
+    elif render_png(cardp,pngp,CARD_W,H): print("PNG :",pngp)
     else: print(f"PNG : skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome). Card HTML: {cardp}")
     m=int(round(total/60))   # ready-to-post text to go with the PNG
-    print("Share:",T['share'].format(q=quote,t=T['share_t'](m//60,m%60),v=T['share_v'].format(v=vtxt) if val['total'] else ''))
+    share=T['share'].format(q=quote,t=T['share_t'](m//60,m%60),v=T['share_v'].format(v=vtxt) if val['total'] else '')
+
+    # the card goes at the end of the report, embedded so the HTML still works on its own
+    if not a.no_png and os.path.exists(pngp):
+        b64=base64.b64encode(open(pngp,'rb').read()).decode()
+        P.insert(-1,f'<h2>{T["s_receipt"]}</h2><div class="card rcpt"><img src="data:image/png;base64,{b64}" alt="{e(name)} receipt">'
+                    f'<div class="note">{T["rc_share_note"]}</div><div class="share">{e(share)}</div></div>')
+
+    out=os.path.join(a.out,f'{name}-report.html')
+    open(out,'w',encoding='utf-8').write('\n'.join(P))
+    csvp=os.path.join(a.out,f'{name}-daily.csv')
+    with open(csvp,'w',encoding='utf-8') as f:
+        f.write('date,prompts,work_min,commits,effective_lines,added,deleted,commit_estimate_min\n')
+        for d in days:
+            f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
+    print("HTML:",out); print("CSV :",csvp)
+    print("Share:",share)
 
 def split_minutes(secs,total):
     """Round each item to whole minutes so the items add up to the rounded total (largest remainder)."""
@@ -527,18 +545,16 @@ def split_minutes(secs,total):
     for i in sorted(range(len(raw)),key=lambda i:fl[i]-raw[i])[:int(round(total/60))-sum(fl)]: fl[i]+=1
     return fl
 
-def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,value,thr,quote,by):
-    """The share card: a thermal-paper receipt on a dark 1080px-wide card. Returns (html, height)."""
+def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,value,thr):
+    """The share card: a thermal-paper receipt, straight, on a dark card. Returns (html, height)."""
     e=html.escape
     def up(x): return (x.replace('i','İ').replace('ı','I') if lang=='tr' else x).upper()   # Turkish dotted İ
     rows=''.join(f'<span>{q:,}</span><span>{e(l)}</span><span class="r">{t}</span>' for q,l,t in items)
     srows=''.join('<div class="sp"></div>' if r is None else f'<div class="row"><span>{e(r[0])}</span><span>{r[1]}</span></div>' for r in stats)
-    H=max(1350,378+804+24*(len(stats)-4)+26*len(items)+24*bool(built)+46*bool(value)+60)   # card padding + quote + receipt body + item/BUILT/value rows + slack
+    H=2*CARD_PAD+804+24*(len(stats)-4)+26*len(items)+24*bool(built)+46*bool(value)+8   # card padding + receipt body + item/BUILT/value rows + slack
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(name)} · vibe receipt</title>'
-      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Instrument+Serif:ital@0;1&display=swap">'
+      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap">'
       f'<style>{RCSS}</style></head><body><div class="card" style="height:{H}px">'
-      '<div class="brand"><b>VIBE RECEIPTS</b><span>github.com/sahmett/vibe-receipts</span></div>'
-      f'<div class="stage"><div class="quote">{e(quote)}</div><div class="by">{e(by)}</div>'
       '<div class="rc"><div class="tear t"></div><div class="paper">'
       f'<div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mute">github.com/sahmett/vibe-receipts</div><div class="mute ls">{T["rc_kind"]}</div></div>'
       '<div class="hr"></div>'
@@ -556,7 +572,7 @@ def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,
       f'<div class="row thr"><span>{thr[0]}</span><b>{e(thr[1])}</b></div>'+(f'<div class="mute">{e(thr[2])}</div>' if thr[2] else '')+
       '<div class="ft"><div class="s">* SHOW THE RECEIPTS *</div><div class="bc"></div>'
       f'<div class="mute bn">{e(up(name))} · {d1}</div><div class="ty">THANK YOU FOR VIBING</div></div>'
-      '</div><div class="tear b"></div></div></div></div></body></html>'),H
+      '</div><div class="tear b"></div></div></div></body></html>'),H
 
 def find_chrome():
     if os.environ.get('CHROME'): return os.environ['CHROME']
@@ -607,18 +623,16 @@ tr.sel td{color:#fff;font-weight:700;background:#1c2030}
 .dayblk h3{font-size:15px;color:#fff;display:flex;justify-content:space-between}.dayblk h3 .hrs{font-size:13px;color:#a78bfa;font-weight:700}
 .dayblk ul{margin:8px 0 0 18px}.dayblk li{font-size:13.5px;color:#aeb3c2;margin:5px 0}
 .foot{text-align:center;color:#5d6273;font-size:12px;margin-top:38px}
+.rcpt{text-align:center}.rcpt img{width:100%;max-width:440px;border-radius:12px;display:block;margin:0 auto}
+.share{margin:8px auto 0;max-width:640px;background:#13161f;border:1px solid #242938;border-radius:10px;padding:10px 14px;font-size:13.5px;color:#c8ccd8;user-select:all}
 @media (max-width:600px){.scn .nm{width:150px}.kpis{grid-template-columns:1fr 1fr}.kpi.hero{grid-row:auto;grid-column:span 2}}"""
 
 PAPER,INK='#F3F0E8','#1d1c1a'
+CARD_W,CARD_PAD=600,40   # the share card: just the receipt, straight, on a dark background
 RCSS=f"""*{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#0e0f14;color:#ECEAF2;font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}}
-.card{{width:1080px;padding:64px 72px;display:flex;flex-direction:column;align-items:center;overflow:hidden}}
-.brand{{width:100%;display:flex;justify-content:space-between;font-size:15px;line-height:22px}}
-.brand b{{color:#a78bfa;font-weight:800;letter-spacing:3px}}.brand span{{color:#9A98A6}}
-.stage{{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center}}
-.quote{{margin-top:52px;font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-size:84px;line-height:88px;letter-spacing:-1px;text-align:center}}
-.by{{margin-top:10px;font-size:16px;line-height:22px;color:#9A98A6}}
-.rc{{margin-top:56px;width:520px;transform:rotate(-2deg);filter:drop-shadow(0 30px 40px rgba(0,0,0,.55)) drop-shadow(0 4px 8px rgba(0,0,0,.4));color:{INK}}}
+.card{{width:{CARD_W}px;padding:{CARD_PAD}px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}}
+.rc{{width:520px;filter:drop-shadow(0 30px 40px rgba(0,0,0,.55)) drop-shadow(0 4px 8px rgba(0,0,0,.4));color:{INK}}}
 .tear{{height:10px;background-size:20px 20px;background-repeat:repeat-x}}
 .tear.t{{background-image:linear-gradient(45deg,{PAPER} 50%,transparent 50%),linear-gradient(-45deg,{PAPER} 50%,transparent 50%);background-position:0 0}}
 .tear.b{{background-image:linear-gradient(135deg,{PAPER} 50%,transparent 50%),linear-gradient(-135deg,{PAPER} 50%,transparent 50%);background-position:0 100%}}

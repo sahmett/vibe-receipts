@@ -10,7 +10,7 @@ spent, measured from your own prompts, and what those tokens would cost on the A
 
 > **Your prompts are the clock. Your commits are the proof of what you built.**
 
-One Python file, zero dependencies, everything runs on your machine. Point it at a git repo and get:
+One Python file, zero dependencies, everything runs on your machine. Point it at any folder you used Claude Code in (a git repo or not) and get:
 
 - **a receipt card** (PNG) to share: working time, prompts, agents, tokens, model mix, commits and the token value
 - **a full HTML report** with your prompt rhythm, the break threshold and why, a sensitivity table and a daily commit log
@@ -104,6 +104,10 @@ Commits don't decide the hours. They show what got built: commit count, **effect
 (weighted: `code ×1.0 · config ×0.4 · docs / vendored / generated ×0`; `CODE LINES` on the receipt),
 lines per hour, minutes per commit and a daily commit log.
 
+**No git? Still works.** If the folder is not a git repo, has no commits in the range, or git is
+not installed, the hours and token value are measured as usual. The receipt simply leaves commits
+out and the report says why. vibe-receipts never talks to GitHub; it only reads local git history.
+
 ### Token value ≠ what you paid
 `TOKEN VALUE` estimates what the recorded usage would cost at **Anthropic API list prices**
 (`PRICES` in `receipts.py`). It is **not** your Claude subscription cost. It covers:
@@ -130,14 +134,14 @@ which models wrote them, a daily table and a daily commit log.
 
 Everything runs locally. vibe-receipts reads your Claude Code transcripts and git history on your
 machine and writes its outputs to `~/vibe-receipts/`. It never uploads your prompts, code, logs or
-reports. The only network request is the receipt card loading its two fonts from Google Fonts while
+reports. The only network request is the receipt card loading its font from Google Fonts while
 it is rendered.
 
 ## Options
 
 | Flag | Meaning |
 |---|---|
-| `repo` | git repo to analyse (default `.`) |
+| `repo` | folder to analyse, git repo or not (default `.`) |
 | `--since / --until` | day range `YYYY-MM-DD`, applied to both prompts and commits |
 | `--author` | only this author's commits (`git log --author` pattern) |
 | `--break MIN` | fixed break threshold in minutes (default: learned from your rhythm); `--idle` is the old name |
