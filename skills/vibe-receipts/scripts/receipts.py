@@ -101,7 +101,7 @@ L={
    rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
    share='{q} {t} later{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
-   rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")],rc_by='\u2014 me, {day} morning'),
+   rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")]),
  'tr':dict(
    h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
    title='Çalışma Süresi Fişi',commits='commit',prompts='prompt',
@@ -140,7 +140,7 @@ L={
    rc_est='OTURUM KAYDI YOK',rc_est_note="Commit'ler arası süreden kaba tahmin.",
    rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
    share='{q} {t} sonra{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
-   rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')],rc_by='\u2014 ben, {day} sabahı'),
+   rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')]),
 }
 
 def default_lang():
@@ -522,12 +522,12 @@ def main():
     period=(d0 if d0==d1 else f"{d0} → {d1[5:] if d0[:4]==d1[:4] else d1}")+f" · {T['rc_days'](span)}"
     quote=next(q for lim,q in T['rc_quote'] if lim is None or hours<lim)
     value=(T['rc_value'],vtxt) if val['total'] else None
-    card,H=receipt_html(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),value,thr,quote,T['rc_by'].format(day=dow(d0)))
+    card,H=receipt_html(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),value,thr)
     cardp=os.path.join(a.out,f'{name}-receipt.html')
     open(cardp,'w',encoding='utf-8').write(card)
     pngp=os.path.join(a.out,f'{name}-receipt.png')
     if a.no_png: pass
-    elif render_png(cardp,pngp,1080,H): print("PNG :",pngp)
+    elif render_png(cardp,pngp,CARD_W,H): print("PNG :",pngp)
     else: print(f"PNG : skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome). Card HTML: {cardp}")
     m=int(round(total/60))   # ready-to-post text to go with the PNG
     print("Share:",T['share'].format(q=quote,t=T['share_t'](m//60,m%60),v=T['share_v'].format(v=vtxt) if val['total'] else ''))
@@ -538,18 +538,16 @@ def split_minutes(secs,total):
     for i in sorted(range(len(raw)),key=lambda i:fl[i]-raw[i])[:int(round(total/60))-sum(fl)]: fl[i]+=1
     return fl
 
-def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,value,thr,quote,by):
-    """The share card: a thermal-paper receipt on a dark 1080px-wide card. Returns (html, height)."""
+def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,value,thr):
+    """The share card: a thermal-paper receipt, straight, on a dark card. Returns (html, height)."""
     e=html.escape
     def up(x): return (x.replace('i','İ').replace('ı','I') if lang=='tr' else x).upper()   # Turkish dotted İ
     rows=''.join(f'<span>{q:,}</span><span>{e(l)}</span><span class="r">{t}</span>' for q,l,t in items)
     srows=''.join('<div class="sp"></div>' if r is None else f'<div class="row"><span>{e(r[0])}</span><span>{r[1]}</span></div>' for r in stats)
-    H=max(1350,378+804+24*(len(stats)-4)+26*len(items)+24*bool(built)+46*bool(value)+60)   # card padding + quote + receipt body + item/BUILT/value rows + slack
+    H=2*CARD_PAD+804+24*(len(stats)-4)+26*len(items)+24*bool(built)+46*bool(value)+8   # card padding + receipt body + item/BUILT/value rows + slack
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(name)} · vibe receipt</title>'
-      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Instrument+Serif:ital@0;1&display=swap">'
+      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap">'
       f'<style>{RCSS}</style></head><body><div class="card" style="height:{H}px">'
-      '<div class="brand"><b>VIBE RECEIPTS</b><span>github.com/sahmett/vibe-receipts</span></div>'
-      f'<div class="stage"><div class="quote">{e(quote)}</div><div class="by">{e(by)}</div>'
       '<div class="rc"><div class="tear t"></div><div class="paper">'
       f'<div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mute">github.com/sahmett/vibe-receipts</div><div class="mute ls">{T["rc_kind"]}</div></div>'
       '<div class="hr"></div>'
@@ -567,7 +565,7 @@ def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,
       f'<div class="row thr"><span>{thr[0]}</span><b>{e(thr[1])}</b></div>'+(f'<div class="mute">{e(thr[2])}</div>' if thr[2] else '')+
       '<div class="ft"><div class="s">* SHOW THE RECEIPTS *</div><div class="bc"></div>'
       f'<div class="mute bn">{e(up(name))} · {d1}</div><div class="ty">THANK YOU FOR VIBING</div></div>'
-      '</div><div class="tear b"></div></div></div></div></body></html>'),H
+      '</div><div class="tear b"></div></div></div></body></html>'),H
 
 def find_chrome():
     if os.environ.get('CHROME'): return os.environ['CHROME']
@@ -621,15 +619,11 @@ tr.sel td{color:#fff;font-weight:700;background:#1c2030}
 @media (max-width:600px){.scn .nm{width:150px}.kpis{grid-template-columns:1fr 1fr}.kpi.hero{grid-row:auto;grid-column:span 2}}"""
 
 PAPER,INK='#F3F0E8','#1d1c1a'
+CARD_W,CARD_PAD=600,40   # the share card: just the receipt, straight, on a dark background
 RCSS=f"""*{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#0e0f14;color:#ECEAF2;font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}}
-.card{{width:1080px;padding:64px 72px;display:flex;flex-direction:column;align-items:center;overflow:hidden}}
-.brand{{width:100%;display:flex;justify-content:space-between;font-size:15px;line-height:22px}}
-.brand b{{color:#a78bfa;font-weight:800;letter-spacing:3px}}.brand span{{color:#9A98A6}}
-.stage{{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center}}
-.quote{{margin-top:52px;font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-size:84px;line-height:88px;letter-spacing:-1px;text-align:center}}
-.by{{margin-top:10px;font-size:16px;line-height:22px;color:#9A98A6}}
-.rc{{margin-top:56px;width:520px;transform:rotate(-2deg);filter:drop-shadow(0 30px 40px rgba(0,0,0,.55)) drop-shadow(0 4px 8px rgba(0,0,0,.4));color:{INK}}}
+.card{{width:{CARD_W}px;padding:{CARD_PAD}px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}}
+.rc{{width:520px;filter:drop-shadow(0 30px 40px rgba(0,0,0,.55)) drop-shadow(0 4px 8px rgba(0,0,0,.4));color:{INK}}}
 .tear{{height:10px;background-size:20px 20px;background-repeat:repeat-x}}
 .tear.t{{background-image:linear-gradient(45deg,{PAPER} 50%,transparent 50%),linear-gradient(-45deg,{PAPER} 50%,transparent 50%);background-position:0 0}}
 .tear.b{{background-image:linear-gradient(135deg,{PAPER} 50%,transparent 50%),linear-gradient(-135deg,{PAPER} 50%,transparent 50%);background-position:0 100%}}

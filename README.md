@@ -134,7 +134,7 @@ which models wrote them, a daily table and a daily commit log.
 
 Everything runs locally. vibe-receipts reads your Claude Code transcripts and git history on your
 machine and writes its outputs to `~/vibe-receipts/`. It never uploads your prompts, code, logs or
-reports. The only network request is the receipt card loading its two fonts from Google Fonts while
+reports. The only network request is the receipt card loading its font from Google Fonts while
 it is rendered.
 
 ## Options
