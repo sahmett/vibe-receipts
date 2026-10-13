@@ -1,5 +1,11 @@
 # 🧾 vibe-receipts
 
+[![MIT license](https://img.shields.io/github/license/sahmett/vibe-receipts)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/sahmett/vibe-receipts)](https://github.com/sahmett/vibe-receipts/stargazers)
+![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)
+![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB)
+![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
+
 **How long did that "2-hour project" actually take?**
 vibe-receipts turns your Claude Code history into a shareable work-time receipt: the hours you really
 spent, measured from your own prompts, and what those tokens would cost on the API.
@@ -15,6 +21,16 @@ One Python file, zero dependencies, everything runs on your machine. Point it at
 - **a receipt card** (PNG) to share: working time, prompts, agents, tokens, model mix, commits and the token value
 - **a full HTML report** with your prompt rhythm, the break threshold and why, a sensitivity table and a daily commit log
 - **a daily CSV** for timesheets and invoices
+
+## Who is this for?
+
+- **Freelancers and consultants** who build with Claude Code and bill by the hour: a daily CSV and
+  a per-day commit log for the timesheet, measured instead of guessed.
+- **Vibe coders** who want to know what that weekend project really took, in hours and in tokens.
+- **Anyone who wants to show their work**: one image and a caption, ready to post.
+
+It measures **your own** work from **your own** Claude Code logs, on your machine. It can't see what
+other people did, or work you did outside Claude Code.
 
 ## Install as a Claude Code plugin (recommended)
 
@@ -48,6 +64,13 @@ never into the analysed repo. The PNG is rendered with your local Chrome/Chromiu
 (`CHROME=/path/to/browser` to pick one, `--no-png` to skip it). `--built "mobile app"` says what you
 built on the receipt (the plugin fills it in from your README), and `--name` shows another project
 name, handy for client work.
+
+## Requirements
+
+- **Python 3.9 or newer**, standard library only
+- **Claude Code session logs** in `~/.claude/projects` (the CLI and the desktop app both write them)
+- Optional: **git** for commits and lines of code, and **Chrome, Chromium, Edge or Brave** for the
+  receipt PNG
 
 ## Share your receipt
 
@@ -170,6 +193,54 @@ The receipt PNG is made for you. To turn the full HTML report into a long JPEG t
 ```bash
 bash to_jpg.sh ~/vibe-receipts/<repo>-report.html   # macOS + Google Chrome + Pillow
 ```
+
+## FAQ
+
+<details>
+<summary><b>Is the token value what I paid?</b></summary>
+
+No. It is what the same usage would cost at Anthropic API list prices. A Claude subscription costs
+something else. See [Token value ≠ what you paid](#token-value--what-you-paid).
+</details>
+
+<details>
+<summary><b>It found no prompts, or the hours look too low.</b></summary>
+
+- Claude Code deletes session logs after **30 days** by default. Older work is gone unless you set
+  `"cleanupPeriodDays"` (see [Install](#install-as-a-claude-code-plugin-recommended)).
+- Logs are stored by **folder path**. If you moved or renamed the project, point at the old logs with
+  `--transcripts ~/.claude/projects/<old-path-with-dashes>`.
+- If you walk away while Claude works, that gap counts as a break once it passes your break threshold
+  (30 min at most). `--break 45` counts longer gaps as work.
+</details>
+
+<details>
+<summary><b>No PNG was made.</b></summary>
+
+The card is rendered with a local Chrome, Chromium, Edge or Brave. If none is found, the run says so
+and writes the card as HTML next to the report. Set `CHROME=/path/to/browser` to pick one.
+</details>
+
+<details>
+<summary><b>Do I need git or GitHub?</b></summary>
+
+No. The hours come from your prompts. Git only adds commits and lines of code, and vibe-receipts
+never talks to GitHub.
+</details>
+
+<details>
+<summary><b>Older commits are missing from the receipt.</b></summary>
+
+By default the date range is the days your prompts cover, so the period, commits and lines describe
+the same work as the hours. Use `--since` / `--until` to choose the range yourself.
+</details>
+
+<details>
+<summary><b>Can I use it on a repo without Claude Code logs?</b></summary>
+
+Yes, but then the hours are an estimate from commit sessions, not a measurement. See
+[No session logs?](#no-session-logs-estimated-from-commits).
+</details>
 
 ## Repo layout
 
