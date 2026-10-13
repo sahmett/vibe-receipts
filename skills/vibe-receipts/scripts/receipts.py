@@ -559,7 +559,6 @@ def split_minutes(secs,total):
 def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,value,thr):
     """The share card: a thermal-paper receipt, straight, on a dark card. Returns (html, height)."""
     e=html.escape
-    def up(x): return (x.replace('i','İ').replace('ı','I') if lang=='tr' else x).upper()   # Turkish dotted İ
     rows=''.join(f'<span>{q:,}</span><span>{e(l)}</span><span class="r">{t}</span>' for q,l,t in items)
     srows=''.join('<div class="sp"></div>' if r is None else f'<div class="row"><span>{e(r[0])}</span><span>{r[1]}</span></div>' for r in stats)
     H=2*CARD_PAD+804+24*(len(stats)-4)+26*len(items)+24*bool(built)+46*bool(value)+8   # card padding + receipt body + item/BUILT/value rows + slack
@@ -570,7 +569,7 @@ def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,
       f'<div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mute">github.com/sahmett/vibe-receipts</div><div class="mute ls">{T["rc_kind"]}</div></div>'
       '<div class="hr"></div>'
       f'<div class="row"><span>{T["rc_project"]}</span><span class="nm">{e(name)}</span></div>'
-      +(f'<div class="row"><span>{T["rc_built"]}</span><span class="nm">{e(up(built))}</span></div>' if built else '')+
+      +(f'<div class="row"><span>{T["rc_built"]}</span><span class="nm">{e(built.upper())}</span></div>' if built else '')+
       f'<div class="row"><span>{T["rc_period"]}</span><span>{period}</span></div>'
       +(f'<div class="row"><span>{T["rc_active"]}</span><span>{active_days}</span></div>' if active_days!=span else '')+
       '<div class="hr"></div>'
@@ -582,7 +581,7 @@ def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,
       '<div class="hr"></div>'
       f'<div class="row thr"><span>{thr[0]}</span><b>{e(thr[1])}</b></div>'+(f'<div class="mute">{e(thr[2])}</div>' if thr[2] else '')+
       '<div class="ft"><div class="s">* SHOW THE RECEIPTS *</div><div class="bc"></div>'
-      f'<div class="mute bn">{e(up(name))} · {d1}</div><div class="ty">THANK YOU FOR VIBING</div></div>'
+      f'<div class="mute bn">{e(name.upper())} · {d1}</div><div class="ty">THANK YOU FOR VIBING</div></div>'
       '</div><div class="tear b"></div></div></div></body></html>'),H
 
 def find_chrome():
