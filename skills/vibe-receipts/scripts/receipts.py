@@ -84,6 +84,7 @@ L={
    p_repo='Repo',p_range='Range',p_time='Working time',p_prompts='Prompts',p_commits='Commits',p_code='Effective code',p_lines='lines',
    p_rhythm='Rhythm',rh='Q1 (1st quartile) {q1} · median (P50) {med} · Q3 (3rd quartile) {q3} · IQR (interquartile range) {iqr} · P90 {p90} · Tukey upper fence (Q3+1.5·IQR) {tk}  ({n} gaps)',p_est='Commit estimate (fallback)',p_none='No prompts in range — using the commit estimate.',
    e_none='No commits or prompts found in this range.',
+   p_left_out='from your prompts; {n} older/newer commits left out, use --since/--until to include them',
    g_why=dict(nogit='git is not installed, so commits are left out',norepo='No git history here, so commits are left out',none='No commits in this range'),
    g_tail='Working time comes from your prompts.',
    s_claude='🤖 Claude side',c_read='Tokens read',c_written='Tokens written',c_total='Tokens total',c_runs='Sessions (runs)',c_subs='Subagents',
@@ -98,7 +99,7 @@ L={
    rc_thr='BREAK THRESHOLD',rc_note=dict(auto='Based on your own prompt rhythm. Longer gaps are breaks, not work.',
      fixed='Set by you. Longer gaps are breaks, not work.',capped='Your rhythm gave {tk}, capped at {cap}. Longer gaps are breaks.',few='Default: too few prompts to read your rhythm. Longer gaps are breaks.'),
    rc_est='NO SESSION LOGS',rc_est_note='Rough estimate from the gaps between commits.',
-   rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+   rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_q='Q',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
    share='{q} {t} later{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
    rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")]),
@@ -124,6 +125,7 @@ L={
    p_repo='Repo',p_range='Aralık',p_time='Çalışma süresi',p_prompts='Prompt',p_commits='Commit',p_code='Etkin kod',p_lines='satır',
    p_rhythm='Ritim',rh='Q1 (1. çeyrek) {q1} · medyan (P50) {med} · Q3 (3. çeyrek) {q3} · IQR (çeyrekler arası aralık) {iqr} · P90 {p90} · Tukey üst çiti (Q3+1,5·IQR) {tk}  ({n} aralık)',p_est='Commit tahmini (yedek)',p_none='Aralıkta prompt yok — commit tahmini kullanılıyor.',
    e_none='Bu aralıkta commit ya da prompt bulunamadı.',
+   p_left_out="prompt'larından alındı; dışında kalan {n} commit dahil edilmedi, eklemek için --since/--until kullan",
    g_why=dict(nogit="git kurulu değil, commit'ler dahil edilmedi",norepo="Burada git geçmişi yok, commit'ler dahil edilmedi",none='Bu aralıkta commit yok'),
    g_tail="Çalışma süresi prompt'lardan hesaplanıyor.",
    s_claude='🤖 Claude tarafı',c_read='Okunan token',c_written='Yazılan token',c_total='Toplam token',c_runs='Oturum',c_subs='Subagent',
@@ -138,7 +140,7 @@ L={
    rc_thr='MOLA SINIRI',rc_note=dict(auto='Kendi prompt ritmine göre. Daha uzun aralıklar mola sayılır, çalışma değil.',
      fixed='Senin seçtiğin eşik. Daha uzun aralıklar mola sayılır, çalışma değil.',capped='Ritminden {tk} çıktı, {cap} üst sınır uygulandı. Daha uzun aralıklar mola sayılır.',few='Varsayılan: ritmini okumak için prompt az. Daha uzun aralıklar mola sayılır.'),
    rc_est='OTURUM KAYDI YOK',rc_est_note="Commit'ler arası süreden kaba tahmin.",
-   rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
+   rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_q='Ç',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
    share='{q} {t} sonra{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
    rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')]),
 }
@@ -320,13 +322,18 @@ def main():
 
     repo=os.path.realpath(a.repo)
     name=a.name or os.path.basename(repo)
+    dirs=a.transcripts or claude_dirs(repo)
+    prompts=load_prompts(dirs,a.since,a.until)
     try: commits=load_commits(repo,a.author,a.since,a.until)
     except subprocess.CalledProcessError: commits=[]   # not a git repo, or no commits yet
     except FileNotFoundError: commits=[]               # git is not installed
+    # No range given: the prompts set it, so the receipt's period, commits and lines cover the same days as the hours
+    left_out=0
+    if prompts and a.since=='0000-00-00' and a.until=='9999-99-99':
+        p0,p1=day_of(prompts[0]),day_of(prompts[-1])
+        kept=[c for c in commits if p0<=day_of(c['t'])<=p1]; left_out=len(commits)-len(kept); commits=kept
     gitst='ok' if commits else ('nogit' if not shutil.which('git') else 'norepo' if subprocess.run(['git','-C',repo,'rev-parse','--git-dir'],capture_output=True).returncode else 'none')
     gitmsg=f"{T['g_why'][gitst]}. {T['g_tail']}" if gitst!='ok' else ''
-    dirs=a.transcripts or claude_dirs(repo)
-    prompts=load_prompts(dirs,a.since,a.until)
     tok,runs,subagents,mix,subtypes,val=load_usage(dirs,a.since,a.until)
     vtxt=('≥ ' if val['unpriced'] else '')+usd(val['total'])                                     # token value as shown
     tread=tok['input_tokens']+tok['cache_creation_input_tokens']+tok['cache_read_input_tokens']   # context Claude processed
@@ -382,7 +389,7 @@ def main():
     mpc=(total/60)/len(commits) if commits else 0
 
     print(f"{T['p_repo']:<15}: {repo}")
-    print(f"{T['p_range']:<15}: {d0} → {d1}")
+    print(f"{T['p_range']:<15}: {d0} → {d1}"+(f"   ({T['p_left_out'].format(n=left_out)})" if left_out else ''))
     if has_p:
         print(f"{T['p_time']:<15}: {hm(work)}   ({len(prompts)} {T['prompts']}, {len(dirs)} dir)")
         print(f"{T['k_thr']}: {mins(idle)}   ({modetxt})")
@@ -489,13 +496,16 @@ def main():
 
     # ===== SHARE CARD: <repo>-receipt.png (rendered first so the report can show it) =====
     os.makedirs(a.out,exist_ok=True)
-    # Line items: one per day; per week or per month when there are too many days for a receipt.
+    # Line items: one per day; per week, month, quarter or year when there are too many for a receipt (max ~12 lines).
     qty=dprompt if has_p else dcom
     if len(days)<=7: key=lambda d:d; label=lambda k:f"{T['rc_dow'][datetime.date.fromisoformat(k).weekday()]} {k[5:]}"
     else:
         def wk(d): x=datetime.date.fromisoformat(d); return (x-datetime.timedelta(days=x.weekday())).isoformat()
+        def qtr(d): return f"{d[:4]}-{(int(d[5:7])-1)//3+1}"
         if len({wk(d) for d in days})<=7: key=wk; label=lambda k:f"{T['rc_wk']} {k[5:]}"
-        else: key=lambda d:d[:7]; label=lambda k:k
+        elif len({d[:7] for d in days})<=12: key=lambda d:d[:7]; label=lambda k:k
+        elif len({qtr(d) for d in days})<=12: key=qtr; label=lambda k:f"{k[:4]} {T['rc_q']}{k[5:]}"
+        else: key=lambda d:d[:4]; label=lambda k:k
     groups={}
     for d in days:
         g=groups.setdefault(key(d),[0,0]); g[0]+=qty.get(d,0); g[1]+=dtotal.get(d,0)

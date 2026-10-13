@@ -142,7 +142,7 @@ it is rendered.
 | Flag | Meaning |
 |---|---|
 | `repo` | folder to analyse, git repo or not (default `.`) |
-| `--since / --until` | day range `YYYY-MM-DD`, applied to both prompts and commits |
+| `--since / --until` | day range `YYYY-MM-DD`, applied to both prompts and commits (default: the days your prompts cover, so older commits are left out) |
 | `--author` | only this author's commits (`git log --author` pattern) |
 | `--break MIN` | fixed break threshold in minutes (default: learned from your rhythm); `--idle` is the old name |
 | `--built` | what the project is, 1–3 words, shown on the receipt |
