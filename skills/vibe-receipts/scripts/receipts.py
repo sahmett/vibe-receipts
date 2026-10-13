@@ -434,7 +434,8 @@ def main():
           [(mins(mpp),T['k_mpp'],0)])
     else:
         K=[(hm(est),T['k_est'],1),(f'{lph:,.0f}',T['k_lph'],0),(mins(mpc),T['k_mpc'],0),(str(len(commits)),T['k_com'],0)]
-    P.append('<div class="kpis">'+''.join(f'<div class="kpi{" hero" if h else ""}"{" style=\"grid-row:auto\"" if h and len(K)<=4 else ""}><div class="v">{v}</div><div class="l">{l}</div></div>' for v,l,h in K)+'</div>')
+    span1=' style="grid-row:auto"' if len(K)<=4 else ''   # hero spans two rows only when there are two rows
+    P.append('<div class="kpis">'+''.join(f'<div class="kpi{" hero" if h else ""}"{span1 if h else ""}><div class="v">{v}</div><div class="l">{l}</div></div>' for v,l,h in K)+'</div>')
     if gitmsg: P.append(f'<div class="note">ℹ️ {e(gitmsg)}</div>')
 
     if has_p and gaps:
@@ -455,7 +456,8 @@ def main():
         mxs=max(r[1] for r in rows) or 1
         for t,w in rows:
             cov=100*sum(1 for g in gaps if g<=t)/len(gaps)
-            P.append(f'<tr{" class=\"sel\"" if t==idle else ""}><td>≤ {mins(t)}</td><td class="r">{cov:.0f}%</td>'
+            sel=' class="sel"' if t==idle else ''
+            P.append(f'<tr{sel}><td>≤ {mins(t)}</td><td class="r">{cov:.0f}%</td>'
                      f'<td><div style="display:flex;align-items:center;gap:8px">{bar(w,mxs,"#a78bfa" if t==idle else "#3f4560")}<span style="width:64px;text-align:right">{hm(w)}</span></div></td></tr>')
         P.append(f'</table><div class="note">{e(T["sens_note"])}</div></div>')
     elif not has_p:
