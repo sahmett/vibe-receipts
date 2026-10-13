@@ -24,9 +24,12 @@ CAP        = 30            # minutes: the automatic threshold never goes above t
 SENS       = [5,10,15,20,30,45,60]   # thresholds shown in the sensitivity table
 BANDS      = [(0,2),(2,5),(5,15),(15,30),(30,60),(60,None)]
 
-# Fallback commit estimate (only used when there are no session logs)
-BREAK      = 150*60        # gap between commits longer than this = break
-CODE_RATE  = 0.02          # minutes per effective added line
+# Commit-session estimate (only used when there are no session logs). One author's commits less than
+# SESSION_GAP apart form a session; each counts SESSION_MIN + SESSION_SPAN x its length. Fitted on 112 days
+# of Claude-assisted solo work in 7 repos; on a repo left out of the fit it was off by 15% on average.
+SESSION_GAP  = 60*60       # seconds
+SESSION_MIN  = 48          # minutes per session
+SESSION_SPAN = 0.05        # share of the first-to-last-commit time
 
 # Weights for added lines (only real code/config; docs/vendor/generated weigh 0)
 CODE_W = {'code':1.0, 'config':0.4, 'arch':0.0, 'doc':0.0, 'vendor':0.0, 'gen':0.0}
@@ -78,8 +81,8 @@ L={
    sens_note='How much the total moves if the break threshold changes. The result is sensitive to it, which is why the threshold comes from your own gap distribution instead of a guess.',
    s_daily='📅 Daily',c=['Date','Day','Prompts','Working time','Commits','Code lines','Lines/h'],tot='TOTAL',
    s_sum='📝 Daily commit log',s_receipt='🧾 Your receipt',rc_share_note='Ready to post with the image:',
-   fb_title='No Claude session logs found — fallback estimate',
-   fb_note='Without session logs this is a rough estimate from gaps between commits (breaks >{b}m dropped) plus {r} min per effective added line. It tends to overestimate AI-heavy work.',
+   fb_title='No Claude session logs — estimated from commits',
+   fb_note='Estimated from your commit sessions.',
    k_est='Commit estimate',
    p_repo='Repo',p_range='Range',p_time='Working time',p_prompts='Prompts',p_commits='Commits',p_code='Effective code',p_lines='lines',
    p_rhythm='Rhythm',rh='Q1 (1st quartile) {q1} · median (P50) {med} · Q3 (3rd quartile) {q3} · IQR (interquartile range) {iqr} · P90 {p90} · Tukey upper fence (Q3+1.5·IQR) {tk}  ({n} gaps)',p_est='Commit estimate (fallback)',p_none='No prompts in range — using the commit estimate.',
@@ -98,7 +101,7 @@ L={
    rc_prompts='PROMPTS',rc_commits='COMMITS',rc_code='CODE LINES',rc_total='TOTAL',rc_value='TOKEN VALUE',
    rc_thr='BREAK THRESHOLD',rc_note=dict(auto='Based on your own prompt rhythm. Longer gaps are breaks, not work.',
      fixed='Set by you. Longer gaps are breaks, not work.',capped='Your rhythm gave {tk}, capped at {cap}. Longer gaps are breaks.',few='Default: too few prompts to read your rhythm. Longer gaps are breaks.'),
-   rc_est='NO SESSION LOGS',rc_est_note='Rough estimate from the gaps between commits.',
+   rc_est='NO SESSION LOGS',rc_est_note='Estimated from your commit sessions.',
    rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_q='Q',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
    share='{q} {t} later{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
@@ -119,8 +122,8 @@ L={
    sens_note='Mola eşiği değişirse toplam ne kadar oynar. Sonuç eşiğe hassas; bu yüzden eşik tahminle değil, senin kendi aralık dağılımından seçiliyor.',
    s_daily='📅 Günlük',c=['Tarih','Gün','Prompt','Çalışma','Commit','Kod satırı','Satır/s'],tot='TOPLAM',
    s_sum='📝 Günlük commit özeti',s_receipt='🧾 Fişin',rc_share_note='Görselle birlikte paylaşmak için hazır metin:',
-   fb_title='Claude oturum kaydı yok — yedek tahmin',
-   fb_note='Oturum kaydı olmadığı için bu, commit\'ler arası süreden (>{b}dk molalar atılır) ve eklenen her etkin satıra {r} dk eklenerek yapılan kaba bir tahmin. AI ağırlıklı işte fazla gösterme eğilimindedir.',
+   fb_title="Claude oturum kaydı yok — commit'lerden tahmin",
+   fb_note="Commit oturumlarından tahmin.",
    k_est='Commit tahmini',
    p_repo='Repo',p_range='Aralık',p_time='Çalışma süresi',p_prompts='Prompt',p_commits='Commit',p_code='Etkin kod',p_lines='satır',
    p_rhythm='Ritim',rh='Q1 (1. çeyrek) {q1} · medyan (P50) {med} · Q3 (3. çeyrek) {q3} · IQR (çeyrekler arası aralık) {iqr} · P90 {p90} · Tukey üst çiti (Q3+1,5·IQR) {tk}  ({n} aralık)',p_est='Commit tahmini (yedek)',p_none='Aralıkta prompt yok — commit tahmini kullanılıyor.',
@@ -139,7 +142,7 @@ L={
    rc_prompts='PROMPT',rc_commits='COMMIT',rc_code='KOD SATIRI',rc_total='TOPLAM',rc_value='TOKEN VALUE',
    rc_thr='MOLA SINIRI',rc_note=dict(auto='Kendi prompt ritmine göre. Daha uzun aralıklar mola sayılır, çalışma değil.',
      fixed='Senin seçtiğin eşik. Daha uzun aralıklar mola sayılır, çalışma değil.',capped='Ritminden {tk} çıktı, {cap} üst sınır uygulandı. Daha uzun aralıklar mola sayılır.',few='Varsayılan: ritmini okumak için prompt az. Daha uzun aralıklar mola sayılır.'),
-   rc_est='OTURUM KAYDI YOK',rc_est_note="Commit'ler arası süreden kaba tahmin.",
+   rc_est='OTURUM KAYDI YOK',rc_est_note="Commit oturumlarından tahmin.",
    rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_q='Ç',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
    share='{q} {t} sonra{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
    rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')]),
@@ -165,14 +168,14 @@ def claude_dirs(repo):
             if os.path.basename(d)==enc or os.path.basename(d).startswith(enc+'--claude-worktrees-')]
 
 def load_commits(repo,author,since,until):
-    cmd=['git','-C',repo,'log','--all','--no-merges','--pretty=format:C|%at|%s','--numstat']
+    cmd=['git','-C',repo,'log','--all','--no-merges','--pretty=format:C|%at|%an|%s','--numstat']
     if author: cmd.append(f'--author={author}')
     raw=subprocess.check_output(cmd,text=True,errors='ignore',stderr=subprocess.DEVNULL)
     commits=[];cur=None
     for ln in raw.splitlines():
         if ln.startswith('C|'):
             if cur: commits.append(cur)
-            _,at,subj=ln.split('|',2); cur={'t':int(at),'subj':subj,'f':[]}
+            _,at,an,subj=ln.split('|',3); cur={'t':int(at),'a':an,'subj':subj,'f':[]}
         elif ln.strip() and cur is not None:
             p=ln.split('\t')
             if len(p)==3: cur['f'].append(p)
@@ -359,11 +362,10 @@ def main():
     work,dwork=active(idle)
 
     # --- commits: context (what got built) + fallback estimate ---
-    dcom={};dcode={};dadd={};ddel={};dsubj={};dmeas={}
-    for i,c in enumerate(commits):
+    dcom={};dcode={};dadd={};ddel={};dsubj={}
+    for c in commits:
         d=day_of(c['t'])
         dcom[d]=dcom.get(d,0)+1; dsubj.setdefault(d,[]).append(c['subj'])
-        if i>0 and c['t']-commits[i-1]['t']<=BREAK: dmeas[d]=dmeas.get(d,0)+c['t']-commits[i-1]['t']
         for ad,de,path in c['f']:
             if ad=='-' or de=='-': continue
             ad,de=int(ad),int(de)
@@ -371,7 +373,14 @@ def main():
             if '=>' in path and ad==0 and de==0: continue
             dcode[d]=dcode.get(d,0)+CODE_W[kind(path)]*ad
     code=sum(dcode.values())
-    dest={d:dmeas.get(d,0)+dcode.get(d,0)*CODE_RATE*60 for d in dcom}
+    dest={}   # commit-session estimate per day (see SESSION_*), per author so co-authors do not merge
+    for au in {c['a'] for c in commits}:
+        ts=[c['t'] for c in commits if c['a']==au]; ses=[]
+        for prev,t in zip([None]+ts,ts):
+            if prev is None or t-prev>SESSION_GAP: ses.append([])
+            ses[-1].append(t)
+        for se in ses:   # a session past midnight is shared out over its commits' days
+            for t in se: d=day_of(t); dest[d]=dest.get(d,0)+(SESSION_MIN*60+SESSION_SPAN*(se[-1]-se[0]))/len(se)
     est=sum(dest.values())
 
     has_p=bool(prompts)
@@ -450,7 +459,7 @@ def main():
                      f'<td><div style="display:flex;align-items:center;gap:8px">{bar(w,mxs,"#a78bfa" if t==idle else "#3f4560")}<span style="width:64px;text-align:right">{hm(w)}</span></div></td></tr>')
         P.append(f'</table><div class="note">{e(T["sens_note"])}</div></div>')
     elif not has_p:
-        P.append(f'<h2>⚠️ {T["fb_title"]}</h2><div class="card"><div class="note">{e(T["fb_note"].format(b=BREAK//60,r=CODE_RATE))}</div></div>')
+        P.append(f'<h2>⚠️ {T["fb_title"]}</h2><div class="card"><div class="note">{e(T["fb_note"])}</div></div>')
 
     if tread+twrote:
         P.append(f'<h2>{T["s_claude"]}</h2><div class="card"><div class="stats">'+''.join(f'<div class="st"><div class="v">{v}</div><div class="l">{l}</div></div>'

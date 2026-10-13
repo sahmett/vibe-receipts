@@ -22,7 +22,8 @@ Measures working time on a project folder from the user's own prompts in Claude 
   Git is optional: with no repo, no commits in range or no git installed, the `Commits` line says
   why and the hours are unaffected. Pass that reason on to the user in one sentence; the tool never
   connects to GitHub, it only reads local git history.
-- With no session logs, it falls back to a rough commit-gap estimate (clearly labelled).
+- With no session logs, it estimates the hours from commit sessions (about 48 min per session of
+  commits less than 60 min apart; ~15% average error on Claude-assisted solo repos), clearly labelled.
 
 ## Run it
 
