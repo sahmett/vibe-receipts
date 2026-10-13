@@ -499,6 +499,7 @@ def main():
     groups={}
     for d in days:
         g=groups.setdefault(key(d),[0,0]); g[0]+=qty.get(d,0); g[1]+=dtotal.get(d,0)
+    groups={k:g for k,g in groups.items() if g[0] or g[1]}   # commit-only days/months have no prompts and no time: no line
     unit=T['rc_unit_p'] if has_p else T['rc_unit_c']
     mins_split=split_minutes([v[1] for v in groups.values()],total)
     items=[(q,f"{unit} · {label(k)}",f"{m//60}{T['h']} {m%60:02d}{T['m']}") for (k,(q,_)),m in zip(groups.items(),mins_split)]
