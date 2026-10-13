@@ -154,12 +154,14 @@ it is rendered.
 
 Constants at the top of `receipts.py`: `IDLE` (fallback threshold), `CAP`, `MIN_GAPS`, `SENS`
 (thresholds in the sensitivity table), `PRICES`, `CODE_W`, `VENDOR_RE` / `GEN_RE` (excluded file
-patterns), and `BREAK` / `CODE_RATE` for the fallback estimate.
+patterns), and `SESSION_GAP` / `SESSION_MIN` / `SESSION_SPAN` for the commit estimate.
 
-## No session logs? Rough fallback
-For a repo with no Claude logs, the report falls back to an estimate from gaps between commits
-(breaks over 150 min dropped) plus 0.02 min per effective added line, clearly labelled. It tends
-to overestimate AI-heavy work, because Claude writes many lines fast.
+## No session logs? Estimated from commits
+For a repo with no Claude logs, the hours are estimated from commit sessions: one author's commits
+less than 60 min apart form a session, and each session counts about 48 min plus 5% of its length.
+These numbers were fitted on 112 days of Claude-assisted solo work in 7 repos, where prompt-measured
+hours were known; for a repo left out of the fit the estimate was off by 15% on average. The receipt
+says it is an estimate. Work without any commits stays invisible to it.
 
 ## Full report as an image
 
