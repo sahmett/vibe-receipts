@@ -16,7 +16,7 @@ Usage:
 Besides the HTML report and CSV it writes <repo>-receipt.png, a shareable receipt card
 (rendered with a local Chrome/Chromium in headless mode; skipped if none is found).
 """
-import argparse, datetime, glob, html, json, os, pathlib, re, shutil, subprocess
+import argparse, base64, datetime, glob, html, json, os, pathlib, re, shutil, subprocess
 
 IDLE       = 15            # minutes: fallback threshold when there are too few gaps for Tukey
 MIN_GAPS   = 20            # fewer gaps than this = Tukey threshold is not reliable
@@ -77,7 +77,7 @@ L={
    s_sens='🎚️ Threshold sensitivity',sens_c=['Threshold','Gaps within (cumulative %, CDF)','Working time'],
    sens_note='How much the total moves if the break threshold changes. The result is sensitive to it, which is why the threshold comes from your own gap distribution instead of a guess.',
    s_daily='📅 Daily',c=['Date','Day','Prompts','Working time','Commits','Code lines','Lines/h'],tot='TOTAL',
-   s_sum='📝 Daily commit log',
+   s_sum='📝 Daily commit log',s_receipt='🧾 Your receipt',rc_share_note='Ready to post with the image:',
    fb_title='No Claude session logs found — fallback estimate',
    fb_note='Without session logs this is a rough estimate from gaps between commits (breaks >{b}m dropped) plus {r} min per effective added line. It tends to overestimate AI-heavy work.',
    k_est='Commit estimate',
@@ -117,7 +117,7 @@ L={
    s_sens='🎚️ Eşik duyarlılığı',sens_c=['Eşik','Eşik altındaki aralıklar (kümülatif %, CDF)','Çalışma süresi'],
    sens_note='Mola eşiği değişirse toplam ne kadar oynar. Sonuç eşiğe hassas; bu yüzden eşik tahminle değil, senin kendi aralık dağılımından seçiliyor.',
    s_daily='📅 Günlük',c=['Tarih','Gün','Prompt','Çalışma','Commit','Kod satırı','Satır/s'],tot='TOPLAM',
-   s_sum='📝 Günlük commit özeti',
+   s_sum='📝 Günlük commit özeti',s_receipt='🧾 Fişin',rc_share_note='Görselle birlikte paylaşmak için hazır metin:',
    fb_title='Claude oturum kaydı yok — yedek tahmin',
    fb_note='Oturum kaydı olmadığı için bu, commit\'ler arası süreden (>{b}dk molalar atılır) ve eklenen her etkin satıra {r} dk eklenerek yapılan kaba bir tahmin. AI ağırlıklı işte fazla gösterme eğilimindedir.',
    k_est='Commit tahmini',
@@ -487,17 +487,8 @@ def main():
 
     P.append(f'<div class="foot">🧾 vibe-receipts · {e(name)} · {datetime.date.today()}</div></div></body></html>')
 
+    # ===== SHARE CARD: <repo>-receipt.png (rendered first so the report can show it) =====
     os.makedirs(a.out,exist_ok=True)
-    out=os.path.join(a.out,f'{name}-report.html')
-    open(out,'w',encoding='utf-8').write('\n'.join(P))
-    csvp=os.path.join(a.out,f'{name}-daily.csv')
-    with open(csvp,'w',encoding='utf-8') as f:
-        f.write('date,prompts,work_min,commits,effective_lines,added,deleted,commit_estimate_min\n')
-        for d in days:
-            f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
-    print("HTML:",out); print("CSV :",csvp)
-
-    # ===== SHARE CARD: <repo>-receipt.png =====
     # Line items: one per day; per week or per month when there are too many days for a receipt.
     qty=dprompt if has_p else dcom
     if len(days)<=7: key=lambda d:d; label=lambda k:f"{T['rc_dow'][datetime.date.fromisoformat(k).weekday()]} {k[5:]}"
@@ -530,7 +521,23 @@ def main():
     elif render_png(cardp,pngp,CARD_W,H): print("PNG :",pngp)
     else: print(f"PNG : skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome). Card HTML: {cardp}")
     m=int(round(total/60))   # ready-to-post text to go with the PNG
-    print("Share:",T['share'].format(q=quote,t=T['share_t'](m//60,m%60),v=T['share_v'].format(v=vtxt) if val['total'] else ''))
+    share=T['share'].format(q=quote,t=T['share_t'](m//60,m%60),v=T['share_v'].format(v=vtxt) if val['total'] else '')
+
+    # the card goes at the end of the report, embedded so the HTML still works on its own
+    if not a.no_png and os.path.exists(pngp):
+        b64=base64.b64encode(open(pngp,'rb').read()).decode()
+        P.insert(-1,f'<h2>{T["s_receipt"]}</h2><div class="card rcpt"><img src="data:image/png;base64,{b64}" alt="{e(name)} receipt">'
+                    f'<div class="note">{T["rc_share_note"]}</div><div class="share">{e(share)}</div></div>')
+
+    out=os.path.join(a.out,f'{name}-report.html')
+    open(out,'w',encoding='utf-8').write('\n'.join(P))
+    csvp=os.path.join(a.out,f'{name}-daily.csv')
+    with open(csvp,'w',encoding='utf-8') as f:
+        f.write('date,prompts,work_min,commits,effective_lines,added,deleted,commit_estimate_min\n')
+        for d in days:
+            f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
+    print("HTML:",out); print("CSV :",csvp)
+    print("Share:",share)
 
 def split_minutes(secs,total):
     """Round each item to whole minutes so the items add up to the rounded total (largest remainder)."""
@@ -616,6 +623,8 @@ tr.sel td{color:#fff;font-weight:700;background:#1c2030}
 .dayblk h3{font-size:15px;color:#fff;display:flex;justify-content:space-between}.dayblk h3 .hrs{font-size:13px;color:#a78bfa;font-weight:700}
 .dayblk ul{margin:8px 0 0 18px}.dayblk li{font-size:13.5px;color:#aeb3c2;margin:5px 0}
 .foot{text-align:center;color:#5d6273;font-size:12px;margin-top:38px}
+.rcpt{text-align:center}.rcpt img{width:100%;max-width:440px;border-radius:12px;display:block;margin:0 auto}
+.share{margin:8px auto 0;max-width:640px;background:#13161f;border:1px solid #242938;border-radius:10px;padding:10px 14px;font-size:13.5px;color:#c8ccd8;user-select:all}
 @media (max-width:600px){.scn .nm{width:150px}.kpis{grid-template-columns:1fr 1fr}.kpi.hero{grid-row:auto;grid-column:span 2}}"""
 
 PAPER,INK='#F3F0E8','#1d1c1a'
