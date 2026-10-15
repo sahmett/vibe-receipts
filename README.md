@@ -2,7 +2,7 @@
 
 [![MIT license](https://img.shields.io/github/license/sahmett/vibe-receipts)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/sahmett/vibe-receipts)](https://github.com/sahmett/vibe-receipts/stargazers)
-![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)
+![Claude Code skill · plugin](https://img.shields.io/badge/Claude%20Code-skill%20%C2%B7%20plugin-D97757)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB)
 ![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 
@@ -32,7 +32,22 @@ One Python file, zero dependencies, everything runs on your machine. Point it at
 It measures **your own** work from **your own** Claude Code logs, on your machine. It can't see what
 other people did, or work you did outside Claude Code.
 
-## Install as a Claude Code plugin (recommended)
+## Install
+
+Works in Claude Code: the CLI, the desktop app's Code tab and the IDE extensions. It doesn't work in
+a claude.ai chat, because it reads the Claude Code logs on your machine.
+
+### As a skill (copy one folder)
+
+```bash
+git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts
+mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/
+```
+
+Open a new Claude Code session and it's there. To use it in one project only, copy the folder to that
+project's `.claude/skills/` instead.
+
+### Or as a plugin (easy updates)
 
 ```
 /plugin marketplace add sahmett/vibe-receipts
@@ -62,7 +77,7 @@ python3 vibe-receipts/receipts.py ~/code/my-project
 Outputs go to `~/vibe-receipts/` (`<repo>-receipt.png`, `<repo>-report.html`, `<repo>-daily.csv`),
 never into the analysed repo. The PNG is rendered with your local Chrome/Chromium in headless mode
 (`CHROME=/path/to/browser` to pick one, `--no-png` to skip it). `--built "mobile app"` says what you
-built on the receipt (the plugin fills it in from your README), and `--name` shows another project
+built on the receipt (the skill fills it in from your README), and `--name` shows another project
 name, handy for client work.
 
 ## Requirements
@@ -207,7 +222,7 @@ something else. See [Token value ≠ what you paid](#token-value--what-you-paid)
 <summary><b>It found no prompts, or the hours look too low.</b></summary>
 
 - Claude Code deletes session logs after **30 days** by default. Older work is gone unless you set
-  `"cleanupPeriodDays"` (see [Install](#install-as-a-claude-code-plugin-recommended)).
+  `"cleanupPeriodDays"` (see [Install](#install)).
 - Logs are stored by **folder path**. If you moved or renamed the project, point at the old logs with
   `--transcripts ~/.claude/projects/<old-path-with-dashes>`.
 - If you walk away while Claude works, that gap counts as a break once it passes your break threshold
