@@ -642,7 +642,9 @@ def render_video(paper_png,dst,data,timeout=120):
     record WebM and there is no ffmpeg), or None."""
     chrome=find_chrome()
     if not chrome: return None
-    page=VIDEO_HTML.replace('__DATA__',json.dumps(data)).encode()
+    printer=os.path.join(os.path.dirname(os.path.abspath(__file__)),'printer.json')   # built by tools/printer/build.mjs
+    if not os.path.exists(printer): return None
+    page=VIDEO_HTML.replace('__DATA__',json.dumps(data)).replace('__PRINTER__',open(printer,encoding='utf-8').read()).encode()
     paper=open(paper_png,'rb').read()
     got={}; done=threading.Event()
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -766,8 +768,8 @@ const easeOut=t=>1-(1-t)*(1-t), easeIn=t=>t*t, easeInOut=t=>t<.5?4*t*t*t:1-Math.
 const fail=m=>fetch('/error',{method:'POST',body:String(m)});
 window.onerror=(m,s,l)=>{fail(m+' @'+l)};
 
-const SY=1500, PW=700;              // slot line, paper width on screen
-let P, PH, k, step, n, sd, DP, T;   // paper canvas, its height on screen, scale, line step, steps, step time, print time, timeline
+const PR=__PRINTER__, GEO=PR.geo;    // the printer from tools/printer/build.mjs: back and front SVG, where the paper leaves the slot
+let P, PHw, q, step, n, sd, DP, T, BACK, FRONT;  // paper canvas, its length and px size in world units, line step, steps, step time, print time, timeline, printer layers
 
 function trim(img){                  // cut the transparent margin around the receipt screenshot
   const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
@@ -779,16 +781,16 @@ function trim(img){                  // cut the transparent margin around the re
 }
 
 function setup(img){
-  P=trim(img); k=PW/P.width; PH=P.height*k;
-  step=24*PW/520;                    // one receipt line (24 css px) per printer step
-  n=Math.ceil(PH/step); DP=clamp(PH/260,4.5,7); sd=DP/n;
+  P=trim(img); q=GEO.paperW/P.width; PHw=P.height*q;
+  step=24*GEO.paperW/520;            // one receipt line (24 css px) per printer step
+  n=Math.ceil(PHw/step); DP=clamp(PHw*Math.hypot(...GEO.v)/260,4.5,7); sd=DP/n;
   const tp0=0.5, tp1=tp0+DP, tt=tp1+0.8, tf0=tt+0.18, tf1=tf0+1.0;
   T={tp0,tp1,tt,tf0,tf1,end:tf1+2.8};
 }
 
 function printed(t){                 // thermal printers feed in short jerks: move, stop, move
   const i=Math.floor(t/sd), f=(t-i*sd)/sd;
-  return Math.min(PH,(i+(f<.55?easeOut(f/.55):1))*step);
+  return Math.min(PHw,(i+(f<.55?easeOut(f/.55):1))*step);
 }
 
 function bg(){
@@ -800,45 +802,38 @@ function bg(){
   g.fillStyle=r; g.fillRect(0,0,W,H);
 }
 
-function printer(dy,a,led){
-  g.save(); g.globalAlpha=a; g.translate(0,dy);
-  const x=90, w=900, top=SY-64, h=400;
-  let s=g.createRadialGradient(540,top+h+28,10,540,top+h+28,520);      // floor shadow
-  s.addColorStop(0,'rgba(0,0,0,.75)'); s.addColorStop(1,'rgba(0,0,0,0)');
-  g.save(); g.scale(1,.12); g.fillStyle=s; g.beginPath(); g.arc(540,(top+h+28)/.12,520,0,7); g.fill(); g.restore();
-  let b=g.createLinearGradient(0,top,0,top+h);                          // body
-  b.addColorStop(0,'#3a3e4b'); b.addColorStop(.2,'#2a2d37'); b.addColorStop(.21,'#22252e'); b.addColorStop(1,'#121318');
-  g.fillStyle=b; g.beginPath(); g.roundRect(x,top,w,h,[48,48,30,30]); g.fill();
-  g.strokeStyle='rgba(255,255,255,.10)'; g.lineWidth=2; g.beginPath(); g.roundRect(x+1,top+1,w-2,h-2,[47,47,29,29]); g.stroke();
-  g.fillStyle='rgba(0,0,0,.35)'; g.fillRect(x+30,top+82,w-60,3);       // lid seam
-  g.fillStyle='rgba(255,255,255,.05)'; g.fillRect(x+30,top+85,w-60,1);
-  const sw=PW+56;                                                       // paper slot
-  g.fillStyle='#040405'; g.beginPath(); g.roundRect(540-sw/2,SY-8,sw,16,8); g.fill();
-  g.fillStyle='rgba(255,255,255,.12)'; g.fillRect(540-sw/2+10,SY+9,sw-20,2);
-  g.fillStyle='#7d818d';                                                // tear bar teeth, in front of the paper
-  for(let i=540-PW/2-10;i<540+PW/2+10;i+=12){g.beginPath(); g.moveTo(i,SY+2); g.lineTo(i+6,SY-5); g.lineTo(i+12,SY+2); g.fill();}
-  g.fillStyle='#5d6170'; g.fillRect(540-PW/2-10,SY+2,PW+20,4);
-  g.font='800 26px '+FONT; g.letterSpacing='8px'; g.fillStyle='#5a5e6c'; g.textBaseline='middle';
-  g.fillText('VIBE RECEIPTS',x+60,SY+165); g.letterSpacing='0px';
-  g.fillStyle='#262932'; g.strokeStyle='#3c404c'; g.lineWidth=2;      // feed button
-  g.beginPath(); g.roundRect(x+w-190,SY+148,70,34,17); g.fill(); g.stroke();
-  g.beginPath(); g.arc(x+w-70,SY+165,10,0,7);                           // status LED
-  if(led>0){g.fillStyle='#34d399'; g.shadowColor='#34d399'; g.shadowBlur=26*led; g.globalAlpha=a*(.35+.65*led);}
-  else g.fillStyle='#1d3d31';
-  g.fill(); g.restore();
+function layer(img,dy,a){if(a>0){g.save(); g.globalAlpha=a; g.drawImage(img,0,dy,W,H); g.restore();}}
+
+function lamps(dy,a,power,feed){     // the power lamp, and the feed lamp that flickers while it prints
+  [power,feed].forEach((on,i)=>{
+    if(on<=0||a<=0) return;
+    const [x,y]=GEO.leds[i], R=GEO.ledR*10, r=g.createRadialGradient(x,y+dy,0,x,y+dy,R);
+    r.addColorStop(0,'rgba(190,255,225,'+(a*on)+')'); r.addColorStop(.12,'rgba(52,211,153,'+(.75*a*on)+')'); r.addColorStop(1,'rgba(52,211,153,0)');
+    g.fillStyle=r; g.beginPath(); g.arc(x,y+dy,R,0,7); g.fill();
+  });
 }
 
-function paperAt(cx,top,sc,rot,clipY,slotShade,shadow){
-  g.save();
-  if(clipY!==null){g.beginPath(); g.rect(0,0,W,clipY); g.clip();}
-  const w=PW*sc, h=PH*sc;
-  g.translate(cx,top+h/2); g.rotate(rot);
+// Affine maps from paper px to screen. On the printer the sheet lies in its leaning plane: s across (GEO.u),
+// t up the sheet (GEO.v), the top `o` world units out of the slot. Torn off, it lies flat in the middle.
+const mul=(A,B)=>[A[0]*B[0]+A[2]*B[1],A[1]*B[0]+A[3]*B[1],A[0]*B[2]+A[2]*B[3],A[1]*B[2]+A[3]*B[3],A[0]*B[4]+A[2]*B[5]+A[4],A[1]*B[4]+A[3]*B[5]+A[5]];
+const turn=(r,cx,cy)=>{const c=Math.cos(r), s=Math.sin(r); return [c,s,-s,c,cx-c*cx+s*cy,cy-s*cx-c*cy];};
+function onPrinter(o,sway){
+  const u=GEO.u, v=GEO.v, O=GEO.origin, M=[q*u[0],q*u[1],-q*v[0],-q*v[1],O[0]+o*v[0],O[1]+o*v[1]];
+  return mul(turn(sway,O[0]+u[0]*GEO.paperW/2,O[1]+u[1]*GEO.paperW/2),M);   // a slight sway about the slot
+}
+function laidFlat(){
+  const s=Math.min(1220/P.height,880/P.width);
+  return mul(turn(-.02,540,1020),[s,0,0,s,540-s*P.width/2,1020-s*P.height/2]);
+}
+function paper(M,clip,shade,shadow){
+  g.save(); g.setTransform(...M);
+  if(clip!==null){g.beginPath(); g.rect(0,0,P.width,clip/q); g.clip();}
   if(shadow>0){g.shadowColor='rgba(0,0,0,'+(.6*shadow)+')'; g.shadowBlur=60*shadow; g.shadowOffsetY=26*shadow;}
-  g.imageSmoothingQuality='high'; g.drawImage(P,-w/2,-h/2,w,h); g.shadowColor='transparent';
-  if(slotShade>0){                    // the paper darkens where it leaves the slot
-    const y0=clipY-top-h/2, s=g.createLinearGradient(0,y0-90,0,y0);
-    s.addColorStop(0,'rgba(0,0,0,0)'); s.addColorStop(1,'rgba(0,0,0,'+(.32*slotShade)+')');
-    g.fillStyle=s; g.fillRect(-w/2,y0-90,w,90);
+  g.imageSmoothingQuality='high'; g.drawImage(P,0,0); g.shadowColor='transparent';
+  if(shade>0&&clip!==null){            // the paper darkens where it leaves the slot
+    const y1=clip/q, y0=y1-7/q, s=g.createLinearGradient(0,y0,0,y1);
+    s.addColorStop(0,'rgba(0,0,0,0)'); s.addColorStop(1,'rgba(0,0,0,'+(.38*shade)+')');
+    g.fillStyle=s; g.fillRect(0,y0,P.width,y1-y0);
   }
   g.restore();
 }
@@ -854,21 +849,22 @@ function text(t,y,weight,size,color,a,maxW=980){
 function draw(t){
   bg();
   const fp=clamp((t-T.tf0)/(T.tf1-T.tf0)), fe=easeInOut(fp);
-  const o=t<T.tp0?0:t>=T.tp1?PH:printed(t-T.tp0);
-  const jerk=-20*easeOut(clamp((t-T.tt)/.15));                          // the tear: a short pull up
-  const sway=tt=>.005*Math.sin(tt*2.3)*Math.min(1,printed(Math.max(0,Math.min(tt,T.tp1)-T.tp0))/700);
-  const led=t<T.tp0?(Math.sin(t*14)>0?1:0):t<T.tp1?.75+.25*Math.sin(t*40):.3;
-  printer(560*easeIn(fp),1-fp,led);
-  const cover=clamp((SY-o-280)/220);                                     // the hook fades as the paper rises past it
-  text(D.quote,210,'800',58,'#ECEAF2',clamp(.4+t/.25)*Math.max(cover,fe));   // the hook is there from frame one
-  if(t<T.tt){                                                            // printing, about the slot
-    g.save(); g.translate(540,SY); g.rotate(sway(t)); g.translate(-540,-SY);
-    paperAt(540,SY-o,1,0,SY,1,0); g.restore();
-  } else {                                                               // torn off: fly to the middle
-    const sF=Math.min(1.15,1220/PH,880/PW), r0=sway(T.tt), top0=SY-PH+jerk;
-    const cy=lerp(top0+PH/2,1020,fe), sc=lerp(1,sF,fe);
-    paperAt(540,cy-PH*sc/2,sc,lerp(r0,-.02,fe),fp>0?null:SY,1-clamp((t-T.tt)/.2),fe);
+  const o=t<T.tp0?0:t>=T.tp1?PHw:printed(t-T.tp0);
+  const sway=tt=>.004*Math.sin(tt*2.3)*Math.min(1,printed(Math.max(0,Math.min(tt,T.tp1)-T.tp0))/120);
+  const dy=600*easeIn(fp), a=1-fp;
+  layer(BACK,dy,a);
+  lamps(dy,a,t<.35?(Math.sin(t*30)>0?1:.25):1,t>=T.tp0&&t<T.tp1?.7+.3*Math.sin(t*47):0);
+  let M;
+  if(t<T.tt){                                                            // printing: out of the slot, under the tear bar
+    M=onPrinter(o,sway(t)); paper(M,o,1,0); layer(FRONT,0,1);
+  } else {                                                               // torn off: a short pull up, then into the middle
+    const lift=3.5*easeOut(clamp((t-T.tt)/.15));
+    layer(FRONT,dy,a);
+    const M0=onPrinter(PHw+lift,sway(T.tt)), M1=laidFlat();
+    M=M0.map((x,i)=>lerp(x,M1[i],fe)); paper(M,null,0,fe);
   }
+  const cover=clamp((M[5]-280)/220);                                     // the hook fades as the paper rises past it
+  text(D.quote,210,'800',58,'#ECEAF2',clamp(.4+t/.25)*Math.max(cover,fe));   // the hook is there from frame one
   const la=clamp((t-T.tf1+.35)/.45);
   text(D.later,320+24*(1-easeOut(la)),'800',80,'#c4b5fd',la);
   const ca=clamp((t-T.tf1)/.5);
@@ -903,6 +899,8 @@ function sound(at){                  // schedules the whole soundtrack, `at` = A
 }
 
 async function main(){
+  const svg=x=>{const i=new Image(); i.src=URL.createObjectURL(new Blob([x],{type:'image/svg+xml'})); return i.decode().then(()=>i);};
+  [BACK,FRONT]=await Promise.all([svg(PR.back),svg(PR.front)]);
   const img=new Image(); img.src='paper.png'; await img.decode(); setup(img);
   const wait=ms=>new Promise(r=>setTimeout(r,ms));
   await Promise.race([Promise.all(['500','700','800'].map(w=>document.fonts.load(w+' 40px "JetBrains Mono"'))),wait(5000)]);

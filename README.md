@@ -101,7 +101,9 @@ Post it with **#vibereceipts**. We'd love to see yours.
 
 `--video` (or ask Claude for *"a video of my receipt"*) also writes `<repo>-receipt.mp4`: a vertical
 1080×1920 clip for Reels, TikTok and Shorts. Your receipt prints out of a thermal printer line by line,
-with the printer's sound, gets torn off, and ends on your total and the share line. It takes about 15
+with the printer's sound, gets torn off, and ends on your total and the share line. The printer is
+drawn with the [anatomy](https://github.com/wheresryan22/anatomy) isometric kit
+(`tools/printer/build.mjs`, only needed to change it). It takes about 15
 seconds, because Chrome records the animation in real time.
 
 It needs nothing beyond the Chrome that renders the PNG. If **ffmpeg** is installed, the clip is
@@ -277,10 +279,12 @@ Yes, but then the hours are an estimate from commit sessions, not a measurement.
 skills/vibe-receipts/
 ├── SKILL.md               when and how Claude runs it
 └── scripts/
-    ├── receipts.py        analysis, HTML report, receipt card
+    ├── receipts.py        analysis, HTML report, receipt card, video
+    ├── printer.json       the printer in the video (built by tools/printer)
     └── to_jpg.sh          report → JPEG
 receipts.py, to_jpg.sh     shortcuts (symlinks)
 demo/make_demo.py          rebuilds the synthetic demo above (--video for the clip)
+tools/printer/build.mjs    draws the printer with the anatomy isometric kit
 ```
 
 ## License
