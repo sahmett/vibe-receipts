@@ -347,31 +347,15 @@ function floorPose(sh,cx,cy,headDeg,end){
 }
 const behind=sh=>dot(add(sh.pose.B,sh.pose.T0,sh.L/2),G.view)<dot([0,-10,0],G.view);   // drawn behind the printer or in front of it
 
-// the printed receipt: on the slot, then torn off, tipped back, dropped behind the printer
-const SLOT=[-G.paperW/2,WD.slotY,WD.top], LEAN=WD.lean*RAD, CURL=64*RAD, STIFF=34;
-// How far the sheet bends back: nothing while the first few centimetres are out, then more and more as its own
-// weight grows; along the sheet the bend gathers toward the top. It is a function of how much is out, so the
-// whole sheet tips back while it prints, instead of the paper climbing a fixed curve.
-const bendFor=o=>{const g=Math.pow(clamp((o-STIFF)/170),1.25); return s=>CURL*g*Math.pow(clamp(s/Math.max(o,1)),1.5);};
-function printPose(sh,o,lift){
-  const T0=[0,-Math.sin(LEAN),Math.cos(LEAN)], N0=[0,-Math.cos(LEAN),-Math.sin(LEAN)];
-  return {B:add(SLOT,T0,lift),X:[1,0,0],T0,N0,bend:bendFor(o),off:o,clip:lift===0,slotShade:lift===0};
-}
-function fallPose(sh,k,drift){   // k: 0..1 over the whole fall
-  const L=sh.L, x0=SLOT[0]+drift.x, back=WD.shell[1]-4;
-  const a=clamp(k/.45), b=clamp((k-.45)/.55);                  // tip back over the printer, then slide off and drop
-  const lean=lerp(LEAN,90*RAD,easeOut(a));
-  let T0=[0,-Math.sin(lean),Math.cos(lean)], N0=[0,-Math.cos(lean),-Math.sin(lean)], X=[1,0,0];
-  const curl=1-easeOut(a), full=bendFor(L), f=s=>curl*full(s);
-  const slide=smooth(clamp(b/.4)), drop=clamp((b-.3)/.7), start=add(SLOT,[0,-Math.sin(LEAN),Math.cos(LEAN)],3);
-  let B=[lerp(start[0],x0,slide),lerp(start[1],back,slide),lerp(start[2],.6,drop*drop)];
-  const turnZ=drift.a*easeOut(b); T0=rz(T0,turnZ); N0=rz(N0,turnZ); X=rz(X,turnZ);
-  return {B,X,T0,N0,bend:f,off:L,clip:false};
-}
-function landedPose(sh,drift){
-  const h=-90*RAD+drift.a, T0=[Math.cos(h),Math.sin(h),0], X=[-Math.sin(h),Math.cos(h),0];
-  const B=[SLOT[0]+drift.x,WD.shell[1]-4,.6], L=sh.L;
-  return {B,X,T0,N0:[0,0,1],bend:s=>.28*smooth(clamp((s-(L-24))/24)),off:L,clip:false};
+// The printed receipt. Thermal paper keeps the curl of its roll: it leaves the slot nearly upright, runs straight
+// for a few centimetres along the paper guide, then curls back with the roll's radius into a loose tube that
+// tightens a little as it wraps (so its turns never lie on each other). The tip traces that curl as the paper
+// feeds, and the receipt stays there, curled on the printer, as on a real one.
+const SLOT=[-G.paperW/2,WD.slotY,WD.top], LEAN=10*RAD, STRAIGHT=38, R0=26, TIGHT=.035;
+const curlAt=s=>s<=STRAIGHT?0:-Math.log(Math.max(.2,1-TIGHT*(s-STRAIGHT)/R0))/TIGHT;   // the turn so far: the integral of 1/radius
+function printPose(sh,o){
+  const T0=[0,-Math.sin(LEAN),Math.cos(LEAN)], N0=[0,-Math.cos(LEAN),-Math.sin(LEAN)];   // up the paper, and back over the printer
+  return {B:SLOT,X:[1,0,0],T0,N0,bend:curlAt,off:o,clip:true,slotShade:true};
 }
 
 let floor=[], current=null, queue=[], printed=0;
@@ -385,15 +369,15 @@ function buildFigure(){
   floor=FLOOR.map((spot,i)=>{const sh=makeSheet(others[i%others.length],LY.back,endBands(spot.end==="roll"?34:12),FLOOR_SCALE); sh.pose=floorPose(sh,spot.c[0],spot.c[1],spot.h,spot.end); sh.el.classList.add("floor","far"); return sh;});
   floor.forEach(sh=>{if(!behind(sh)) LY.front.appendChild(sh.el);});
   queue=[...R];
-  // the box: printer, the printed sheet at its tallest, the floor in front and behind; the floor may run off the sides
-  VB=null; current=makeSheet(queue[0],LY.mid,uniform(26));
+  // the box: the printer and its curled receipt; the floor in the background may run off the sides
+  VB=null; current=makeSheet(queue[0],LY.mid,uniform(14));
   let top=Infinity, bottom=1868/VS;
   const probe=(pose,sh)=>{sh.pose=pose; const {B,T0,N0,bend,off}=pose; let p=B; for(let s=0;s<off;s+=6){p=add(p,turn(T0,N0,bend(s+3)),6); top=Math.min(top,sp(p)[1]/VS); top=Math.min(top,sp(add(p,pose.X,G.paperW))[1]/VS);}};
-  probe(printPose(current,current.L,0),current);
+  probe(printPose(current,current.L),current);
   top-=10;
   VB=[26,top,1080/VS-52,bottom-top];
   fig.querySelectorAll("svg").forEach(s=>{s.setAttribute("viewBox",VB.join(" ")); s.removeAttribute("width"); s.removeAttribute("height"); s.setAttribute("preserveAspectRatio","xMidYMid meet");});
-  current.pose=printPose(current,0,0);
+  current.pose=printPose(current,0);
   built=true; size();
   if(!buildFigure.wired){addEventListener("resize",size); buildFigure.wired=true;}
 }
@@ -409,42 +393,29 @@ function paintAll(){
   lamps.forEach((el,i)=>{const [x,y]=G.leds[i]; el.style.left=((x/VS-VB[0])*S)+"px"; el.style.top=((y/VS-VB[1])*S)+"px"; el.style.setProperty("--on",i?feed:1);});
 }
 
-// one print: feed, hold, tear, fall, land; the next one starts after a pause, three on their own, then on a click
+// one print: the paper feeds and curls, then stays; a click prints the next receipt in its place
 const ACC=.14, feedAt=x=>{const a=ACC, k=1/(1-a); return x<a?k*x*x/(2*a):x>1-a?1-k*(1-x)*(1-x)/(2*a):k*(x-a/2);};
-let t0=0, raf=0, DP=4, drift={x:0,a:0}, auto=3;
+let t0=0, raf=0, DP=4, printing=false;
 function say(text,live){rtext.textContent=text; readout.classList.toggle("live",!!live);}
-function begin(){
-  if(!current||current.done){
-    const r=queue[printed%queue.length]; current=makeSheet(r,LY.mid,uniform(26)); current.pose=printPose(current,0,0);
-  }
-  DP=Math.min(6,Math.max(3.4,2.2+current.r.items.length*.35));
-  drift={x:(Math.random()-.5)*60,a:(Math.random()-.5)*34*RAD};
-  t0=performance.now(); cancelAnimationFrame(raf); raf=requestAnimationFrame(run);
-}
+const done=sh=>`${fmt(sh.r.min)} · ${count(sh.r)}`;
 function run(now){
-  const t=(now-t0)/1000, idle=.5, end=idle+DP, hold=end+1.1, tear=hold+.16, fall=tear+1.15, sh=current, label=`${fmt(sh.r.min)} · ${count(sh.r)}`;
+  const t=(now-t0)/1000, idle=.5, end=idle+DP, sh=current;
   feed=0;
-  if(t<idle){sh.pose=printPose(sh,0,0); say(UI.ready);}
-  else if(t<end){sh.pose=printPose(sh,sh.L*feedAt((t-idle)/DP),0); feed=.75+.25*Math.sin(t*44); say(`${UI.printing} · %${String(Math.round(feedAt((t-idle)/DP)*100)).padStart(3," ")}`,true);}
-  else if(t<hold){sh.pose=printPose(sh,sh.L,0); say(label);}
-  else if(t<tear){sh.pose=printPose(sh,sh.L,3*easeOut((t-hold)/.16));}                  // torn off: a short pull up
-  else if(t<fall){const k=(t-tear)/1.15; sh.pose=fallPose(sh,k,drift); if(sh.pose.B[1]<WD.shell[1]&&sh.el.parentNode!==LY.back) LY.back.appendChild(sh.el);}   // behind the printer once past its back edge
-  else {                                                                                  // on the floor, for good
-    sh.pose=landedPose(sh,drift); sh.el.classList.add("floor"); sh.done=true; floor.push(sh); printed++;
-    if(floor.length>FLOOR.length+8){const old=floor.splice(FLOOR.length,1)[0]; old.el.remove();}   // the oldest fallen sheet gives way after a dozen or so
-    paintAll(); say(label);
-    if(auto-->1) setTimeout(()=>{if(!document.getElementById("v-yazici").hidden) begin();},2600);
-    return;
-  }
+  if(t<idle){sh.pose=printPose(sh,0); say(UI.ready);}
+  else if(t<end){const x=feedAt((t-idle)/DP); sh.pose=printPose(sh,sh.L*x); feed=.75+.25*Math.sin(t*44); say(`${UI.printing} · %${String(Math.round(x*100)).padStart(3,"\u2007")}`,true);}
+  else {sh.pose=printPose(sh,sh.L); paintAll(); say(done(sh)); printing=false; return;}
   paintAll(); raf=requestAnimationFrame(run);
 }
 function startPrint(){
-  cancelAnimationFrame(raf);
-  if(still.matches){current.pose=printPose(current,current.L,0); paintAll(); say(`${fmt(current.r.min)} · ${count(current.r)}`); return;}
-  if(current&&!current.done&&current.pose&&current.pose.off>0&&!current.pose.clip) return;   // mid-fall: let it land first
-  begin();
+  if(still.matches){current.pose=printPose(current,current.L); paintAll(); say(done(current)); return;}
+  if(printing) return;
+  printing=true; DP=Math.min(6,Math.max(3.4,2.2+current.r.items.length*.35));
+  t0=performance.now(); cancelAnimationFrame(raf); raf=requestAnimationFrame(run);
 }
-fig.addEventListener("click",()=>{auto=0; startPrint();});
+fig.addEventListener("click",()=>{   // the next receipt replaces the curled one
+  if(printing||still.matches) return;
+  printed++; current.el.remove(); current=makeSheet(queue[printed%queue.length],LY.mid,uniform(14)); current.pose=printPose(current,0); paintAll(); startPrint();
+});
 
 // ---- board view ----
 const COLS=[{k:"due",dot:"half"},{k:"paid",dot:"full"},{k:"personal",dot:"dash"}];
