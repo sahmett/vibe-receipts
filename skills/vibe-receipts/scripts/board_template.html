@@ -38,6 +38,13 @@ nav a[aria-current="page"]{color:var(--on-invert)}
 nav .pill{position:absolute;top:3px;bottom:3px;border-radius:999px;background:var(--invert)}
 nav.ready .pill{transition:left .35s var(--spring),width .35s var(--spring)}
 nav a,nav svg{z-index:1}
+/* light / dark: dark unless the viewer picks light; the choice is remembered */
+.theme{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);right:16px;z-index:80;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;cursor:pointer;
+  color:var(--fg-2);background:color-mix(in srgb,var(--panel) 78%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-2);transition:color .2s}
+.theme:hover{color:var(--fg)}
+.theme svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.theme .sun{display:none}
+:root[data-theme="light"] .theme .sun{display:block}:root[data-theme="light"] .theme .moon{display:none}
 nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 
 /* printer view: the printer and its finished receipt, centred together under a soft studio light, the caption below */
@@ -164,6 +171,8 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
   <a href="#pano" data-view="pano"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.2" width="3.4" height="11.6" rx="1"/><rect x="6.3" y="2.2" width="3.4" height="7.6" rx="1"/><rect x="10.8" y="2.2" width="3.4" height="9.6" rx="1"/></svg><span data-ui="navBoard"></span></a>
 </nav>
 
+<button class="theme" type="button" id="theme"><svg class="moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.6A5.6 5.6 0 0 1 6.4 2.5a5.6 5.6 0 1 0 7.1 7.1z"/></svg><svg class="sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg></button>
+
 <main>
 <section id="v-yazici" class="stage" aria-labelledby="t1">
   <div id="fig" role="img"></div>
@@ -184,6 +193,10 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 <script>
 // Filled in by receipts.py --board: the printer (tools/printer), every archived receipt, the language and today.
 const PR=__PRINTER__, R=__RECEIPTS__, LANG="__LANG__", TODAY="__TODAY__";
+// dark by default, light only when the viewer asks for it
+const root=document.documentElement, themeBtn=document.getElementById("theme");
+let theme="dark"; try{if(localStorage.getItem("vr-theme")==="light") theme="light";}catch(e){}
+function setTheme(t){theme=t; root.setAttribute("data-theme",t); themeBtn.setAttribute("aria-label",t==="dark"?UI.toLight:UI.toDark); themeBtn.setAttribute("aria-pressed",String(t==="dark"));}
 const UI={
  tr:{navPrinter:"Yazıcı",navBoard:"Pano",title:"Çalıştığın saatin fişi",
    lede:"Claude Code'daki kendi prompt aralıklarından ölçülür. Hepsi kendi makinende kalır.",
@@ -191,20 +204,22 @@ const UI={
    board:"Pano",periods:[["month","Bu ay"],["q","90 gün"],["all","Tümü"]],period:"Dönem",
    metrics:["Toplam süre","Faturalanacak","Token değeri","Fiş"],cols:{due:"Faturalanacak",paid:"Faturalandı",personal:"Kişisel"},
    empty:"Fişi buraya sürükle",status:"Durum",est:"commit tahmini",close:"Kapat",open:"aç",h:"s",m:"d",reprint:"Yeniden bas",
-   figLabel:(n,t)=>`Bir termal fiş yazıcısı, ${n} projesinin ${t} çalışma fişini basıyor.`},
+   figLabel:(n,t)=>`Bir termal fiş yazıcısı, ${n} projesinin ${t} çalışma fişini basıyor.`,toLight:"Açık temaya geç",toDark:"Koyu temaya geç"},
  en:{navPrinter:"Printer",navBoard:"Board",title:"A receipt for the hours you worked",
    lede:"Measured from the gaps between your own prompts in Claude Code. It all stays on your machine.",
    ready:"ready",printing:"printing",prompts:"prompts",commits:"commits",
    board:"Board",periods:[["month","This month"],["q","90 days"],["all","All"]],period:"Period",
    metrics:["Total time","To bill","Token value","Receipts"],cols:{due:"To bill",paid:"Billed",personal:"Personal"},
    empty:"Drag a receipt here",status:"Status",est:"commit estimate",close:"Close",open:"open",h:"h",m:"m",reprint:"Print again",
-   figLabel:(n,t)=>`A thermal receipt printer printing the ${t} work receipt for ${n}.`},
+   figLabel:(n,t)=>`A thermal receipt printer printing the ${t} work receipt for ${n}.`,toLight:"Switch to light",toDark:"Switch to dark"},
 }[LANG==="tr"?"tr":"en"];
 const fmt=m=>`${Math.floor(m/60)}${UI.h} ${String(m%60).padStart(2,"0")}${UI.m}`;
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const usd=v=>"$"+v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const still=matchMedia("(prefers-reduced-motion: reduce)");
 document.documentElement.lang=LANG==="tr"?"tr":"en";
+setTheme(theme);
+themeBtn.addEventListener("click",()=>{setTheme(theme==="dark"?"light":"dark"); try{localStorage.setItem("vr-theme",theme);}catch(e){}});
 document.querySelectorAll("[data-ui]").forEach(el=>{const v=UI[el.dataset.ui]; if(typeof v==="string") el.textContent=v;});
 
 // a receipt in its own run's language and units, the layout receipts.py prints
