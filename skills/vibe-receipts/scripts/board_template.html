@@ -1,7 +1,6 @@
 <title>Vibe Receipts</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600;700;800&display=swap">
+<script>/* before the first paint: the saved theme (dark by default), and hide the page until its fonts and figure are ready */
+(function(){var r=document.documentElement,t="dark";try{if(localStorage.getItem("vr-theme")==="light")t="light"}catch(e){}r.setAttribute("data-theme",t);r.classList.add("boot")})();</script>
 <style>
 /* Layout: two views behind a two-button pill. "Printer": the device dead centre, a short title under it, the
    newest receipt rising out of it. "Board": three quiet columns of receipt cards; a card flips over into the
@@ -10,8 +9,9 @@
   --bg:#09090b; --panel:#111113; --raise:#17171a; --hover:#1c1c20; --line:#ffffff10; --line-2:#ffffff1f; --line-3:#ffffff38;
   --fg:#f4f4f5; --fg-2:#a1a1a7; --fg-3:#67676d; --invert:#f4f4f5; --on-invert:#09090b; --shadow:#000000b3;
   --paper:#f6f6f4; --ink:#0b0b0c; --ink-2:#6d6d70;
-  --sans:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --mono:"Geist Mono",ui-monospace,Menlo,Consolas,monospace;
+  /* system faces only: nothing to download, so no text ever swaps font and moves after the page shows */
+  --sans:system-ui,-apple-system,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
   --spring:cubic-bezier(.2,.9,.25,1.12); --out:cubic-bezier(.2,.8,.2,1);
   --spot:#ffffff0e; --pshadow:#000000a6;
   color-scheme:dark;
@@ -24,6 +24,10 @@
   --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8d8d92; --invert:#0b0b0c; --on-invert:#fafafa; --shadow:#0000003d; --spot:#ffffff; --pshadow:#00000033; color-scheme:light}
 *{box-sizing:border-box}
 html,body{min-height:100%}
+/* one calm reveal: nothing is shown until the fonts are in and the figure is measured, then it all fades in at once */
+nav,.theme,main{transition:opacity .5s var(--out)}
+html.boot nav,html.boot .theme,html.boot main{opacity:0}
+html.boot #fig,html.boot .cap{animation:none}
 body{background:var(--bg);color:var(--fg);font:400 14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
 button{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--fg);outline-offset:2px}
@@ -40,23 +44,24 @@ nav.ready .pill{transition:left .35s var(--spring),width .35s var(--spring)}
 nav a,nav svg{z-index:1}
 /* light / dark: dark unless the viewer picks light; the choice is remembered */
 .theme{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);right:16px;z-index:80;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;cursor:pointer;
-  color:var(--fg-2);background:color-mix(in srgb,var(--panel) 78%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-2);transition:color .2s}
+  color:var(--fg-2);background:color-mix(in srgb,var(--panel) 78%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-2);transition:color .2s,opacity .5s var(--out)}
 .theme:hover{color:var(--fg)}
 .theme svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .theme .sun{display:none}
 :root[data-theme="light"] .theme .sun{display:block}:root[data-theme="light"] .theme .moon{display:none}
 nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 
-/* printer view: the printer and its finished receipt, centred together under a soft studio light, the caption below */
-.stage{min-height:100svh;display:grid;grid-template-rows:1fr auto auto 1fr;justify-items:center;padding-inline:16px;padding-block:72px 24px;
+/* printer view: the printer and its finished receipt, centred together under a soft studio light, the caption below.
+   overflow:clip, because the receipt's strips reach far past the figure and would otherwise bring up a scrollbar mid-print */
+.stage{min-height:100svh;overflow:clip;display:grid;grid-template-rows:1fr auto auto 1fr;justify-items:center;padding-inline:16px;padding-block:72px 24px;
   background:radial-gradient(56% 50% at 50% 44%,var(--spot),transparent 72%)}
 #fig{grid-row:2;position:relative;cursor:pointer;animation:arrive .8s var(--out) both}
 #fig svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
-@keyframes arrive{from{opacity:0;transform:translateY(10px) scale(.985)}}
+@keyframes arrive{from{opacity:0}}
 .cap{grid-row:3;align-self:start;padding-top:28px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;animation:arrive .8s .12s var(--out) both}
 .cap h1{margin:0;font:600 17px/1.25 var(--sans);letter-spacing:-.01em}
 .cap p{margin:0;max-width:38ch;color:var(--fg-2);font-size:14px;line-height:1.55;text-wrap:balance}
-.cap .readout{margin-top:6px;font:500 12px/1 var(--mono);color:var(--fg-3);display:flex;align-items:center;gap:8px}
+.cap .readout{width:24ch;justify-content:flex-start;margin-top:6px;font:500 12px/1 var(--mono);color:var(--fg-3);display:flex;align-items:center;gap:8px}
 .cap .readout i{width:6px;height:6px;border-radius:50%;background:var(--fg-3);transition:background .2s}
 .cap .readout.live i{background:var(--fg);box-shadow:0 0 0 3px var(--line-2)}
 /* the sheet: horizontal strips of one receipt, each laid along the paper's curve as it bends back over the printer */
@@ -146,7 +151,7 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 .tk .bars i{width:4px;background:var(--fg-3);border-radius:1px}
 .tk .meta{margin-top:14px;display:flex;justify-content:space-between;font:400 11.5px/1 var(--mono);color:var(--fg-3)}
 .enter .tk{animation:rise .55s var(--out) both;animation-delay:calc(var(--i)*45ms)}
-@keyframes rise{from{opacity:0;transform:translateY(12px)}}
+@keyframes rise{from{opacity:0}}
 
 /* the receipt that flips out of a card: a floating sheet, no backdrop, the page stays usable */
 .float{position:fixed;left:0;top:0;z-index:70;transform-origin:0 0;will-change:transform}
@@ -279,7 +284,7 @@ function buildFigure(){
   const bottom=1868/VS, left=26, right=1080/VS-26;
   VB=[left,top,right-left,bottom-top];
   fig.querySelectorAll("svg").forEach(s=>{s.setAttribute("viewBox",VB.join(" ")); s.removeAttribute("width"); s.removeAttribute("height"); s.setAttribute("preserveAspectRatio","xMidYMid meet");});
-  size(); addEventListener("resize",size);
+  size(); if(!buildFigure.wired){addEventListener("resize",size); buildFigure.wired=true;}
 }
 function size(){
   const room=innerHeight-96-cap.offsetHeight-28;   // nav and padding above, the caption below
@@ -511,7 +516,20 @@ function route(){
   scrollTo(0,0);
 }
 addEventListener("hashchange",route);
-(document.fonts?document.fonts.ready:Promise.resolve()).then(()=>{const a=document.querySelector('nav a[aria-current="page"]'); if(a) movePill(a);
-  requestAnimationFrame(()=>document.querySelector("nav").classList.add("ready"));});
-route();   // the figure is built the first time its view shows, so the receipt can be measured
+function fontsReady(){   // system faces are there at once; this only waits for the document to settle
+  return document.fonts?Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,300))]):Promise.resolve();
+}
+fontsReady().then(()=>{
+  route();                                              // builds and measures the visible view, still hidden
+  requestAnimationFrame(()=>{
+    root.classList.remove("boot");
+    requestAnimationFrame(()=>document.querySelector("nav").classList.add("ready"));   // the pill only slides from now on
+  });
+  // a face that arrives after the reveal: measure again, so the receipt's strips and the pill match the text
+  if(document.fonts) document.fonts.addEventListener("loadingdone",()=>{
+    const a=document.querySelector('nav a[aria-current="page"]'); if(a) movePill(a);
+    if(wrapEl&&!document.getElementById("v-yazici").hidden){const h=wrapEl.querySelector(".rc").getBoundingClientRect().height; if(Math.abs(h-H)>.5){wrapEl=null; buildFigure(); startPrint();}}
+  });
+  new ResizeObserver(()=>{if(wrapEl) size();}).observe(cap);
+});
 </script>

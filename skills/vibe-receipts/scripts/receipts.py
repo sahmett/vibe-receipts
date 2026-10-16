@@ -618,8 +618,12 @@ def build_board(out,lang):
           '__RECEIPTS__':json.dumps(recs,ensure_ascii=False).replace('</','<\\/'),
           '__LANG__':lang,'__TODAY__':datetime.date.today().isoformat()}
     body=re.sub('|'.join(fill),lambda mt:fill[mt.group(0)],open(os.path.join(here,'board_template.html'),encoding='utf-8').read())
+    # the first paint is already the right colour: the theme and the page background are set in the head
     page=(f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
-          '<style>body{margin:0}[hidden]{display:none!important}</style></head><body>'+body+'</body></html>')
+          '<meta name="color-scheme" content="dark light">'
+          '<script>(function(){var r=document.documentElement,t="dark";try{if(localStorage.getItem("vr-theme")==="light")t="light"}catch(e){}r.setAttribute("data-theme",t);r.classList.add("boot")})();</script>'
+          '<style>html{background:#09090b;color-scheme:dark}html[data-theme="light"]{background:#fafafa;color-scheme:light}body{margin:0}[hidden]{display:none!important}</style>'
+          '</head><body>'+body+'</body></html>')
     dst=os.path.join(out,'board.html')
     with open(dst,'w',encoding='utf-8') as f: f.write(page)
     return dst
