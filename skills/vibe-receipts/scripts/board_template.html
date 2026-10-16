@@ -35,30 +35,30 @@ button{font:inherit;color:inherit}
 ::selection{background:var(--accent-soft)}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);left:50%;transform:translateX(-50%);z-index:80;display:flex;gap:2px;padding:3px;
+nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);left:50%;transform:translateX(-50%);z-index:80;display:flex;gap:2px;padding:6px;
   background:color-mix(in srgb,var(--panel) 78%,transparent);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);
-  border:1px solid var(--line-2);border-radius:999px}
-nav a{position:relative;display:flex;align-items:center;gap:7px;padding:6px 13px 6px 11px;border-radius:999px;color:var(--fg-2);text-decoration:none;font:500 13px/1 var(--sans);transition:color .2s}
+  border:1px solid var(--line-2);border-radius:16px}
+nav a{position:relative;display:flex;align-items:center;gap:8px;padding:9px 15px 9px 13px;border-radius:10px;color:var(--fg-2);text-decoration:none;font:500 13px/1 var(--sans);transition:color .2s}
 nav a:hover{color:var(--fg)}
 nav a[aria-current="page"]{color:var(--on-invert)}
-nav .pill{position:absolute;top:3px;bottom:3px;border-radius:999px;background:var(--invert)}
+nav .pill{position:absolute;top:6px;bottom:6px;border-radius:10px;background:var(--invert)}
 nav.ready .pill{transition:left .35s var(--spring),width .35s var(--spring)}
 nav a,nav svg{z-index:1}
 /* light / dark: dark unless the viewer picks light; the choice is remembered */
-.theme{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);right:16px;z-index:80;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;cursor:pointer;
+.theme{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);right:16px;z-index:80;width:48px;height:48px;border-radius:16px;display:grid;place-items:center;cursor:pointer;
   color:var(--fg-2);background:color-mix(in srgb,var(--panel) 78%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-2);transition:color .2s,opacity .5s var(--out)}
 .theme:hover{color:var(--fg)}
 .theme svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .theme .sun{display:none}
 :root[data-theme="light"] .theme .sun{display:block}:root[data-theme="light"] .theme .moon{display:none}
-nav .brand{display:flex;align-items:center;gap:8px;padding:0 10px 0 5px;font:600 13.5px/1 var(--sans);letter-spacing:-.015em;color:var(--fg);text-decoration:none}
-nav .brand .mark{width:22px;height:22px;flex:none;stroke:none;filter:drop-shadow(0 1px 2px #0000004d)}
-nav .sep{width:1px;margin:6px 4px 6px 2px;background:var(--line-2)}
+nav .brand{display:flex;align-items:center;gap:9px;padding:0 12px 0 3px;font:600 14px/1 var(--sans);letter-spacing:-.015em;color:var(--fg);text-decoration:none}
+nav .brand .mark{width:28px;height:28px;flex:none;stroke:none;filter:drop-shadow(0 1px 2px #0000004d)}
+nav .sep{width:1px;margin:7px 6px 7px 2px;background:var(--line-2)}
 nav a svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 
 /* printer view: the printer and its finished receipt, centred together under a soft studio light, the caption below.
    overflow:clip, because the receipt's strips reach far past the figure and would otherwise bring up a scrollbar mid-print */
-.stage{min-height:100svh;overflow:clip;display:grid;grid-template-rows:1fr auto auto 1fr;justify-items:center;padding-inline:16px;padding-block:72px 24px;
+.stage{min-height:100svh;overflow:clip;display:grid;grid-template-rows:1fr auto auto 1fr;justify-items:center;padding-inline:16px;padding-block:80px 24px;
   background:radial-gradient(56% 50% at 50% 44%,var(--spot),transparent 72%)}
 #fig{grid-row:2;position:relative;cursor:pointer;animation:arrive .8s var(--out) both}
 #fig svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
@@ -74,6 +74,7 @@ nav a svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;
 #fig .layer{position:absolute;left:0;top:0;width:0;height:0}
 #fig .sheet3{position:absolute;left:0;top:0}
 #fig .sheet3.floor{filter:drop-shadow(0 1px .5px var(--floorsh))}
+#fig .sheet3.far{opacity:.78}
 #fig .strip{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
 #fig .strip>i{position:absolute;inset:0;pointer-events:none;background:#000;opacity:0}
 #fig .strip.back .paper>*{visibility:hidden}
@@ -119,7 +120,7 @@ nav a svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;
 
 
 /* board view */
-.view{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:96px 64px}
+.view{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:104px 64px}
 .bhead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
 h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 .seg{display:inline-flex;padding:2px;border-radius:9px;background:var(--raise);border:1px solid var(--line)}
@@ -144,10 +145,18 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 
 .tk{position:relative;display:block;width:100%;text-align:left;cursor:pointer;border:0;padding:0;background:none;transform-style:preserve-3d;
   transition:transform .35s var(--out),opacity .2s}
-.tk .face{background:var(--panel);border:1px solid var(--line);border-radius:12px 12px 0 0;padding:14px 14px 18px;transition:background .2s,border-color .2s;
+/* the card is its frame (the background, cut to the receipt's zigzag) with the face laid 1 px inside it, cut the same
+   way, so the frame line follows the zigzag too; on hover a red beam runs round the frame */
+@property --beam{syntax:"<angle>";inherits:false;initial-value:0deg}
+.tk .face{position:relative;border-radius:12px 12px 0 0;padding:14px 14px 18px;background:var(--line-2);
   -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat;
   mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat}
-.tk:hover .face{background:var(--raise);border-color:var(--line-2)}
+.tk .face::before{content:"";position:absolute;inset:1px;border-radius:11px 11px 0 0;background:var(--panel);transition:background .2s;
+  -webkit-mask:inherit;mask:inherit}
+.tk .face>*{position:relative}
+.tk:hover .face{background:conic-gradient(from var(--beam),#0000 0deg 236deg,#ff9a6b 292deg,var(--accent) 330deg,#0000 360deg),var(--line-2);animation:beam 2.6s linear infinite}
+.tk:hover .face::before{background:var(--raise)}
+@keyframes beam{to{--beam:360deg}}
 .tk.dragging{opacity:.35}
 .tk.away{visibility:hidden}
 .tk .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -182,7 +191,7 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 
 <nav aria-label="Views">
   <span class="pill" aria-hidden="true"></span>
-  <span class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="slipt-red" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#E0262C"/></linearGradient><clipPath id="slipt-clip"><rect width="32" height="32" rx="8"/></clipPath></defs><g clip-path="url(#slipt-clip)"><rect width="32" height="32" fill="url(#slipt-red)"/><path d="M0 19.6 3.2 16.6 6.4 19.6 9.6 16.6 12.8 19.6 16 16.6 19.2 19.6 22.4 16.6 25.6 19.6 28.8 16.6 32 19.6V32H0Z" fill="#F4F0E8"/></g></svg>Slipt</span><span class="sep" aria-hidden="true"></span>
+  <span class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="slipt-red" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#E0262C"/></linearGradient><clipPath id="slipt-clip"><rect width="32" height="32" rx="11.4"/></clipPath></defs><g clip-path="url(#slipt-clip)"><rect width="32" height="32" fill="url(#slipt-red)"/><path d="M0 19.6 3.2 16.6 6.4 19.6 9.6 16.6 12.8 19.6 16 16.6 19.2 19.6 22.4 16.6 25.6 19.6 28.8 16.6 32 19.6V32H0Z" fill="#F4F0E8"/></g></svg>Slipt</span><span class="sep" aria-hidden="true"></span>
   <a href="#yazici" data-view="yazici"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6V2.5h7V6"/><rect x="1.8" y="6" width="12.4" height="5.6" rx="1.4"/><path d="M4.5 9.5h7v4h-7z"/></svg><span data-ui="navPrinter"></span></a>
   <a href="#pano" data-view="pano"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.2" width="3.4" height="11.6" rx="1"/><rect x="6.3" y="2.2" width="3.4" height="7.6" rx="1"/><rect x="10.8" y="2.2" width="3.4" height="9.6" rx="1"/></svg><span data-ui="navBoard"></span></a>
 </nav>
@@ -289,20 +298,20 @@ const RAD=Math.PI/180, LIGHT=(()=>{const l=[-.35,.55,.76], n=Math.hypot(...l); r
 // A sheet: a receipt, its strips, and a pose: base point B (the receipt's bottom-left corner), X across it,
 // T0 up it at the base, N0 the way it bends, bend(s) the angle at s world units from the base, and off,
 // how far up from the base the receipt's top is (less than its length while it is still in the printer).
-function makeSheet(r,layer,band){
+function makeSheet(r,layer,band,scale=1){   // scale < 1: a smaller receipt, for the floor in the background
   const el=document.createElement("div"); el.className="sheet3"; layer.appendChild(el);
   el.innerHTML=`<div class="strip">${receipt(r)}<i></i></div>`;
-  const H=el.querySelector(".rc").getBoundingClientRect().height||900, L=H*q, html=el.innerHTML;
-  const bands=band(H,L); el.innerHTML=bands.map(()=>html).join("");
+  const sq=q*scale, H=el.querySelector(".rc").getBoundingClientRect().height||900, L=H*sq, html=el.innerHTML;
+  const bands=band(H,L,sq); el.innerHTML=bands.map(()=>html).join("");
   const strips=[...el.children].map((s,i)=>({el:s,shade:s.querySelector("i"),j0:bands[i][0],j1:bands[i][1]}));
-  return {r,el,H,L,strips,pose:null};
+  return {r,el,H,L,q:sq,W:G.paperW*scale,strips,pose:null};
 }
 const uniform=h=>(H)=>Array.from({length:Math.ceil(H/h)},(_,i)=>[i*h,Math.min(H,(i+1)*h)]);
 function endBands(lift){   // a flat sheet on the floor: one strip for the flat part, fine strips where its end lifts or rolls
-  return (H,L)=>{const jl=Math.min(H,lift/q), out=[]; for(let j=0;j<jl;j+=22) out.push([j,Math.min(jl,j+22)]); if(jl<H) out.push([jl,H]); return out;};
+  return (H,L,sq)=>{const jl=Math.min(H,lift/sq), out=[]; for(let j=0;j<jl;j+=22) out.push([j,Math.min(jl,j+22)]); if(jl<H) out.push([jl,H]); return out;};
 }
 function place(sh){
-  const {B,X,T0,N0,bend,off,clip}=sh.pose, k=S/VS, ox=VB[0]*S, oy=VB[1]*S;
+  const {B,X,T0,N0,bend,off,clip}=sh.pose, q=sh.q, k=S/VS, ox=VB[0]*S, oy=VB[1]*S;
   const n=Math.max(1,Math.ceil(off)), P=[B];
   for(let i=0;i<n;i++) P.push(add(P[i],turn(T0,N0,bend(i+.5))));
   const at=s=>{if(s<=0) return add(B,T0,s); const i=Math.min(n-1,Math.floor(s)), f=s-i; return lerp3(P[i],P[i+1],f);};
@@ -313,44 +322,47 @@ function place(sh){
     const jm=(st.j0+st.j1)/2, sm=off-jm*q, Tm=turn(T0,N0,bend(Math.max(0,sm))), Pm=at(sm), p=sp(Pm), dT=sv(Tm);
     const a=q*dX[0], b=q*dX[1], c=-q*dT[0], d=-q*dT[1];
     st.el.style.transform=`matrix(${a*k},${b*k},${c*k},${d*k},${(p[0]+jm*q*dT[0])*k-ox},${(p[1]+jm*q*dT[1])*k-oy})`;
-    const lo=Math.max(0,st.j0-.8), hi=Math.min(H(sh),clip?Math.min(st.j1+.8,out):st.j1+.8);
+    const lo=Math.max(0,st.j0-.8), hi=Math.min(sh.H,clip?Math.min(st.j1+.8,out):st.j1+.8);
     st.el.style.clipPath=`inset(${lo}px 0 ${Math.max(0,sh.H-hi)}px 0)`;
     const front=a*d-b*c>0, nrm=cross(Tm,X), lit=dot(front?nrm:nrm.map(v=>-v),LIGHT);   // the face we see, and how much light it gets
     st.el.classList.toggle("back",!front);
     const slot=sh.pose.slotShade?Math.max(0,1-Math.max(0,sm)/8)*.3:0;
     st.shade.style.opacity=(clamp((.86-lit)*.55,0,.3)+slot).toFixed(3);
-    st.el.style.zIndex=Math.round(500+dot(add(Pm,X,G.paperW/2),G.view)*2);
+    st.el.style.zIndex=Math.round(500+dot(add(Pm,X,sh.W/2),G.view)*2);
   }
 }
-const H=sh=>sh.H;
 
 // the floor around the printer: real receipts, near it and up to about a quarter of the window away
 const FLOOR=[   // centre (world), heading in degrees (-90 = its top points away from you), how its end lifts
-  {c:[-168,92],h:-118,end:"lift"}, {c:[186,78],h:-58,end:"roll"}, {c:[-226,-58],h:-102,end:"lift"},
-  {c:[232,-88],h:-74,end:"roll"}, {c:[-318,36],h:-152,end:"lift"}, {c:[330,-14],h:-28,end:"lift"},
+  {c:[-150,58],h:-118,end:"lift"}, {c:[160,40],h:-58,end:"roll"}, {c:[-196,-62],h:-102,end:"lift"},
+  {c:[206,-84],h:-74,end:"roll"}, {c:[-270,8],h:-152,end:"lift"}, {c:[282,-30],h:-28,end:"lift"},
 ];
+const FLOOR_SCALE=.46;   // the floor is the background: smaller receipts, a little dimmer
 function floorPose(sh,cx,cy,headDeg,end){
   const h=headDeg*RAD, T0=[Math.cos(h),Math.sin(h),0], X=[-Math.sin(h),Math.cos(h),0], L=sh.L;
-  const B=add(add([cx,cy,.6],T0,-L/2),X,-G.paperW/2);
-  const R0=7, Lr=2*Math.PI*R0*1.25;   // a roll: about one and a quarter turns at the top end
-  const bend=end==="roll"?(s=>s>L-Lr?(s-(L-Lr))/R0:0):(s=>.32*smooth(clamp((s-(L-26))/26)));
+  const B=add(add([cx,cy,.6],T0,-L/2),X,-sh.W/2);
+  const R0=3.4, Lr=2*Math.PI*R0*1.25;   // a roll: about one and a quarter turns at the top end
+  const bend=end==="roll"?(s=>s>L-Lr?(s-(L-Lr))/R0:0):(s=>.32*smooth(clamp((s-(L-12))/12)));
   return {B,X,T0,N0:[0,0,1],bend,off:L,clip:false};
 }
 const behind=sh=>dot(add(sh.pose.B,sh.pose.T0,sh.L/2),G.view)<dot([0,-10,0],G.view);   // drawn behind the printer or in front of it
 
 // the printed receipt: on the slot, then torn off, tipped back, dropped behind the printer
 const SLOT=[-G.paperW/2,WD.slotY,WD.top], LEAN=WD.lean*RAD, CURL=64*RAD, STIFF=34;
+// How far the sheet bends back: nothing while the first few centimetres are out, then more and more as its own
+// weight grows; along the sheet the bend gathers toward the top. It is a function of how much is out, so the
+// whole sheet tips back while it prints, instead of the paper climbing a fixed curve.
+const bendFor=o=>{const g=Math.pow(clamp((o-STIFF)/170),1.25); return s=>CURL*g*Math.pow(clamp(s/Math.max(o,1)),1.5);};
 function printPose(sh,o,lift){
-  const T0=[0,-Math.sin(LEAN),Math.cos(LEAN)], N0=[0,-Math.cos(LEAN),-Math.sin(LEAN)], L=sh.L;
-  const f=s=>CURL*Math.pow(clamp((s-STIFF)/Math.max(60,L-STIFF)),1.6);
-  return {B:add(SLOT,T0,lift),X:[1,0,0],T0,N0,bend:f,off:o,clip:lift===0,slotShade:lift===0};
+  const T0=[0,-Math.sin(LEAN),Math.cos(LEAN)], N0=[0,-Math.cos(LEAN),-Math.sin(LEAN)];
+  return {B:add(SLOT,T0,lift),X:[1,0,0],T0,N0,bend:bendFor(o),off:o,clip:lift===0,slotShade:lift===0};
 }
 function fallPose(sh,k,drift){   // k: 0..1 over the whole fall
   const L=sh.L, x0=SLOT[0]+drift.x, back=WD.shell[1]-4;
   const a=clamp(k/.45), b=clamp((k-.45)/.55);                  // tip back over the printer, then slide off and drop
   const lean=lerp(LEAN,90*RAD,easeOut(a));
   let T0=[0,-Math.sin(lean),Math.cos(lean)], N0=[0,-Math.cos(lean),-Math.sin(lean)], X=[1,0,0];
-  const curl=1-easeOut(a), f=s=>curl*CURL*Math.pow(clamp((s-STIFF)/Math.max(60,L-STIFF)),1.6);
+  const curl=1-easeOut(a), full=bendFor(L), f=s=>curl*full(s);
   const slide=smooth(clamp(b/.4)), drop=clamp((b-.3)/.7), start=add(SLOT,[0,-Math.sin(LEAN),Math.cos(LEAN)],3);
   let B=[lerp(start[0],x0,slide),lerp(start[1],back,slide),lerp(start[2],.6,drop*drop)];
   const turnZ=drift.a*easeOut(b); T0=rz(T0,turnZ); N0=rz(N0,turnZ); X=rz(X,turnZ);
@@ -370,7 +382,7 @@ function buildFigure(){
   lamps=[...fig.querySelectorAll(".lamp")];
   // the floor: the receipts after the newest one, as many as there are spots (repeating if the archive is small)
   const others=R.length>1?R.slice(1):R;
-  floor=FLOOR.map((spot,i)=>{const sh=makeSheet(others[i%others.length],LY.back,endBands(spot.end==="roll"?70:26)); sh.pose=floorPose(sh,spot.c[0],spot.c[1],spot.h,spot.end); sh.el.classList.add("floor"); return sh;});
+  floor=FLOOR.map((spot,i)=>{const sh=makeSheet(others[i%others.length],LY.back,endBands(spot.end==="roll"?34:12),FLOOR_SCALE); sh.pose=floorPose(sh,spot.c[0],spot.c[1],spot.h,spot.end); sh.el.classList.add("floor","far"); return sh;});
   floor.forEach(sh=>{if(!behind(sh)) LY.front.appendChild(sh.el);});
   queue=[...R];
   // the box: printer, the printed sheet at its tallest, the floor in front and behind; the floor may run off the sides
@@ -378,8 +390,6 @@ function buildFigure(){
   let top=Infinity, bottom=1868/VS;
   const probe=(pose,sh)=>{sh.pose=pose; const {B,T0,N0,bend,off}=pose; let p=B; for(let s=0;s<off;s+=6){p=add(p,turn(T0,N0,bend(s+3)),6); top=Math.min(top,sp(p)[1]/VS); top=Math.min(top,sp(add(p,pose.X,G.paperW))[1]/VS);}};
   probe(printPose(current,current.L,0),current);
-  probe(landedPose(current,{x:0,a:0}),current);
-  for(const sh of floor){const {B,X,T0,L}=sh.pose; for(const c of [B,add(B,X,G.paperW),add(B,T0,sh.L),add(add(B,T0,sh.L),X,G.paperW)]){const y=sp(c)[1]/VS; top=Math.min(top,y); bottom=Math.max(bottom,y+4);}}
   top-=10;
   VB=[26,top,1080/VS-52,bottom-top];
   fig.querySelectorAll("svg").forEach(s=>{s.setAttribute("viewBox",VB.join(" ")); s.removeAttribute("width"); s.removeAttribute("height"); s.setAttribute("preserveAspectRatio","xMidYMid meet");});
@@ -388,7 +398,7 @@ function buildFigure(){
   if(!buildFigure.wired){addEventListener("resize",size); buildFigure.wired=true;}
 }
 function size(){
-  const room=innerHeight-96-cap.offsetHeight-28;   // nav and padding above, the caption below
+  const room=innerHeight-104-cap.offsetHeight-28;   // nav and padding above, the caption below
   const w=Math.max(200,Math.min(innerWidth-32,600,room*VB[2]/VB[3]));
   S=w/VB[2]; fig.style.width=w+"px"; fig.style.height=(VB[3]*S)+"px"; paintAll();
 }
