@@ -76,7 +76,11 @@ nav a svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;
 #fig .sheet3.floor{filter:drop-shadow(0 1px .5px var(--floorsh))}
 #fig .sheet3.far{opacity:.78}
 #fig .strip{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
-#fig .strip>i{position:absolute;inset:0;pointer-events:none;background:#000;opacity:0}
+#fig .strip>i{position:absolute;inset:0;pointer-events:none;background:var(--sheet-shade,#000);opacity:0}
+/* light mode: the receipt reads as clean white paper; its shading is a soft grey and the texture and edge shade fade back */
+:root[data-theme="light"] #fig{--sheet-shade:#8a8a90}
+:root[data-theme="light"] #fig .paper{background-image:linear-gradient(90deg,#00000008,#0000 6%,#0000 94%,#0000000a)}
+:root[data-theme="light"] #fig .sheet3.far{opacity:.9}
 #fig .strip.back .paper>*{visibility:hidden}
 #fig .paper{background-image:linear-gradient(90deg,#0000001c,#0000 6%,#0000 94%,#0000001f),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0 0 0 -.07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 .lamp{position:absolute;width:0;height:0;pointer-events:none}
