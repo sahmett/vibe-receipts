@@ -74,7 +74,7 @@ git clone https://github.com/sahmett/vibe-receipts
 python3 vibe-receipts/receipts.py ~/code/my-project
 ```
 
-Outputs go to `~/vibe-receipts/` (`<repo>-receipt.png`, `<repo>-report.html`, `<repo>-daily.csv`),
+Outputs go to `~/vibe-receipts/` (`<repo>-receipt.png`, `<repo>-report.html`, `<repo>-daily.csv`, and the receipt as data in `archive/`),
 never into the analysed repo. The PNG is rendered with your local Chrome/Chromium in headless mode
 (`CHROME=/path/to/browser` to pick one, `--no-png` to skip it). `--built "mobile app"` says what you
 built on the receipt (the skill fills it in from your README), and `--name` shows another project
@@ -109,6 +109,24 @@ seconds, because Chrome records the animation in real time.
 It needs nothing beyond the Chrome that renders the PNG. If **ffmpeg** is installed, the clip is
 re-encoded to constant-frame-rate H.264/AAC, which every platform accepts; without it you get what
 Chrome recorded (MP4, or WebM on older browsers).
+
+## All your receipts on one board
+
+Every run also keeps its receipt as data in `~/vibe-receipts/archive/` (one JSON file per project and
+date range; a rerun of the same range replaces it). `--board` turns the archive into
+`~/vibe-receipts/board.html`, a black-and-white page with two views:
+
+- **Printer:** your newest receipt printing out of the isometric thermal printer.
+- **Board:** every receipt as a card in three columns (to bill, billed, personal), with the totals on
+  top, a 90-day / this-month filter and a drawer with the full receipt.
+
+```bash
+python3 receipts.py ~/code/client-app --client Northwind --board   # lands in "to bill"
+python3 receipts.py --board                                          # rebuild the board from the archive only
+```
+
+`--client` names the client and `--status due|paid|personal` picks the column; both are kept for later runs
+of the same range. Dragging a card to another column on the page is remembered in that browser.
 
 ## How it works
 
@@ -204,6 +222,9 @@ throwaway server on `127.0.0.1`.
 | `--out DIR` | output folder (default `~/vibe-receipts`) |
 | `--no-png` | skip the receipt PNG |
 | `--video` | also make `<repo>-receipt.mp4`, the receipt printing out of a thermal printer (1080×1920) |
+| `--board` | also rebuild `board.html` from every archived receipt; with no `repo`, only rebuild it |
+| `--client` | client of this receipt, shown on the board |
+| `--status` | board column: `due`, `paid` or `personal` (default: `due` with a client, else `personal`) |
 
 Constants at the top of `receipts.py`: `IDLE` (fallback threshold), `CAP`, `MIN_GAPS`, `SENS`
 (thresholds in the sensitivity table), `PRICES`, `CODE_W`, `VENDOR_RE` / `GEN_RE` (excluded file
@@ -280,7 +301,8 @@ skills/vibe-receipts/
 ├── SKILL.md               when and how Claude runs it
 └── scripts/
     ├── receipts.py        analysis, HTML report, receipt card, video
-    ├── printer.json       the printer in the video (built by tools/printer)
+    ├── printer.json       the printer in the video and on the board (built by tools/printer)
+    ├── board_template.html  the board page --board fills in
     └── to_jpg.sh          report → JPEG
 receipts.py, to_jpg.sh     shortcuts (symlinks)
 demo/make_demo.py          rebuilds the synthetic demo above (--video for the clip)

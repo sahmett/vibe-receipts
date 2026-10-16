@@ -106,7 +106,8 @@ L={
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
    share='{q} {t} later{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
    rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")],
-   vid_later='{t} later.',vid_cta='Get your own receipt'),
+   vid_later='{t} later.',vid_cta='Get your own receipt',
+   b_none='No receipts archived yet: run receipts.py on a project first, then --board.'),
  'tr':dict(
    h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
    title='Çalışma Süresi Fişi',commits='commit',prompts='prompt',
@@ -147,7 +148,8 @@ L={
    rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_q='Ç',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
    share='{q} {t} sonra{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
    rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')],
-   vid_later='{t} sonra.',vid_cta='Kendi fişini çıkar'),
+   vid_later='{t} sonra.',vid_cta='Kendi fişini çıkar',
+   b_none="Arşivde henüz fiş yok: önce receipts.py'yi bir projede çalıştır, sonra --board."),
 }
 
 def default_lang():
@@ -305,7 +307,7 @@ def short(n):
 
 def main():
     ap=argparse.ArgumentParser(description='Working time from your Claude Code prompts (+ git commits for context)')
-    ap.add_argument('repo',nargs='?',default='.',help='folder to analyse, git repo or not (default: .)')
+    ap.add_argument('repo',nargs='?',help='folder to analyse, git repo or not (default: .; leave it out with --board to only rebuild the board)')
     ap.add_argument('--since',default='0000-00-00',help='first day YYYY-MM-DD')
     ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
     ap.add_argument('--author',help='only commits by this author (git --author pattern)')
@@ -317,9 +319,15 @@ def main():
     ap.add_argument('--built',help='what the project is, 1-3 words (e.g. "e-commerce site"), shown on the receipt')
     ap.add_argument('--no-png',action='store_true',help='skip the receipt PNG (needs Chrome/Chromium; set CHROME=path to choose one)')
     ap.add_argument('--video',action='store_true',help='also make <name>-receipt.mp4: the receipt printing out of a thermal printer, 1080x1920 for Reels/TikTok/Shorts (needs Chrome; ffmpeg optional)')
+    ap.add_argument('--board',action='store_true',help='also rebuild board.html: every archived receipt on one page, a printer view and a status board')
+    ap.add_argument('--client',help='client this receipt is for, shown on the board (kept for later runs of the same range)')
+    ap.add_argument('--status',choices=['due','paid','personal'],help='board column for this receipt (default: due with a client, else personal)')
     a=ap.parse_args()
     a.out=os.path.abspath(os.path.expanduser(a.out))
     T=L[a.lang]; e=html.escape
+    if a.board and a.repo is None:   # just the board, from the receipts already archived
+        print("Board:",build_board(a.out,a.lang)); return
+    a.repo=a.repo or '.'
 
     def hm(s):
         mm=int(round(s/60)); return f"{mm//60}{T['h']} {mm%60:02d}{T['m']}"
@@ -561,6 +569,23 @@ def main():
         if vid: print("MP4 :",vid)
         else:   print("MP4 : skipped, no Chrome/Chromium found or the recording failed (set CHROME=/path/to/chrome)")
 
+    # every run keeps its receipt as data, one file per project and range: archive/<name>_<from>_<to>.json.
+    # A rerun of the same range replaces it, keeping the client and status unless they are given again.
+    arch=os.path.join(a.out,'archive'); os.makedirs(arch,exist_ok=True)
+    rkey=re.sub(r'[^A-Za-z0-9._-]','-',name)+f'_{d0}_{d1}'
+    archp=os.path.join(arch,rkey+'.json')
+    try: old=json.load(open(archp,encoding='utf-8'))
+    except (OSError,ValueError): old={}
+    client=(a.client if a.client is not None else old.get('client')) or None
+    rec=dict(key=rkey,name=name,built=a.built,period=period,active=active_days if active_days!=span else None,start=d0,end=d1,
+             items=[[q,l,mm] for (q,l,_),mm in zip(items,mins_split)],min=m,prompts=len(prompts),commits=len(commits),estimate=not has_p,
+             stats=stats,value=round(val['total'],2) if val['total'] else None,value_text=vtxt if val['total'] else None,thr=list(thr),
+             client=client,status=a.status or old.get('status') or ('due' if client else 'personal'),
+             lang=a.lang,made=datetime.datetime.now().isoformat(timespec='seconds'),
+             L=dict(kind=T['rc_kind'],project=T['rc_project'],built=T['rc_built'],period=T['rc_period'],active=T['rc_active'],qty=T['rc_qty'],
+                    item=T['rc_item'],time=T['rc_time'],value=T['rc_value'],total=T['rc_total'],h=T['h'],m=T['m']))
+    with open(archp,'w',encoding='utf-8') as f: json.dump(rec,f,ensure_ascii=False,indent=1)
+
     # the card goes at the end of the report, embedded so the HTML still works on its own
     if not a.no_png and os.path.exists(pngp):
         b64=base64.b64encode(open(pngp,'rb').read()).decode()
@@ -574,8 +599,30 @@ def main():
         f.write('date,prompts,work_min,commits,effective_lines,added,deleted,commit_estimate_min\n')
         for d in days:
             f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
-    print("HTML:",out); print("CSV :",csvp)
+    print("HTML:",out); print("CSV :",csvp); print("JSON:",archp)
+    if a.board: print("Board:",build_board(a.out,a.lang))
     print("Share:",share)
+
+def build_board(out,lang):
+    """Every archived receipt on one page, <out>/board.html: the printer view (the newest receipt printing out
+    of the isometric printer) and the board (columns by status, a drawer with the full receipt). Statuses changed
+    on the page are kept in that browser. Newest receipts first."""
+    here=os.path.dirname(os.path.abspath(__file__))
+    recs=[]
+    for p in glob.glob(os.path.join(out,'archive','*.json')):
+        try: recs.append(json.load(open(p,encoding='utf-8')))
+        except (OSError,ValueError): continue
+    if not recs: raise SystemExit(L[lang]['b_none'])
+    recs.sort(key=lambda r:(r.get('end',''),r.get('start',''),r.get('made','')),reverse=True)
+    fill={'__PRINTER__':open(os.path.join(here,'printer.json'),encoding='utf-8').read(),
+          '__RECEIPTS__':json.dumps(recs,ensure_ascii=False).replace('</','<\\/'),
+          '__LANG__':lang,'__TODAY__':datetime.date.today().isoformat()}
+    body=re.sub('|'.join(fill),lambda mt:fill[mt.group(0)],open(os.path.join(here,'board_template.html'),encoding='utf-8').read())
+    page=(f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
+          '<style>body{margin:0}[hidden]{display:none!important}</style></head><body>'+body+'</body></html>')
+    dst=os.path.join(out,'board.html')
+    with open(dst,'w',encoding='utf-8') as f: f.write(page)
+    return dst
 
 def split_minutes(secs,total):
     """Round each item to whole minutes so the items add up to the rounded total (largest remainder)."""

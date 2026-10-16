@@ -46,6 +46,10 @@ python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [-
 - `--video` when the user wants a video, a reel/TikTok/Short or "something to post" ("video yap", "paylaşmak
   için video"): it also writes `<repo>-receipt.mp4`, the receipt printing out of a thermal printer (1080×1920,
   with sound). It records in real time, so the run takes ~15 s longer; leave it out otherwise.
+- `--board` when the user wants to see their receipts together ("all my receipts", "fişlerim", "pano", a
+  timesheet across projects): every run archives its receipt in `~/vibe-receipts/archive/`, and `--board`
+  rebuilds `~/vibe-receipts/board.html` from all of them. With no repo (`receipts.py --board`) it only rebuilds.
+  For client work pass `--client "<name>"` (the card goes to "to bill"), and `--status paid` once it is invoiced.
 - Leave `--break` out by default (automatic threshold). Pass `--break MIN` only when the user asks for
   a specific threshold ("recalculate with 20 minutes", "15 dk ile hesapla"); re-run and compare.
 - If the same repo lives in two folders (two clones, or a moved folder), pass every matching
@@ -75,8 +79,8 @@ After running, read the printed summary and the CSV, then answer in the user's l
   missing from `PRICES` in `scripts/receipts.py`.
 - The busiest days (from the CSV), and a short summary of what was done per day based on the
   commit subjects (`git -C <repo> log --since ... --until ... --pretty='%ad %s' --date=short`).
-- The path to the HTML report and the receipt PNG (and the MP4 with `--video`), and open them if the
-  environment can show files. Without `--video`, offer it once: a clip of the receipt printing out is made
+- The path to the HTML report and the receipt PNG (and the MP4 with `--video`, the board with `--board`), and
+  open them if the environment can show files. Without `--video`, offer it once: a clip of the receipt printing out is made
   for posting.
 - The `Share:` line, as-is in a code block, as a ready-to-post caption for the receipt PNG or video. Never post it
   anywhere yourself. If the project name is private, offer to re-run with `--name` to hide it.

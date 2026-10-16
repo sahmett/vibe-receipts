@@ -1,0 +1,407 @@
+<title>Vibe Receipts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: two views behind a two-button pill. "Yazıcı": a quiet hero beside a figure card where the isometric
+   printer prints a receipt. "Pano": a status board, three columns of receipt cards and a peek drawer.
+   Strictly black and white; dark first, light mirrors it. */
+:root{
+  --bg:#08080a; --panel:#0e0e10; --raise:#151518; --hover:#1b1b1f; --line:#ffffff12; --line-2:#ffffff22; --line-3:#ffffff3a;
+  --fg:#f3f3f4; --fg-2:#a3a3a8; --fg-3:#6c6c72; --invert:#f3f3f4; --on-invert:#08080a;
+  --paper:#f5f5f3; --ink:#0b0b0c; --ink-2:#6d6d70;
+  --sans:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"Geist Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --bg:#fafafa; --panel:#ffffff; --raise:#f4f4f5; --hover:#ededef; --line:#0000000f; --line-2:#0000001c; --line-3:#00000033;
+  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8b8b90; --invert:#0b0b0c; --on-invert:#fafafa; color-scheme:light}}
+:root[data-theme="light"]{
+  --bg:#fafafa; --panel:#ffffff; --raise:#f4f4f5; --hover:#ededef; --line:#0000000f; --line-2:#0000001c; --line-3:#00000033;
+  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8b8b90; --invert:#0b0b0c; --on-invert:#fafafa; color-scheme:light}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:400 14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* nav pill */
+nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:2px;padding:3px;
+  background:color-mix(in srgb,var(--panel) 82%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--line-2);border-radius:999px;
+  box-shadow:0 8px 24px -12px #0008}
+nav a{display:flex;align-items:center;gap:7px;padding:6px 13px 6px 11px;border-radius:999px;color:var(--fg-2);text-decoration:none;font:500 13px/1 var(--sans)}
+nav a:hover{color:var(--fg)}
+nav a[aria-current="page"]{background:var(--invert);color:var(--on-invert)}
+nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+.view{max-width:1120px;margin:0 auto;padding-inline:16px;padding-block:84px 56px}
+
+/* view 1: printer */
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:56px;align-items:center}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font:500 12px/1 var(--mono);color:var(--fg-2);border:1px solid var(--line-2);border-radius:999px;padding:6px 10px 6px 8px}
+.eyebrow i{width:6px;height:6px;border-radius:50%;background:var(--fg);box-shadow:0 0 0 3px var(--line-2)}
+h1{margin:18px 0 0;font:600 clamp(34px,5.4vw,56px)/1.02 var(--sans);letter-spacing:-.035em;text-wrap:balance}
+h1 span{color:var(--fg-3)}
+.lede{margin:16px 0 0;max-width:46ch;font-size:16px;line-height:1.6;color:var(--fg-2);text-wrap:pretty}
+.actions{margin-top:26px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--line-2);background:var(--raise);cursor:pointer;font-weight:500;text-decoration:none;color:var(--fg)}
+.btn:hover{background:var(--hover);border-color:var(--line-3)}
+.btn.primary{background:var(--invert);color:var(--on-invert);border-color:transparent}
+.btn.primary:hover{opacity:.9}
+.cmd{display:inline-flex;align-items:center;gap:10px;height:36px;padding:0 6px 0 12px;border-radius:8px;border:1px solid var(--line);font:500 12.5px/1 var(--mono);color:var(--fg-2);background:transparent;max-width:100%}
+.cmd code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmd button{height:26px;padding:0 9px;border-radius:6px;border:1px solid var(--line-2);background:var(--raise);cursor:pointer;font:500 12px/1 var(--sans)}
+.facts{margin-top:40px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line)}
+.facts div{padding:14px 14px 0 0;display:flex;flex-direction:column;gap:4px}
+.facts b{font:500 13px/1.3 var(--sans)}.facts span{font-size:12.5px;color:var(--fg-3);line-height:1.45}
+
+.figcard{position:relative;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden;padding-block:34px}
+.corner{position:absolute;z-index:6;font:500 11px/1 var(--mono);letter-spacing:.04em;color:var(--fg-3)}
+.corner.tl{top:14px;left:16px}.corner.tr{top:14px;right:16px;color:var(--fg-2)}
+.corner.bl{bottom:14px;left:16px}.corner.br{bottom:14px;right:16px;color:var(--fg)}
+#fig{position:relative;width:100%;margin:0 auto;cursor:pointer}
+#fig svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+#paper{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform,clip-path}
+.lamp{position:absolute;width:0;height:0;pointer-events:none}
+.lamp::after{content:"";position:absolute;left:-14px;top:-14px;width:28px;height:28px;border-radius:50%;
+  background:radial-gradient(circle,#fff 0 12%,#ffffffa0 22%,#ffffff00 70%);opacity:var(--on,0);transition:opacity .15s}
+#slotshade{position:absolute;left:0;right:0;height:0;background:linear-gradient(180deg,#0000,#00000059);pointer-events:none}
+
+/* the figure's printer: the kit's neutral tokens, one set per theme */
+#fig .iso{--anatomy-paper:#0e0e10;--anatomy-face:#171719;--anatomy-top:#1a1a1c;--anatomy-shade-0:#0b0b0c;--anatomy-shade-1:#0d0d0e;--anatomy-shade-2:#101011;--anatomy-shade-3:#131314;
+  --anatomy-lit-top:#262628;--anatomy-lit-shade:#1d1d1f;--anatomy-hi:#e8e8ea;--anatomy-mid:#7a7a80;--anatomy-lo:#46464b;--anatomy-faint:#2a2a2e;--anatomy-lit:#fff;--anatomy-halo:#000;--anatomy-halo-opacity:.85;--anatomy-dot:#e8e8ea}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) #fig .iso{--anatomy-paper:#fff;--anatomy-face:#fff;--anatomy-top:#fff;--anatomy-shade-0:#dcdcdc;--anatomy-shade-1:#e5e5e5;--anatomy-shade-2:#ededed;--anatomy-shade-3:#f4f4f4;
+  --anatomy-lit-top:#fff;--anatomy-lit-shade:#eee;--anatomy-hi:#1a1a1c;--anatomy-mid:#8a8a8f;--anatomy-lo:#b4b4b8;--anatomy-faint:#d6d6d8;--anatomy-lit:#000;--anatomy-halo:#8a8a8a;--anatomy-halo-opacity:.3;--anatomy-dot:#3a3a3e}}
+:root[data-theme="light"] #fig .iso{--anatomy-paper:#fff;--anatomy-face:#fff;--anatomy-top:#fff;--anatomy-shade-0:#dcdcdc;--anatomy-shade-1:#e5e5e5;--anatomy-shade-2:#ededed;--anatomy-shade-3:#f4f4f4;
+  --anatomy-lit-top:#fff;--anatomy-lit-shade:#eee;--anatomy-hi:#1a1a1c;--anatomy-mid:#8a8a8f;--anatomy-lo:#b4b4b8;--anatomy-faint:#d6d6d8;--anatomy-lit:#000;--anatomy-halo:#8a8a8a;--anatomy-halo-opacity:.3;--anatomy-dot:#3a3a3e}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .lamp::after{background:radial-gradient(circle,#000 0 9%,#0004 16%,#0000 42%)}}
+:root[data-theme="light"] .lamp::after{background:radial-gradient(circle,#000 0 9%,#0004 16%,#0000 42%)}
+
+/* the receipt itself: the layout receipts.py prints, in black on white, sized in em */
+.rc{--fs:15px;font-size:var(--fs);width:34.67em;color:var(--ink);font-family:var(--mono);font-variant-numeric:tabular-nums;line-height:1.6em}
+.rc .tear{height:.67em;background-size:1.33em 1.33em;background-repeat:repeat-x}
+.rc .tear.t{background-image:linear-gradient(45deg,var(--paper) 50%,transparent 50%),linear-gradient(-45deg,var(--paper) 50%,transparent 50%)}
+.rc .tear.b{background-image:linear-gradient(135deg,var(--paper) 50%,transparent 50%),linear-gradient(-135deg,var(--paper) 50%,transparent 50%);background-position:0 100%}
+.rc .paper{background:var(--paper);padding:1.87em 2.4em 2.13em}
+.rc .hd{text-align:center}.rc .hd .t{font-size:1.73em;line-height:1.25em;font-weight:800;letter-spacing:.2em}
+.rc .mu{font-size:.8em;line-height:1.5em;color:var(--ink-2)}.rc .ls{letter-spacing:.13em}
+.rc .hr{border-top:.13em dashed #9a9a9a;margin:1.07em 0}.rc .hr2{border-top:.27em double var(--ink);margin:1.07em 0}
+.rc .row{display:flex;justify-content:space-between;gap:1em;white-space:nowrap}
+.rc .row .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rc .items{display:grid;grid-template-columns:3.73em minmax(0,1fr) auto;row-gap:.13em;white-space:nowrap}
+.rc .items span{overflow:hidden;text-overflow:ellipsis}.rc .items .h{font-size:.73em;color:var(--ink-2);letter-spacing:.1em}.rc .items .r{text-align:right}
+.rc .val{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.4em}
+.rc .val span:first-child{font-size:1.07em;font-weight:800;letter-spacing:.13em}.rc .val span:last-child{font-size:1.87em;line-height:1.2em;font-weight:800}
+.rc .tot{display:flex;justify-content:space-between;align-items:baseline}
+.rc .tot span:first-child{font-size:1.47em;font-weight:800;letter-spacing:.2em}.rc .tot span:last-child{font-size:3.07em;line-height:1.15em;font-weight:800;letter-spacing:-.04em}
+.rc .thr{font-size:.87em;line-height:1.35em}.rc .sp{height:.8em}
+.rc .ft{padding-top:1.6em;display:flex;flex-direction:column;align-items:center;gap:.67em;text-align:center}
+.rc .ft .s{font-size:1.07em;font-weight:800;letter-spacing:.2em}
+.rc .bc{width:20em;max-width:100%;height:3.73em;background:repeating-linear-gradient(90deg,var(--ink) 0 .2em,transparent .2em .33em,var(--ink) .33em .4em,transparent .4em .6em,var(--ink) .6em .87em,transparent .87em 1em,var(--ink) 1em 1.07em,transparent 1.07em 1.33em,var(--ink) 1.33em 1.47em,transparent 1.47em 1.53em)}
+.rc .ft .bn{font-size:.73em;letter-spacing:.2em}.rc .ft .ty{font-size:.8em;letter-spacing:.13em}
+
+/* view 2: board */
+.bhead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.crumb{font:500 12.5px/1 var(--mono);color:var(--fg-3)}
+.crumb b{color:var(--fg-2);font-weight:500}
+h2{margin:10px 0 0;font:600 26px/1.1 var(--sans);letter-spacing:-.025em}
+.seg{display:inline-flex;padding:2px;border:1px solid var(--line-2);border-radius:8px;background:var(--panel)}
+.seg button{border:0;background:transparent;padding:5px 10px;border-radius:6px;cursor:pointer;color:var(--fg-2);font:500 12.5px/1.2 var(--sans)}
+.seg button[aria-pressed="true"]{background:var(--raise);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-2)}
+.metrics{margin-top:22px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.metrics div{padding:14px 16px;display:flex;flex-direction:column;gap:6px;border-left:1px solid var(--line)}
+.metrics div:first-child{border-left:0}
+.metrics span{font-size:12px;color:var(--fg-3)}
+.metrics b{font:600 22px/1 var(--mono);letter-spacing:-.02em}
+.cols{margin-top:18px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start}
+.col{border-radius:12px;background:color-mix(in srgb,var(--panel) 55%,transparent);border:1px solid var(--line);padding:8px;min-height:220px;transition:border-color .15s,background .15s}
+.col.over{border-color:var(--line-3);background:var(--panel)}
+.colh{display:flex;align-items:center;gap:8px;padding:6px 6px 10px;font:500 13px/1 var(--sans)}
+.colh .dot{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--fg)}
+.colh .dot.half{background:linear-gradient(90deg,var(--fg) 50%,transparent 50%)}
+.colh .dot.full{background:var(--fg)}
+.colh .dot.dash{border-style:dashed;border-color:var(--fg-3)}
+.colh .n{color:var(--fg-3);font-family:var(--mono);font-size:12px}
+.colh .h{margin-left:auto;color:var(--fg-2);font-family:var(--mono);font-size:12px}
+.stack{display:flex;flex-direction:column;gap:8px}
+.empty{border:1px dashed var(--line-2);border-radius:10px;padding:18px;text-align:center;color:var(--fg-3);font-size:12.5px}
+
+.tk{position:relative;background:var(--raise);border:1px solid var(--line);border-radius:10px 10px 0 0;padding:12px 13px 16px;cursor:pointer;text-align:left;width:100%;
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat;
+  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat;
+  transition:background .12s,transform .12s}
+.tk:hover{background:var(--hover)}
+.tk.dragging{opacity:.4}
+.tk .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tk .nm{font:500 13.5px/1.2 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk .cl{font:500 11px/1 var(--mono);color:var(--fg-2);border:1px solid var(--line-2);border-radius:5px;padding:3px 6px;white-space:nowrap}
+.tk .pd{margin-top:4px;font:400 12px/1.3 var(--mono);color:var(--fg-3)}
+.tk .mid{margin-top:14px;display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+.tk .hrs{font:600 22px/1 var(--mono);letter-spacing:-.03em}
+.tk .bars{display:flex;align-items:flex-end;gap:2px;height:24px}
+.tk .bars i{width:5px;background:var(--fg-2);border-radius:1px;opacity:.75}
+.tk .meta{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line-2);display:flex;justify-content:space-between;font:400 11.5px/1 var(--mono);color:var(--fg-3)}
+.tk .est{color:var(--fg-2)}
+
+/* peek drawer */
+.scrim{position:fixed;inset:0;z-index:60;background:#0006;opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.on{opacity:1;pointer-events:auto}
+aside{position:fixed;top:0;right:0;bottom:0;z-index:61;width:min(460px,100%);background:var(--panel);border-left:1px solid var(--line-2);transform:translateX(102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
+  display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+aside.on{transform:none}
+.dh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.dh b{font:500 14px/1.2 var(--sans)}
+.x{width:30px;height:30px;border-radius:7px;border:1px solid var(--line-2);background:var(--raise);cursor:pointer;display:grid;place-items:center}
+.x svg{width:14px;height:14px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round}
+.db{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:16px;align-items:center}
+.db .rc{--fs:min(11.4px,calc((100vw - 48px)/34.67))}
+.db .stat{width:100%;display:flex;flex-direction:column;gap:8px}
+.db .lbl{font-size:12px;color:var(--fg-3)}
+.toast{font-size:12.5px;color:var(--fg-2);min-height:1.2em}
+@media (max-width:860px){
+  .hero{grid-template-columns:minmax(0,1fr);gap:32px}
+  .cols{grid-template-columns:minmax(0,1fr)}
+  .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .metrics div:nth-child(3){border-left:0}
+  .metrics div:nth-child(n+3){border-top:1px solid var(--line)}
+}
+@media (max-width:480px){.facts{grid-template-columns:minmax(0,1fr)}.facts div{padding-right:0}}
+@media (prefers-reduced-motion:reduce){aside,.scrim,.tk{transition:none}}
+</style>
+
+<nav aria-label="Views">
+  <a href="#yazici" data-view="yazici"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6V2.5h7V6"/><rect x="1.8" y="6" width="12.4" height="5.6" rx="1.4"/><path d="M4.5 9.5h7v4h-7z"/></svg><span data-ui="navPrinter"></span></a>
+  <a href="#pano" data-view="pano"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.2" width="3.4" height="11.6" rx="1"/><rect x="6.3" y="2.2" width="3.4" height="7.6" rx="1"/><rect x="10.8" y="2.2" width="3.4" height="9.6" rx="1"/></svg><span data-ui="navBoard"></span></a>
+</nav>
+
+<main>
+<section class="view" id="v-yazici" aria-labelledby="t1">
+  <div class="hero">
+    <div>
+      <span class="eyebrow"><i></i><span id="eyebrow"></span></span>
+      <h1 id="t1"><span data-ui="h1a" style="color:inherit"></span> <span data-ui="h1b"></span></h1>
+      <p class="lede" data-ui="lede"></p>
+      <div class="actions">
+        <a class="btn primary" href="#pano" data-ui="openBoard"></a>
+        <span class="cmd"><code id="cmd">python3 receipts.py . --board</code><button type="button" id="copyCmd" data-ui="copy"></button></span>
+      </div>
+      <div class="toast" id="cmdToast" role="status" aria-live="polite"></div>
+      <div class="facts" id="facts"></div>
+    </div>
+    <figure class="figcard" style="margin:0">
+      <span class="corner tl">Fig 1</span><span class="corner tr" data-ui="figTitle"></span>
+      <span class="corner bl" data-ui="figHint"></span><span class="corner br mono" id="readout"></span>
+      <div id="fig" role="img"></div>
+    </figure>
+  </div>
+</section>
+
+<section class="view" id="v-pano" aria-labelledby="t2" hidden>
+  <div class="bhead">
+    <div><div class="crumb"><span data-ui="crumbA"></span> <b>/ <span data-ui="crumbB"></span></b></div><h2 id="t2" data-ui="board"></h2></div>
+    <div class="seg" role="group" id="periods"></div>
+  </div>
+  <div class="metrics" id="metrics"></div>
+  <div class="cols" id="cols"></div>
+</section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside id="drawer" aria-hidden="true" aria-labelledby="dt">
+  <div class="dh"><b id="dt"></b><button class="x" type="button" id="dclose"><svg viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8"/></svg></button></div>
+  <div class="db" id="dbody"></div>
+</aside>
+
+<script>
+// Filled in by receipts.py --board: the printer (tools/printer), every archived receipt, the language and today.
+const PR=__PRINTER__, R=__RECEIPTS__, LANG="__LANG__", TODAY="__TODAY__";
+const UI={
+ tr:{navPrinter:"Yazıcı",navBoard:"Pano",eyebrow:n=>`vibe receipts · ${n} fiş`,h1a:"Çalıştığın saatin fişi.",h1b:"Prompt prompt ölçülür.",
+   lede:"Claude Code loglarındaki kendi prompt aralıklarından gerçek çalışma süreni hesaplar, fişini basar ve panona ekler. Hepsi kendi makinende çalışır.",
+   openBoard:"Panoyu aç",copy:"Kopyala",copied:"Komut kopyalandı.",copyFail:"Komutu seçtim, kopyalayabilirsin.",
+   facts:[["Prompt'larından ölçer","Mola sınırı senin ritminden hesaplanır."],["Yerelde kalır","Prompt'ların makineden çıkmaz."],["Fiş, rapor, video","Her çalıştırma bu panoya eklenir."]],
+   figTitle:"Termal yazıcı",figHint:"Dokun, yeniden bassın",ready:"hazır",printing:"yazdırılıyor",prompts:"prompt",commits:"commit",
+   crumbA:"Fişler",crumbB:"Pano",board:"Pano",periods:[["month","Bu ay"],["q","90 gün"],["all","Tümü"]],period:"Dönem",
+   metrics:["Toplam süre","Faturalanacak","Token değeri","Fiş"],cols:{due:"Faturalanacak",paid:"Faturalandı",personal:"Kişisel"},
+   empty:"Fişi buraya sürükle",status:"Durum",est:"commit tahmini",close:"Kapat",open:"aç",h:"s",m:"d",
+   figLabel:(n,t)=>`İzometrik bir termal fiş yazıcısı, ${n} projesinin ${t} çalışma fişini basıyor.`},
+ en:{navPrinter:"Printer",navBoard:"Board",eyebrow:n=>`vibe receipts · ${n} receipt${n===1?"":"s"}`,h1a:"A receipt for the hours you worked.",h1b:"Measured prompt by prompt.",
+   lede:"Measures your real working time from the gaps between your own prompts in Claude Code logs, prints the receipt and pins it to your board. All on your machine.",
+   openBoard:"Open the board",copy:"Copy",copied:"Command copied.",copyFail:"Command selected, copy it from there.",
+   facts:[["Measured from your prompts","The break threshold comes from your own rhythm."],["Stays local","Your prompts never leave the machine."],["Receipt, report, video","Every run lands on this board."]],
+   figTitle:"Thermal printer",figHint:"Tap to print again",ready:"ready",printing:"printing",prompts:"prompts",commits:"commits",
+   crumbA:"Receipts",crumbB:"Board",board:"Board",periods:[["month","This month"],["q","90 days"],["all","All"]],period:"Period",
+   metrics:["Total time","To bill","Token value","Receipts"],cols:{due:"To bill",paid:"Billed",personal:"Personal"},
+   empty:"Drag a receipt here",status:"Status",est:"commit estimate",close:"Close",open:"open",h:"h",m:"m",
+   figLabel:(n,t)=>`An isometric thermal receipt printer printing the ${t} work receipt for ${n}.`},
+}[LANG==="tr"?"tr":"en"];
+const fmt=m=>`${Math.floor(m/60)}${UI.h} ${String(m%60).padStart(2,"0")}${UI.m}`;
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const usd=v=>"$"+v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const still=matchMedia("(prefers-reduced-motion: reduce)");
+document.documentElement.lang=LANG==="tr"?"tr":"en";
+document.querySelectorAll("[data-ui]").forEach(el=>{const v=UI[el.dataset.ui]; if(typeof v==="string") el.textContent=v;});
+document.getElementById("eyebrow").textContent=UI.eyebrow(R.length);
+document.getElementById("facts").innerHTML=UI.facts.map(([b,s])=>`<div><b>${esc(b)}</b><span>${esc(s)}</span></div>`).join("");
+document.getElementById("dclose").setAttribute("aria-label",UI.close);
+
+// a receipt in its own run's language and units, the layout receipts.py prints
+function receipt(r){
+  const L=r.L, f=m=>`${Math.floor(m/60)}${L.h} ${String(m%60).padStart(2,"0")}${L.m}`;
+  const rows=r.items.map(([q,l,m])=>`<span>${Number(q).toLocaleString("en-US")}</span><span>${esc(l)}</span><span class="r">${f(m)}</span>`).join("");
+  const stats=r.stats.map(s=>s?`<div class="row"><span>${esc(s[0])}</span><span>${esc(s[1])}</span></div>`:`<div class="sp"></div>`).join("");
+  return `<div class="rc"><div class="tear t"></div><div class="paper">
+    <div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mu">github.com/sahmett/vibe-receipts</div><div class="mu ls">${esc(L.kind)}</div></div>
+    <div class="hr"></div>
+    <div class="row"><span>${esc(L.project)}</span><span class="nm">${esc(r.name)}</span></div>
+    ${r.built?`<div class="row"><span>${esc(L.built)}</span><span class="nm">${esc(r.built.toUpperCase())}</span></div>`:""}
+    <div class="row"><span>${esc(L.period)}</span><span>${esc(r.period)}</span></div>
+    ${r.active?`<div class="row"><span>${esc(L.active)}</span><span>${r.active}</span></div>`:""}
+    <div class="hr"></div>
+    <div class="items"><span class="h">${esc(L.qty)}</span><span class="h">${esc(L.item)}</span><span class="h r">${esc(L.time)}</span>${rows}</div>
+    <div class="hr"></div>${stats}<div class="hr2"></div>
+    ${r.value_text?`<div class="val"><span>${esc(L.value)}</span><span>${esc(r.value_text)}</span></div>`:""}
+    <div class="tot"><span>${esc(L.total)}</span><span>${f(r.min)}</span></div>
+    <div class="hr"></div>
+    <div class="row thr"><span>${esc(r.thr[0])}</span><b>${esc(r.thr[1])}</b></div>${r.thr[2]?`<div class="mu">${esc(r.thr[2])}</div>`:""}
+    <div class="ft"><div class="s">* SHOW THE RECEIPTS *</div><div class="bc"></div><div class="mu bn">${esc(r.name.toUpperCase())} · ${esc(r.end)}</div><div class="ty">THANK YOU FOR VIBING</div></div>
+  </div><div class="tear b"></div></div>`;
+}
+const count=r=>r.estimate?`${r.commits} ${UI.commits}`:`${r.prompts.toLocaleString("en-US")} ${UI.prompts}`;
+
+// ---- view 1: the isometric printer prints the latest receipt ----
+const G=PR.geo, VS=2.4, RW=34.67*15;           // video px per viewBox unit; the receipt's own width in px
+const LATEST=R[0];                              // receipts.py sorts newest first
+const fig=document.getElementById("fig"), readout=document.getElementById("readout");
+fig.setAttribute("aria-label",UI.figLabel(LATEST.name,fmt(LATEST.min)));
+let VB, S=1, paperEl, shadeEl, lamps=[], H=0, q=0, PHw=0;
+function buildFigure(){
+  fig.innerHTML=PR.back+`<div id="paper">${receipt(LATEST)}<div id="slotshade"></div></div>`+PR.front+G.leds.slice(0,2).map(()=>`<span class="lamp"></span>`).join("");
+  paperEl=document.getElementById("paper"); shadeEl=document.getElementById("slotshade"); lamps=[...fig.querySelectorAll(".lamp")];
+  H=paperEl.querySelector(".rc").getBoundingClientRect().height||900; q=G.paperW/RW; PHw=H*q;
+  // crop the 1080 x 1920 video frame to the printer and the fully printed sheet above it
+  const top=(G.origin[1]+PHw*G.v[1])/VS-14, bottom=1868/VS, left=26, right=1080/VS-26;
+  VB=[left,top,right-left,bottom-top];
+  fig.querySelectorAll("svg").forEach(s=>{s.setAttribute("viewBox",VB.join(" ")); s.removeAttribute("width"); s.removeAttribute("height"); s.setAttribute("preserveAspectRatio","xMidYMid meet");});
+  fig.style.aspectRatio=`${VB[2]} / ${VB[3]}`;
+  fig.style.maxWidth=`calc((100svh - 190px) * ${(VB[2]/VB[3]).toFixed(4)})`;
+  new ResizeObserver(()=>{S=fig.clientWidth/VB[2]; paint();}).observe(fig);
+}
+const state={o:0,feed:0,lift:0,alpha:1};
+function paint(){
+  if(!paperEl) return;
+  const {o,feed,lift,alpha}=state, u=G.u, v=G.v, O=G.origin, t=o+lift;
+  const m=[q*u[0],q*u[1],-q*v[0],-q*v[1],O[0]+t*v[0],O[1]+t*v[1]].map(x=>x/VS);
+  m[4]-=VB[0]; m[5]-=VB[1];
+  paperEl.style.transform=`matrix(${m.map(x=>x*S).join(",")})`;
+  const L=Math.max(0,o/q);                      // px of receipt out of the slot
+  paperEl.style.clipPath=lift>0?"none":`inset(0 0 ${Math.max(0,H-L)}px 0)`;
+  paperEl.style.opacity=alpha;
+  shadeEl.style.top=(L-7/q)+"px"; shadeEl.style.height=(7/q)+"px"; shadeEl.style.opacity=lift>0?0:1;
+  lamps.forEach((el,i)=>{const [x,y]=G.leds[i]; el.style.left=((x/VS-VB[0])*S)+"px"; el.style.top=((y/VS-VB[1])*S)+"px"; el.style.setProperty("--on",i?feed:1);});
+}
+const ACC=.14, DP=4.4, DONE=`${fmt(LATEST.min)} · ${count(LATEST)}`;
+const feedAt=x=>{const a=ACC, k=1/(1-a); return x<a?k*x*x/(2*a):x>1-a?1-k*(1-x)*(1-x)/(2*a):k*(x-a/2);};
+let t0=0, raf=0;
+function run(now){
+  const t=(now-t0)/1000, idle=.5, end=idle+DP, hold=end+2.6, out=hold+.7;
+  let o=0, feed=0, lift=0, alpha=1;
+  if(t<idle){o=0;}
+  else if(t<end){o=PHw*feedAt((t-idle)/DP); feed=.75+.25*Math.sin(t*44);}
+  else if(t<hold){o=PHw;}
+  else if(t<out){const k=(t-hold)/.7; o=PHw; lift=40*k*k; alpha=1-k;}
+  else {t0=now;}
+  Object.assign(state,{o,feed,lift,alpha}); paint();
+  readout.textContent=t<idle?UI.ready:t<end?`${UI.printing} · %${Math.round(o/PHw*100)}`:t<out?DONE:UI.ready;
+  raf=requestAnimationFrame(run);
+}
+function startPrint(){
+  cancelAnimationFrame(raf);
+  if(still.matches){Object.assign(state,{o:PHw,feed:0,lift:0,alpha:1}); paint(); readout.textContent=DONE; return;}
+  t0=performance.now(); raf=requestAnimationFrame(run);
+}
+fig.addEventListener("click",startPrint);
+document.getElementById("copyCmd").addEventListener("click",async()=>{
+  const t=document.getElementById("cmdToast"), c=document.getElementById("cmd");
+  try{await navigator.clipboard.writeText(c.textContent); t.textContent=UI.copied;}
+  catch(e){const r=document.createRange(); r.selectNodeContents(c); const s=getSelection(); s.removeAllRanges(); s.addRange(r); t.textContent=UI.copyFail;}
+});
+
+// ---- view 2: the board ----
+const COLS=[{k:"due",dot:"half"},{k:"paid",dot:"full"},{k:"personal",dot:"dash"}];
+// A status changed here is kept in this browser, until a run with --status sets a new one for that receipt.
+const SAVE="vr-board-status";
+let saved={}; try{saved=JSON.parse(localStorage.getItem(SAVE)||"{}")||{};}catch(e){saved={};}
+R.forEach(r=>{const s=saved[r.key]; if(s&&s.base===r.status) r.shown=s.s; else r.shown=r.status;});
+function setStatus(r,k){r.shown=k; saved[r.key]={s:k,base:r.status}; try{localStorage.setItem(SAVE,JSON.stringify(saved));}catch(e){}}
+let period="q";
+const daysAgo=n=>{const d=new Date(TODAY+"T12:00:00"); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10);};
+const inPeriod=r=>period==="all"?true:period==="month"?r.end>=TODAY.slice(0,7)+"-01":r.end>=daysAgo(90);
+document.getElementById("periods").setAttribute("aria-label",UI.period);
+document.getElementById("periods").innerHTML=UI.periods.map(([k,l])=>`<button type="button" data-p="${k}" aria-pressed="${k===period}">${esc(l)}</button>`).join("");
+document.querySelectorAll("#periods button").forEach(b=>b.addEventListener("click",()=>{
+  period=b.dataset.p; document.querySelectorAll("#periods button").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); board();
+}));
+
+function card(r){
+  const mx=Math.max(1,...r.items.map(i=>i[2]));
+  const bars=r.items.slice(-12).map(i=>`<i style="height:${Math.max(12,i[2]/mx*100)}%"></i>`).join("");
+  return `<button class="tk" type="button" draggable="true" data-key="${esc(r.key)}" aria-label="${esc(r.name)}, ${fmt(r.min)}, ${UI.open}">
+    <div class="top"><span class="nm">${esc(r.name)}</span>${r.client?`<span class="cl">${esc(r.client)}</span>`:""}</div>
+    <div class="pd">${esc(r.period)}</div>
+    <div class="mid"><span class="hrs">${fmt(r.min)}</span><span class="bars" aria-hidden="true">${bars}</span></div>
+    <div class="meta"><span>${r.estimate?`<span class="est">${UI.est}</span>`:count(r)}</span><span>${r.value_text?esc(r.value_text):"—"}</span></div>
+  </button>`;
+}
+function board(){
+  const list=R.filter(inPeriod), sum=k=>list.filter(r=>r.shown===k).reduce((s,r)=>s+r.min,0);
+  const vals=[fmt(list.reduce((s,r)=>s+r.min,0)),fmt(sum("due")),usd(list.reduce((s,r)=>s+(r.value||0),0)),String(list.length)];
+  document.getElementById("metrics").innerHTML=UI.metrics.map((l,i)=>`<div><span>${esc(l)}</span><b>${vals[i]}</b></div>`).join("");
+  document.getElementById("cols").innerHTML=COLS.map(c=>{
+    const items=list.filter(r=>r.shown===c.k);
+    return `<section class="col" data-k="${c.k}" aria-label="${esc(UI.cols[c.k])}"><div class="colh"><span class="dot ${c.dot}"></span>${esc(UI.cols[c.k])}<span class="n">${items.length}</span><span class="h">${fmt(items.reduce((s,r)=>s+r.min,0))}</span></div>
+      <div class="stack">${items.length?items.map(card).join(""):`<div class="empty">${esc(UI.empty)}</div>`}</div></section>`;
+  }).join("");
+  wire();
+}
+let dragKey=null;
+function wire(){
+  document.querySelectorAll(".tk").forEach(el=>{
+    el.addEventListener("click",()=>peek(el.dataset.key));
+    el.addEventListener("dragstart",e=>{dragKey=el.dataset.key; el.classList.add("dragging"); e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain",dragKey);});
+    el.addEventListener("dragend",()=>{el.classList.remove("dragging"); dragKey=null;});
+  });
+  document.querySelectorAll(".col").forEach(col=>{
+    col.addEventListener("dragover",e=>{if(dragKey){e.preventDefault(); col.classList.add("over");}});
+    col.addEventListener("dragleave",e=>{if(!col.contains(e.relatedTarget)) col.classList.remove("over");});
+    col.addEventListener("drop",e=>{e.preventDefault(); col.classList.remove("over"); const r=R.find(x=>x.key===(dragKey||e.dataTransfer.getData("text/plain"))); if(r){setStatus(r,col.dataset.k); board();}});
+  });
+}
+
+const drawer=document.getElementById("drawer"), scrim=document.getElementById("scrim"), dbody=document.getElementById("dbody");
+let lastFocus=null;
+function peek(key){
+  const r=R.find(x=>x.key===key); lastFocus=document.activeElement;
+  document.getElementById("dt").textContent=r.name;
+  dbody.innerHTML=`<div class="stat"><span class="lbl">${esc(UI.status)}</span><div class="seg" role="group" aria-label="${esc(UI.status)}">${COLS.map(c=>`<button type="button" data-k="${c.k}" aria-pressed="${r.shown===c.k}">${esc(UI.cols[c.k])}</button>`).join("")}</div></div>${receipt(r)}`;
+  dbody.querySelectorAll(".seg button").forEach(b=>b.addEventListener("click",()=>{setStatus(r,b.dataset.k); dbody.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); board();}));
+  drawer.classList.add("on"); scrim.classList.add("on"); drawer.setAttribute("aria-hidden","false");
+  document.getElementById("dclose").focus({preventScroll:true});
+}
+function closePeek(){drawer.classList.remove("on"); scrim.classList.remove("on"); drawer.setAttribute("aria-hidden","true"); if(lastFocus&&lastFocus.focus) lastFocus.focus({preventScroll:true});}
+document.getElementById("dclose").addEventListener("click",closePeek);
+scrim.addEventListener("click",closePeek);
+addEventListener("keydown",e=>{if(e.key==="Escape"&&drawer.classList.contains("on")) closePeek();});
+
+// ---- the two views ----
+function route(){
+  const v=location.hash==="#pano"?"pano":"yazici";
+  document.getElementById("v-yazici").hidden=v!=="yazici"; document.getElementById("v-pano").hidden=v!=="pano";
+  document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.view===v) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current");});
+  if(v==="yazici"){if(!paperEl) buildFigure(); startPrint();} else cancelAnimationFrame(raf);
+  scrollTo(0,0);
+}
+addEventListener("hashchange",route);
+board(); route();   // the figure is built the first time its view shows, so the receipt can be measured
+</script>
