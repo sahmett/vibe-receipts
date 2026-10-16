@@ -3,65 +3,53 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600;700;800&display=swap">
 <style>
-/* Layout: two views behind a two-button pill. "Yazıcı": a quiet hero beside a figure card where the isometric
-   printer prints a receipt. "Pano": a status board, three columns of receipt cards and a peek drawer.
-   Strictly black and white; dark first, light mirrors it. */
+/* Layout: two views behind a two-button pill. "Printer": the device dead centre, a short title under it, the
+   newest receipt rising out of it. "Board": three quiet columns of receipt cards; a card flips over into the
+   full receipt, which floats beside it (no modal). Black and white; dark first, light mirrors it. */
 :root{
-  --bg:#08080a; --panel:#0e0e10; --raise:#151518; --hover:#1b1b1f; --line:#ffffff12; --line-2:#ffffff22; --line-3:#ffffff3a;
-  --fg:#f3f3f4; --fg-2:#a3a3a8; --fg-3:#6c6c72; --invert:#f3f3f4; --on-invert:#08080a;
-  --paper:#f5f5f3; --ink:#0b0b0c; --ink-2:#6d6d70;
+  --bg:#09090b; --panel:#111113; --raise:#17171a; --hover:#1c1c20; --line:#ffffff10; --line-2:#ffffff1f; --line-3:#ffffff38;
+  --fg:#f4f4f5; --fg-2:#a1a1a7; --fg-3:#67676d; --invert:#f4f4f5; --on-invert:#09090b; --shadow:#000000b3;
+  --paper:#f6f6f4; --ink:#0b0b0c; --ink-2:#6d6d70;
   --sans:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"Geist Mono",ui-monospace,Menlo,Consolas,monospace;
+  --spring:cubic-bezier(.2,.9,.25,1.12); --out:cubic-bezier(.2,.8,.2,1);
   color-scheme:dark;
 }
 @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
-  --bg:#fafafa; --panel:#ffffff; --raise:#f4f4f5; --hover:#ededef; --line:#0000000f; --line-2:#0000001c; --line-3:#00000033;
-  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8b8b90; --invert:#0b0b0c; --on-invert:#fafafa; color-scheme:light}}
+  --bg:#fafafa; --panel:#ffffff; --raise:#f4f4f5; --hover:#efeff1; --line:#0000000d; --line-2:#00000019; --line-3:#00000030;
+  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8d8d92; --invert:#0b0b0c; --on-invert:#fafafa; --shadow:#0000003d; color-scheme:light}}
 :root[data-theme="light"]{
-  --bg:#fafafa; --panel:#ffffff; --raise:#f4f4f5; --hover:#ededef; --line:#0000000f; --line-2:#0000001c; --line-3:#00000033;
-  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8b8b90; --invert:#0b0b0c; --on-invert:#fafafa; color-scheme:light}
+  --bg:#fafafa; --panel:#ffffff; --raise:#f4f4f5; --hover:#efeff1; --line:#0000000d; --line-2:#00000019; --line-3:#00000030;
+  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8d8d92; --invert:#0b0b0c; --on-invert:#fafafa; --shadow:#0000003d; color-scheme:light}
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg);font:400 14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--fg);font:400 14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
 button{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--fg);outline-offset:2px}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-/* nav pill */
-nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:2px;padding:3px;
-  background:color-mix(in srgb,var(--panel) 82%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--line-2);border-radius:999px;
-  box-shadow:0 8px 24px -12px #0008}
-nav a{display:flex;align-items:center;gap:7px;padding:6px 13px 6px 11px;border-radius:999px;color:var(--fg-2);text-decoration:none;font:500 13px/1 var(--sans)}
+nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);left:50%;transform:translateX(-50%);z-index:80;display:flex;gap:2px;padding:3px;
+  background:color-mix(in srgb,var(--panel) 78%,transparent);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);
+  border:1px solid var(--line-2);border-radius:999px}
+nav a{position:relative;display:flex;align-items:center;gap:7px;padding:6px 13px 6px 11px;border-radius:999px;color:var(--fg-2);text-decoration:none;font:500 13px/1 var(--sans);transition:color .2s}
 nav a:hover{color:var(--fg)}
-nav a[aria-current="page"]{background:var(--invert);color:var(--on-invert)}
+nav a[aria-current="page"]{color:var(--on-invert)}
+nav .pill{position:absolute;top:3px;bottom:3px;border-radius:999px;background:var(--invert);transition:left .35s var(--spring),width .35s var(--spring)}
+nav a,nav svg{z-index:1}
 nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 
-.view{max-width:1120px;margin:0 auto;padding-inline:16px;padding-block:84px 56px}
-
-/* view 1: printer */
-.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:56px;align-items:center}
-.eyebrow{display:inline-flex;align-items:center;gap:8px;font:500 12px/1 var(--mono);color:var(--fg-2);border:1px solid var(--line-2);border-radius:999px;padding:6px 10px 6px 8px}
-.eyebrow i{width:6px;height:6px;border-radius:50%;background:var(--fg);box-shadow:0 0 0 3px var(--line-2)}
-h1{margin:18px 0 0;font:600 clamp(34px,5.4vw,56px)/1.02 var(--sans);letter-spacing:-.035em;text-wrap:balance}
-h1 span{color:var(--fg-3)}
-.lede{margin:16px 0 0;max-width:46ch;font-size:16px;line-height:1.6;color:var(--fg-2);text-wrap:pretty}
-.actions{margin-top:26px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--line-2);background:var(--raise);cursor:pointer;font-weight:500;text-decoration:none;color:var(--fg)}
-.btn:hover{background:var(--hover);border-color:var(--line-3)}
-.btn.primary{background:var(--invert);color:var(--on-invert);border-color:transparent}
-.btn.primary:hover{opacity:.9}
-.cmd{display:inline-flex;align-items:center;gap:10px;height:36px;padding:0 6px 0 12px;border-radius:8px;border:1px solid var(--line);font:500 12.5px/1 var(--mono);color:var(--fg-2);background:transparent;max-width:100%}
-.cmd code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cmd button{height:26px;padding:0 9px;border-radius:6px;border:1px solid var(--line-2);background:var(--raise);cursor:pointer;font:500 12px/1 var(--sans)}
-.facts{margin-top:40px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line)}
-.facts div{padding:14px 14px 0 0;display:flex;flex-direction:column;gap:4px}
-.facts b{font:500 13px/1.3 var(--sans)}.facts span{font-size:12.5px;color:var(--fg-3);line-height:1.45}
-
-.figcard{position:relative;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden;padding-block:34px}
-.corner{position:absolute;z-index:6;font:500 11px/1 var(--mono);letter-spacing:.04em;color:var(--fg-3)}
-.corner.tl{top:14px;left:16px}.corner.tr{top:14px;right:16px;color:var(--fg-2)}
-.corner.bl{bottom:14px;left:16px}.corner.br{bottom:14px;right:16px;color:var(--fg)}
-#fig{position:relative;width:100%;margin:0 auto;cursor:pointer}
-#fig svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+/* printer view: the device centred, the caption below it */
+.stage{min-height:100svh;display:grid;grid-template-rows:1fr auto 1fr;justify-items:center;padding-inline:16px}
+#fig{grid-row:2;position:relative;cursor:pointer;animation:arrive .8s var(--out) both}
+#fig svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
+@keyframes arrive{from{opacity:0;transform:translateY(10px) scale(.985)}}
+.cap{grid-row:3;align-self:start;padding-top:34px;padding-bottom:48px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;animation:arrive .8s .12s var(--out) both}
+.cap h1{margin:0;font:600 17px/1.25 var(--sans);letter-spacing:-.01em}
+.cap p{margin:0;max-width:38ch;color:var(--fg-2);font-size:14px;line-height:1.55;text-wrap:balance}
+.cap .readout{margin-top:6px;font:500 12px/1 var(--mono);color:var(--fg-3);display:flex;align-items:center;gap:8px}
+.cap .readout i{width:6px;height:6px;border-radius:50%;background:var(--fg-3);transition:background .2s}
+.cap .readout.live i{background:var(--fg);box-shadow:0 0 0 3px var(--line-2)}
+.fade-top{position:fixed;left:0;right:0;top:0;height:120px;z-index:40;pointer-events:none;background:linear-gradient(var(--bg) 30%,transparent)}
 #paper{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform,clip-path}
 .lamp{position:absolute;width:0;height:0;pointer-events:none}
 .lamp::after{content:"";position:absolute;left:-14px;top:-14px;width:28px;height:28px;border-radius:50%;
@@ -101,140 +89,105 @@ h1 span{color:var(--fg-3)}
 .rc .bc{width:20em;max-width:100%;height:3.73em;background:repeating-linear-gradient(90deg,var(--ink) 0 .2em,transparent .2em .33em,var(--ink) .33em .4em,transparent .4em .6em,var(--ink) .6em .87em,transparent .87em 1em,var(--ink) 1em 1.07em,transparent 1.07em 1.33em,var(--ink) 1.33em 1.47em,transparent 1.47em 1.53em)}
 .rc .ft .bn{font-size:.73em;letter-spacing:.2em}.rc .ft .ty{font-size:.8em;letter-spacing:.13em}
 
-/* view 2: board */
+
+/* board view */
+.view{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:96px 64px}
 .bhead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
-.crumb{font:500 12.5px/1 var(--mono);color:var(--fg-3)}
-.crumb b{color:var(--fg-2);font-weight:500}
-h2{margin:10px 0 0;font:600 26px/1.1 var(--sans);letter-spacing:-.025em}
-.seg{display:inline-flex;padding:2px;border:1px solid var(--line-2);border-radius:8px;background:var(--panel)}
-.seg button{border:0;background:transparent;padding:5px 10px;border-radius:6px;cursor:pointer;color:var(--fg-2);font:500 12.5px/1.2 var(--sans)}
-.seg button[aria-pressed="true"]{background:var(--raise);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-2)}
-.metrics{margin-top:22px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:12px;background:var(--panel)}
-.metrics div{padding:14px 16px;display:flex;flex-direction:column;gap:6px;border-left:1px solid var(--line)}
-.metrics div:first-child{border-left:0}
+h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
+.seg{display:inline-flex;padding:2px;border-radius:9px;background:var(--raise);border:1px solid var(--line)}
+.seg button{border:0;background:transparent;padding:5px 11px;border-radius:7px;cursor:pointer;color:var(--fg-2);font:500 12.5px/1.2 var(--sans);transition:background .2s,color .2s}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--fg);box-shadow:0 1px 2px #0003,inset 0 0 0 1px var(--line-2)}
+.metrics{margin-top:28px;display:flex;gap:12px 44px;flex-wrap:wrap;padding-bottom:26px;border-bottom:1px solid var(--line)}
+.metrics div{display:flex;flex-direction:column;gap:6px;min-width:0}
 .metrics span{font-size:12px;color:var(--fg-3)}
-.metrics b{font:600 22px/1 var(--mono);letter-spacing:-.02em}
-.cols{margin-top:18px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start}
-.col{border-radius:12px;background:color-mix(in srgb,var(--panel) 55%,transparent);border:1px solid var(--line);padding:8px;min-height:220px;transition:border-color .15s,background .15s}
-.col.over{border-color:var(--line-3);background:var(--panel)}
-.colh{display:flex;align-items:center;gap:8px;padding:6px 6px 10px;font:500 13px/1 var(--sans)}
-.colh .dot{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--fg)}
-.colh .dot.half{background:linear-gradient(90deg,var(--fg) 50%,transparent 50%)}
-.colh .dot.full{background:var(--fg)}
-.colh .dot.dash{border-style:dashed;border-color:var(--fg-3)}
+.metrics b{font:500 20px/1 var(--mono);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.cols{margin-top:26px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;align-items:start}
+.col{min-height:200px;border-radius:14px;padding:4px;margin:-4px;outline:1px dashed transparent;outline-offset:2px;transition:outline-color .15s,background .15s}
+.col.over{outline-color:var(--line-3);background:color-mix(in srgb,var(--panel) 60%,transparent)}
+.colh{display:flex;align-items:center;gap:8px;padding:2px 2px 12px;font:500 13px/1 var(--sans);color:var(--fg-2)}
+.colh .dot{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--fg-2)}
+.colh .dot.half{background:linear-gradient(90deg,var(--fg-2) 50%,transparent 50%)}
+.colh .dot.full{background:var(--fg-2)}
+.colh .dot.dash{border-style:dashed}
 .colh .n{color:var(--fg-3);font-family:var(--mono);font-size:12px}
-.colh .h{margin-left:auto;color:var(--fg-2);font-family:var(--mono);font-size:12px}
-.stack{display:flex;flex-direction:column;gap:8px}
-.empty{border:1px dashed var(--line-2);border-radius:10px;padding:18px;text-align:center;color:var(--fg-3);font-size:12.5px}
+.colh .h{margin-left:auto;color:var(--fg-3);font-family:var(--mono);font-size:12px}
+.stack{display:flex;flex-direction:column;gap:10px;perspective:900px}
+.empty{border:1px dashed var(--line-2);border-radius:12px;padding:22px;text-align:center;color:var(--fg-3);font-size:12.5px}
 
-.tk{position:relative;background:var(--raise);border:1px solid var(--line);border-radius:10px 10px 0 0;padding:12px 13px 16px;cursor:pointer;text-align:left;width:100%;
+.tk{position:relative;display:block;width:100%;text-align:left;cursor:pointer;border:0;padding:0;background:none;transform-style:preserve-3d;
+  transition:transform .35s var(--out),opacity .2s}
+.tk .face{background:var(--panel);border:1px solid var(--line);border-radius:12px 12px 0 0;padding:14px 14px 18px;transition:background .2s,border-color .2s;
   -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat;
-  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat;
-  transition:background .12s,transform .12s}
-.tk:hover{background:var(--hover)}
-.tk.dragging{opacity:.4}
+  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat}
+.tk:hover .face{background:var(--raise);border-color:var(--line-2)}
+.tk.dragging{opacity:.35}
+.tk.away{visibility:hidden}
 .tk .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.tk .nm{font:500 13.5px/1.2 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tk .cl{font:500 11px/1 var(--mono);color:var(--fg-2);border:1px solid var(--line-2);border-radius:5px;padding:3px 6px;white-space:nowrap}
-.tk .pd{margin-top:4px;font:400 12px/1.3 var(--mono);color:var(--fg-3)}
-.tk .mid{margin-top:14px;display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
-.tk .hrs{font:600 22px/1 var(--mono);letter-spacing:-.03em}
-.tk .bars{display:flex;align-items:flex-end;gap:2px;height:24px}
-.tk .bars i{width:5px;background:var(--fg-2);border-radius:1px;opacity:.75}
-.tk .meta{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line-2);display:flex;justify-content:space-between;font:400 11.5px/1 var(--mono);color:var(--fg-3)}
-.tk .est{color:var(--fg-2)}
+.tk .nm{font:500 13.5px/1.25 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk .cl{font:500 11px/1 var(--mono);color:var(--fg-2);background:var(--raise);border-radius:5px;padding:4px 6px;white-space:nowrap}
+.tk .pd{margin-top:4px;font:400 12px/1.3 var(--mono);color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk .mid{margin-top:16px;display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+.tk .hrs{font:500 22px/1 var(--mono);letter-spacing:-.03em}
+.tk .bars{display:flex;align-items:flex-end;gap:2px;height:22px}
+.tk .bars i{width:4px;background:var(--fg-3);border-radius:1px}
+.tk .meta{margin-top:14px;display:flex;justify-content:space-between;font:400 11.5px/1 var(--mono);color:var(--fg-3)}
+.enter .tk{animation:rise .55s var(--out) both;animation-delay:calc(var(--i)*45ms)}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}}
 
-/* peek drawer */
-.scrim{position:fixed;inset:0;z-index:60;background:#0006;opacity:0;pointer-events:none;transition:opacity .2s}
-.scrim.on{opacity:1;pointer-events:auto}
-aside{position:fixed;top:0;right:0;bottom:0;z-index:61;width:min(460px,100%);background:var(--panel);border-left:1px solid var(--line-2);transform:translateX(102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
-  display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-aside.on{transform:none}
-.dh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line)}
-.dh b{font:500 14px/1.2 var(--sans)}
-.x{width:30px;height:30px;border-radius:7px;border:1px solid var(--line-2);background:var(--raise);cursor:pointer;display:grid;place-items:center}
-.x svg{width:14px;height:14px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round}
-.db{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:16px;align-items:center}
-.db .rc{--fs:min(11.4px,calc((100vw - 48px)/34.67))}
-.db .stat{width:100%;display:flex;flex-direction:column;gap:8px}
-.db .lbl{font-size:12px;color:var(--fg-3)}
-.toast{font-size:12.5px;color:var(--fg-2);min-height:1.2em}
-@media (max-width:860px){
-  .hero{grid-template-columns:minmax(0,1fr);gap:32px}
-  .cols{grid-template-columns:minmax(0,1fr)}
-  .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .metrics div:nth-child(3){border-left:0}
-  .metrics div:nth-child(n+3){border-top:1px solid var(--line)}
-}
-@media (max-width:480px){.facts{grid-template-columns:minmax(0,1fr)}.facts div{padding-right:0}}
-@media (prefers-reduced-motion:reduce){aside,.scrim,.tk{transition:none}}
+/* the receipt that flips out of a card: a floating sheet, no backdrop, the page stays usable */
+.float{position:fixed;left:0;top:0;z-index:70;transform-origin:0 0;will-change:transform}
+.float .sheet{filter:drop-shadow(0 28px 40px var(--shadow)) drop-shadow(0 4px 8px var(--shadow))}
+.float .tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.float .x{width:30px;height:30px;border-radius:8px;border:1px solid var(--line-2);background:var(--panel);cursor:pointer;display:grid;place-items:center;flex:none}
+.float .x svg{width:13px;height:13px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round}
+.float .seg{background:var(--panel)}
+
+@media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){#fig,.cap,.enter .tk{animation:none}.tk,nav .pill{transition:none}}
 </style>
 
 <nav aria-label="Views">
+  <span class="pill" aria-hidden="true"></span>
   <a href="#yazici" data-view="yazici"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6V2.5h7V6"/><rect x="1.8" y="6" width="12.4" height="5.6" rx="1.4"/><path d="M4.5 9.5h7v4h-7z"/></svg><span data-ui="navPrinter"></span></a>
   <a href="#pano" data-view="pano"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.2" width="3.4" height="11.6" rx="1"/><rect x="6.3" y="2.2" width="3.4" height="7.6" rx="1"/><rect x="10.8" y="2.2" width="3.4" height="9.6" rx="1"/></svg><span data-ui="navBoard"></span></a>
 </nav>
 
 <main>
-<section class="view" id="v-yazici" aria-labelledby="t1">
-  <div class="hero">
-    <div>
-      <span class="eyebrow"><i></i><span id="eyebrow"></span></span>
-      <h1 id="t1"><span data-ui="h1a" style="color:inherit"></span> <span data-ui="h1b"></span></h1>
-      <p class="lede" data-ui="lede"></p>
-      <div class="actions">
-        <a class="btn primary" href="#pano" data-ui="openBoard"></a>
-        <span class="cmd"><code id="cmd">python3 receipts.py . --board</code><button type="button" id="copyCmd" data-ui="copy"></button></span>
-      </div>
-      <div class="toast" id="cmdToast" role="status" aria-live="polite"></div>
-      <div class="facts" id="facts"></div>
-    </div>
-    <figure class="figcard" style="margin:0">
-      <span class="corner tl">Fig 1</span><span class="corner tr" data-ui="figTitle"></span>
-      <span class="corner bl" data-ui="figHint"></span><span class="corner br mono" id="readout"></span>
-      <div id="fig" role="img"></div>
-    </figure>
+<section id="v-yazici" class="stage" aria-labelledby="t1">
+  <div class="fade-top" aria-hidden="true"></div>
+  <div id="fig" role="img"></div>
+  <div class="cap">
+    <h1 id="t1" data-ui="title"></h1>
+    <p data-ui="lede"></p>
+    <div class="readout" id="readout"><i></i><span></span></div>
   </div>
 </section>
 
 <section class="view" id="v-pano" aria-labelledby="t2" hidden>
-  <div class="bhead">
-    <div><div class="crumb"><span data-ui="crumbA"></span> <b>/ <span data-ui="crumbB"></span></b></div><h2 id="t2" data-ui="board"></h2></div>
-    <div class="seg" role="group" id="periods"></div>
-  </div>
+  <div class="bhead"><h2 id="t2" data-ui="board"></h2><div class="seg" role="group" id="periods"></div></div>
   <div class="metrics" id="metrics"></div>
   <div class="cols" id="cols"></div>
 </section>
 </main>
 
-<div class="scrim" id="scrim"></div>
-<aside id="drawer" aria-hidden="true" aria-labelledby="dt">
-  <div class="dh"><b id="dt"></b><button class="x" type="button" id="dclose"><svg viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8"/></svg></button></div>
-  <div class="db" id="dbody"></div>
-</aside>
-
 <script>
 // Filled in by receipts.py --board: the printer (tools/printer), every archived receipt, the language and today.
 const PR=__PRINTER__, R=__RECEIPTS__, LANG="__LANG__", TODAY="__TODAY__";
 const UI={
- tr:{navPrinter:"Yazıcı",navBoard:"Pano",eyebrow:n=>`vibe receipts · ${n} fiş`,h1a:"Çalıştığın saatin fişi.",h1b:"Prompt prompt ölçülür.",
-   lede:"Claude Code loglarındaki kendi prompt aralıklarından gerçek çalışma süreni hesaplar, fişini basar ve panona ekler. Hepsi kendi makinende çalışır.",
-   openBoard:"Panoyu aç",copy:"Kopyala",copied:"Komut kopyalandı.",copyFail:"Komutu seçtim, kopyalayabilirsin.",
-   facts:[["Prompt'larından ölçer","Mola sınırı senin ritminden hesaplanır."],["Yerelde kalır","Prompt'ların makineden çıkmaz."],["Fiş, rapor, video","Her çalıştırma bu panoya eklenir."]],
-   figTitle:"Termal yazıcı",figHint:"Dokun, yeniden bassın",ready:"hazır",printing:"yazdırılıyor",prompts:"prompt",commits:"commit",
-   crumbA:"Fişler",crumbB:"Pano",board:"Pano",periods:[["month","Bu ay"],["q","90 gün"],["all","Tümü"]],period:"Dönem",
+ tr:{navPrinter:"Yazıcı",navBoard:"Pano",title:"Çalıştığın saatin fişi",
+   lede:"Claude Code'daki kendi prompt aralıklarından ölçülür. Hepsi kendi makinende kalır.",
+   ready:"hazır",printing:"yazdırılıyor",prompts:"prompt",commits:"commit",
+   board:"Pano",periods:[["month","Bu ay"],["q","90 gün"],["all","Tümü"]],period:"Dönem",
    metrics:["Toplam süre","Faturalanacak","Token değeri","Fiş"],cols:{due:"Faturalanacak",paid:"Faturalandı",personal:"Kişisel"},
-   empty:"Fişi buraya sürükle",status:"Durum",est:"commit tahmini",close:"Kapat",open:"aç",h:"s",m:"d",
-   figLabel:(n,t)=>`İzometrik bir termal fiş yazıcısı, ${n} projesinin ${t} çalışma fişini basıyor.`},
- en:{navPrinter:"Printer",navBoard:"Board",eyebrow:n=>`vibe receipts · ${n} receipt${n===1?"":"s"}`,h1a:"A receipt for the hours you worked.",h1b:"Measured prompt by prompt.",
-   lede:"Measures your real working time from the gaps between your own prompts in Claude Code logs, prints the receipt and pins it to your board. All on your machine.",
-   openBoard:"Open the board",copy:"Copy",copied:"Command copied.",copyFail:"Command selected, copy it from there.",
-   facts:[["Measured from your prompts","The break threshold comes from your own rhythm."],["Stays local","Your prompts never leave the machine."],["Receipt, report, video","Every run lands on this board."]],
-   figTitle:"Thermal printer",figHint:"Tap to print again",ready:"ready",printing:"printing",prompts:"prompts",commits:"commits",
-   crumbA:"Receipts",crumbB:"Board",board:"Board",periods:[["month","This month"],["q","90 days"],["all","All"]],period:"Period",
+   empty:"Fişi buraya sürükle",status:"Durum",est:"commit tahmini",close:"Kapat",open:"aç",h:"s",m:"d",reprint:"Yeniden bas",
+   figLabel:(n,t)=>`Bir termal fiş yazıcısı, ${n} projesinin ${t} çalışma fişini basıyor.`},
+ en:{navPrinter:"Printer",navBoard:"Board",title:"A receipt for the hours you worked",
+   lede:"Measured from the gaps between your own prompts in Claude Code. It all stays on your machine.",
+   ready:"ready",printing:"printing",prompts:"prompts",commits:"commits",
+   board:"Board",periods:[["month","This month"],["q","90 days"],["all","All"]],period:"Period",
    metrics:["Total time","To bill","Token value","Receipts"],cols:{due:"To bill",paid:"Billed",personal:"Personal"},
-   empty:"Drag a receipt here",status:"Status",est:"commit estimate",close:"Close",open:"open",h:"h",m:"m",
-   figLabel:(n,t)=>`An isometric thermal receipt printer printing the ${t} work receipt for ${n}.`},
+   empty:"Drag a receipt here",status:"Status",est:"commit estimate",close:"Close",open:"open",h:"h",m:"m",reprint:"Print again",
+   figLabel:(n,t)=>`A thermal receipt printer printing the ${t} work receipt for ${n}.`},
 }[LANG==="tr"?"tr":"en"];
 const fmt=m=>`${Math.floor(m/60)}${UI.h} ${String(m%60).padStart(2,"0")}${UI.m}`;
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -242,9 +195,6 @@ const usd=v=>"$"+v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFracti
 const still=matchMedia("(prefers-reduced-motion: reduce)");
 document.documentElement.lang=LANG==="tr"?"tr":"en";
 document.querySelectorAll("[data-ui]").forEach(el=>{const v=UI[el.dataset.ui]; if(typeof v==="string") el.textContent=v;});
-document.getElementById("eyebrow").textContent=UI.eyebrow(R.length);
-document.getElementById("facts").innerHTML=UI.facts.map(([b,s])=>`<div><b>${esc(b)}</b><span>${esc(s)}</span></div>`).join("");
-document.getElementById("dclose").setAttribute("aria-label",UI.close);
 
 // a receipt in its own run's language and units, the layout receipts.py prints
 function receipt(r){
@@ -270,23 +220,25 @@ function receipt(r){
 }
 const count=r=>r.estimate?`${r.commits} ${UI.commits}`:`${r.prompts.toLocaleString("en-US")} ${UI.prompts}`;
 
-// ---- view 1: the isometric printer prints the latest receipt ----
-const G=PR.geo, VS=2.4, RW=34.67*15;           // video px per viewBox unit; the receipt's own width in px
-const LATEST=R[0];                              // receipts.py sorts newest first
-const fig=document.getElementById("fig"), readout=document.getElementById("readout");
-fig.setAttribute("aria-label",UI.figLabel(LATEST.name,fmt(LATEST.min)));
+// ---- printer view: the device centred; the newest receipt rises out of it and fades under the nav ----
+const G=PR.geo, VS=2.4, RW=34.67*15;            // video px per viewBox unit; the receipt's own width in px
+const LATEST=R[0];                               // receipts.py sorts newest first
+const fig=document.getElementById("fig"), readout=document.getElementById("readout"), rtext=readout.querySelector("span");
+fig.setAttribute("aria-label",UI.figLabel(LATEST.name,fmt(LATEST.min))); fig.title=UI.reprint;
 let VB, S=1, paperEl, shadeEl, lamps=[], H=0, q=0, PHw=0;
 function buildFigure(){
   fig.innerHTML=PR.back+`<div id="paper">${receipt(LATEST)}<div id="slotshade"></div></div>`+PR.front+G.leds.slice(0,2).map(()=>`<span class="lamp"></span>`).join("");
   paperEl=document.getElementById("paper"); shadeEl=document.getElementById("slotshade"); lamps=[...fig.querySelectorAll(".lamp")];
   H=paperEl.querySelector(".rc").getBoundingClientRect().height||900; q=G.paperW/RW; PHw=H*q;
-  // crop the 1080 x 1920 video frame to the printer and the fully printed sheet above it
-  const top=(G.origin[1]+PHw*G.v[1])/VS-14, bottom=1868/VS, left=26, right=1080/VS-26;
+  // the box is the device alone, so the device is what sits in the middle; the paper overflows above it
+  const top=G.origin[1]/VS-86, bottom=1868/VS, left=26, right=1080/VS-26;
   VB=[left,top,right-left,bottom-top];
   fig.querySelectorAll("svg").forEach(s=>{s.setAttribute("viewBox",VB.join(" ")); s.removeAttribute("width"); s.removeAttribute("height"); s.setAttribute("preserveAspectRatio","xMidYMid meet");});
-  fig.style.aspectRatio=`${VB[2]} / ${VB[3]}`;
-  fig.style.maxWidth=`calc((100svh - 190px) * ${(VB[2]/VB[3]).toFixed(4)})`;
-  new ResizeObserver(()=>{S=fig.clientWidth/VB[2]; paint();}).observe(fig);
+  size(); addEventListener("resize",size);
+}
+function size(){
+  const w=Math.min(innerWidth-32,560,innerHeight*.42*VB[2]/VB[3]);
+  S=w/VB[2]; fig.style.width=w+"px"; fig.style.height=(VB[3]*S)+"px"; paint();
 }
 const state={o:0,feed:0,lift:0,alpha:1};
 function paint(){
@@ -295,17 +247,19 @@ function paint(){
   const m=[q*u[0],q*u[1],-q*v[0],-q*v[1],O[0]+t*v[0],O[1]+t*v[1]].map(x=>x/VS);
   m[4]-=VB[0]; m[5]-=VB[1];
   paperEl.style.transform=`matrix(${m.map(x=>x*S).join(",")})`;
-  const L=Math.max(0,o/q);                      // px of receipt out of the slot
+  const L=Math.max(0,o/q);
   paperEl.style.clipPath=lift>0?"none":`inset(0 0 ${Math.max(0,H-L)}px 0)`;
   paperEl.style.opacity=alpha;
   shadeEl.style.top=(L-7/q)+"px"; shadeEl.style.height=(7/q)+"px"; shadeEl.style.opacity=lift>0?0:1;
   lamps.forEach((el,i)=>{const [x,y]=G.leds[i]; el.style.left=((x/VS-VB[0])*S)+"px"; el.style.top=((y/VS-VB[1])*S)+"px"; el.style.setProperty("--on",i?feed:1);});
 }
-const ACC=.14, DP=4.4, DONE=`${fmt(LATEST.min)} · ${count(LATEST)}`;
+const ACC=.14, DP=Math.min(6,Math.max(3.6,PHwGuess())), DONE=`${fmt(LATEST.min)} · ${count(LATEST)}`;
+function PHwGuess(){return 2.2+LATEST.items.length*.35;}   // longer receipts print a little longer
 const feedAt=x=>{const a=ACC, k=1/(1-a); return x<a?k*x*x/(2*a):x>1-a?1-k*(1-x)*(1-x)/(2*a):k*(x-a/2);};
 let t0=0, raf=0;
+function say(text,live){rtext.textContent=text; readout.classList.toggle("live",!!live);}
 function run(now){
-  const t=(now-t0)/1000, idle=.5, end=idle+DP, hold=end+2.6, out=hold+.7;
+  const t=(now-t0)/1000, idle=.6, end=idle+DP, hold=end+3, out=hold+.7;
   let o=0, feed=0, lift=0, alpha=1;
   if(t<idle){o=0;}
   else if(t<end){o=PHw*feedAt((t-idle)/DP); feed=.75+.25*Math.sin(t*44);}
@@ -313,95 +267,166 @@ function run(now){
   else if(t<out){const k=(t-hold)/.7; o=PHw; lift=40*k*k; alpha=1-k;}
   else {t0=now;}
   Object.assign(state,{o,feed,lift,alpha}); paint();
-  readout.textContent=t<idle?UI.ready:t<end?`${UI.printing} · %${Math.round(o/PHw*100)}`:t<out?DONE:UI.ready;
+  if(t<idle) say(UI.ready); else if(t<end) say(`${UI.printing} · %${Math.round(o/PHw*100)}`,true); else if(t<out) say(DONE); else say(UI.ready);
   raf=requestAnimationFrame(run);
 }
 function startPrint(){
   cancelAnimationFrame(raf);
-  if(still.matches){Object.assign(state,{o:PHw,feed:0,lift:0,alpha:1}); paint(); readout.textContent=DONE; return;}
+  if(still.matches){Object.assign(state,{o:PHw,feed:0,lift:0,alpha:1}); paint(); say(DONE); return;}
   t0=performance.now(); raf=requestAnimationFrame(run);
 }
 fig.addEventListener("click",startPrint);
-document.getElementById("copyCmd").addEventListener("click",async()=>{
-  const t=document.getElementById("cmdToast"), c=document.getElementById("cmd");
-  try{await navigator.clipboard.writeText(c.textContent); t.textContent=UI.copied;}
-  catch(e){const r=document.createRange(); r.selectNodeContents(c); const s=getSelection(); s.removeAllRanges(); s.addRange(r); t.textContent=UI.copyFail;}
-});
 
-// ---- view 2: the board ----
+// ---- board view ----
 const COLS=[{k:"due",dot:"half"},{k:"paid",dot:"full"},{k:"personal",dot:"dash"}];
 // A status changed here is kept in this browser, until a run with --status sets a new one for that receipt.
 const SAVE="vr-board-status";
 let saved={}; try{saved=JSON.parse(localStorage.getItem(SAVE)||"{}")||{};}catch(e){saved={};}
-R.forEach(r=>{const s=saved[r.key]; if(s&&s.base===r.status) r.shown=s.s; else r.shown=r.status;});
+R.forEach(r=>{const s=saved[r.key]; r.shown=s&&s.base===r.status?s.s:r.status;});
 function setStatus(r,k){r.shown=k; saved[r.key]={s:k,base:r.status}; try{localStorage.setItem(SAVE,JSON.stringify(saved));}catch(e){}}
 let period="q";
 const daysAgo=n=>{const d=new Date(TODAY+"T12:00:00"); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10);};
 const inPeriod=r=>period==="all"?true:period==="month"?r.end>=TODAY.slice(0,7)+"-01":r.end>=daysAgo(90);
-document.getElementById("periods").setAttribute("aria-label",UI.period);
-document.getElementById("periods").innerHTML=UI.periods.map(([k,l])=>`<button type="button" data-p="${k}" aria-pressed="${k===period}">${esc(l)}</button>`).join("");
-document.querySelectorAll("#periods button").forEach(b=>b.addEventListener("click",()=>{
-  period=b.dataset.p; document.querySelectorAll("#periods button").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); board();
+const periodsEl=document.getElementById("periods");
+periodsEl.setAttribute("aria-label",UI.period);
+periodsEl.innerHTML=UI.periods.map(([k,l])=>`<button type="button" data-p="${k}" aria-pressed="${k===period}">${esc(l)}</button>`).join("");
+periodsEl.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+  period=b.dataset.p; periodsEl.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); closeSheet(true); board(true);
 }));
 
-function card(r){
-  const mx=Math.max(1,...r.items.map(i=>i[2]));
-  const bars=r.items.slice(-12).map(i=>`<i style="height:${Math.max(12,i[2]/mx*100)}%"></i>`).join("");
-  return `<button class="tk" type="button" draggable="true" data-key="${esc(r.key)}" aria-label="${esc(r.name)}, ${fmt(r.min)}, ${UI.open}">
+function card(r,i){
+  const mx=Math.max(1,...r.items.map(x=>x[2]));
+  const bars=r.items.slice(-12).map(x=>`<i style="height:${Math.max(12,x[2]/mx*100)}%"></i>`).join("");
+  return `<button class="tk" type="button" draggable="true" data-key="${esc(r.key)}" style="--i:${i}" aria-label="${esc(r.name)}, ${fmt(r.min)}, ${UI.open}"><div class="face">
     <div class="top"><span class="nm">${esc(r.name)}</span>${r.client?`<span class="cl">${esc(r.client)}</span>`:""}</div>
     <div class="pd">${esc(r.period)}</div>
     <div class="mid"><span class="hrs">${fmt(r.min)}</span><span class="bars" aria-hidden="true">${bars}</span></div>
-    <div class="meta"><span>${r.estimate?`<span class="est">${UI.est}</span>`:count(r)}</span><span>${r.value_text?esc(r.value_text):"—"}</span></div>
-  </button>`;
+    <div class="meta"><span>${r.estimate?UI.est:count(r)}</span><span>${r.value_text?esc(r.value_text):"—"}</span></div>
+  </div></button>`;
 }
-function board(){
+const colsEl=document.getElementById("cols");
+function board(enter){
   const list=R.filter(inPeriod), sum=k=>list.filter(r=>r.shown===k).reduce((s,r)=>s+r.min,0);
   const vals=[fmt(list.reduce((s,r)=>s+r.min,0)),fmt(sum("due")),usd(list.reduce((s,r)=>s+(r.value||0),0)),String(list.length)];
   document.getElementById("metrics").innerHTML=UI.metrics.map((l,i)=>`<div><span>${esc(l)}</span><b>${vals[i]}</b></div>`).join("");
-  document.getElementById("cols").innerHTML=COLS.map(c=>{
+  let i=0;
+  colsEl.innerHTML=COLS.map(c=>{
     const items=list.filter(r=>r.shown===c.k);
     return `<section class="col" data-k="${c.k}" aria-label="${esc(UI.cols[c.k])}"><div class="colh"><span class="dot ${c.dot}"></span>${esc(UI.cols[c.k])}<span class="n">${items.length}</span><span class="h">${fmt(items.reduce((s,r)=>s+r.min,0))}</span></div>
-      <div class="stack">${items.length?items.map(card).join(""):`<div class="empty">${esc(UI.empty)}</div>`}</div></section>`;
+      <div class="stack">${items.length?items.map(r=>card(r,i++)).join(""):`<div class="empty">${esc(UI.empty)}</div>`}</div></section>`;
   }).join("");
+  colsEl.classList.toggle("enter",!!enter&&!still.matches);
+  if(sheet) document.querySelector(`.tk[data-key="${CSS.escape(sheet.key)}"]`)?.classList.add("away");
   wire();
 }
 let dragKey=null;
+const fine=matchMedia("(hover:hover) and (pointer:fine)");
 function wire(){
-  document.querySelectorAll(".tk").forEach(el=>{
-    el.addEventListener("click",()=>peek(el.dataset.key));
-    el.addEventListener("dragstart",e=>{dragKey=el.dataset.key; el.classList.add("dragging"); e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain",dragKey);});
+  colsEl.querySelectorAll(".tk").forEach(el=>{
+    el.addEventListener("click",()=>openSheet(el));
+    el.addEventListener("dragstart",e=>{closeSheet(true); el.style.transform=""; dragKey=el.dataset.key; el.classList.add("dragging"); e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain",dragKey);});
     el.addEventListener("dragend",()=>{el.classList.remove("dragging"); dragKey=null;});
+    // a slight tilt toward the pointer, like picking up a slip of paper
+    el.addEventListener("pointermove",e=>{
+      if(!fine.matches||still.matches||dragKey) return;
+      const b=el.getBoundingClientRect(), x=(e.clientX-b.left)/b.width-.5, y=(e.clientY-b.top)/b.height-.5;
+      el.style.transform=`rotateX(${(-y*6).toFixed(2)}deg) rotateY(${(x*8).toFixed(2)}deg) translateZ(6px)`;
+    });
+    el.addEventListener("pointerleave",()=>{el.style.transform="";});
   });
-  document.querySelectorAll(".col").forEach(col=>{
+  colsEl.querySelectorAll(".col").forEach(col=>{
     col.addEventListener("dragover",e=>{if(dragKey){e.preventDefault(); col.classList.add("over");}});
     col.addEventListener("dragleave",e=>{if(!col.contains(e.relatedTarget)) col.classList.remove("over");});
-    col.addEventListener("drop",e=>{e.preventDefault(); col.classList.remove("over"); const r=R.find(x=>x.key===(dragKey||e.dataTransfer.getData("text/plain"))); if(r){setStatus(r,col.dataset.k); board();}});
+    col.addEventListener("drop",e=>{e.preventDefault(); col.classList.remove("over"); const r=R.find(x=>x.key===(dragKey||e.dataTransfer.getData("text/plain"))); if(r){setStatus(r,col.dataset.k); board(false);}});
   });
 }
 
-const drawer=document.getElementById("drawer"), scrim=document.getElementById("scrim"), dbody=document.getElementById("dbody");
-let lastFocus=null;
-function peek(key){
-  const r=R.find(x=>x.key===key); lastFocus=document.activeElement;
-  document.getElementById("dt").textContent=r.name;
-  dbody.innerHTML=`<div class="stat"><span class="lbl">${esc(UI.status)}</span><div class="seg" role="group" aria-label="${esc(UI.status)}">${COLS.map(c=>`<button type="button" data-k="${c.k}" aria-pressed="${r.shown===c.k}">${esc(UI.cols[c.k])}</button>`).join("")}</div></div>${receipt(r)}`;
-  dbody.querySelectorAll(".seg button").forEach(b=>b.addEventListener("click",()=>{setStatus(r,b.dataset.k); dbody.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); board();}));
-  drawer.classList.add("on"); scrim.classList.add("on"); drawer.setAttribute("aria-hidden","false");
-  document.getElementById("dclose").focus({preventScroll:true});
+// ---- the receipt flips out of its card and floats beside it; it flips back in on close ----
+let sheet=null;   // {key, el, cardEl}
+const P="perspective(1400px)";
+function fitSheet(el){
+  let fs=11.4; el.querySelector(".rc").style.setProperty("--fs",fs+"px");
+  const h=el.getBoundingClientRect().height, w=34.67*fs, room=innerHeight-96;
+  const k=Math.min(1,room/h,(innerWidth-32)/w); fs*=k; el.querySelector(".rc").style.setProperty("--fs",fs+"px");
+  el.style.width=(34.67*fs)+"px";
+  return el.getBoundingClientRect();
 }
-function closePeek(){drawer.classList.remove("on"); scrim.classList.remove("on"); drawer.setAttribute("aria-hidden","true"); if(lastFocus&&lastFocus.focus) lastFocus.focus({preventScroll:true});}
-document.getElementById("dclose").addEventListener("click",closePeek);
-scrim.addEventListener("click",closePeek);
-addEventListener("keydown",e=>{if(e.key==="Escape"&&drawer.classList.contains("on")) closePeek();});
+function placeFor(card,b){
+  const c=card.getBoundingClientRect(), gap=18;
+  let left=c.right+gap;                                    // beside the card, on the side with room
+  if(left+b.width>innerWidth-16) left=c.left-gap-b.width;
+  if(left<16) left=Math.min(Math.max(16,c.left+c.width/2-b.width/2),innerWidth-16-b.width);
+  const top=Math.min(Math.max(72,c.top-24),Math.max(72,innerHeight-16-b.height));
+  return {left,top,c};
+}
+function openSheet(cardEl){
+  const key=cardEl.dataset.key, r=R.find(x=>x.key===key);
+  if(sheet&&sheet.key===key){closeSheet(); return;}
+  closeSheet(true);
+  cardEl.style.transform="";
+  const el=document.createElement("div"); el.className="float"; el.setAttribute("role","dialog"); el.setAttribute("aria-label",r.name);
+  el.innerHTML=`<div class="tools"><div class="seg" role="group" aria-label="${esc(UI.status)}">${COLS.map(c=>`<button type="button" data-k="${c.k}" aria-pressed="${r.shown===c.k}">${esc(UI.cols[c.k])}</button>`).join("")}</div>
+    <button class="x" type="button" aria-label="${esc(UI.close)}"><svg viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8"/></svg></button></div><div class="sheet">${receipt(r)}</div>`;
+  el.style.visibility="hidden"; document.body.appendChild(el);
+  const b=fitSheet(el), {left,top,c}=placeFor(cardEl,b);
+  el.style.left=left+"px"; el.style.top=top+"px"; el.style.visibility="";
+  sheet={key,el,cardEl,left,top};
+  el.querySelector(".x").addEventListener("click",()=>closeSheet());
+  el.querySelectorAll(".seg button").forEach(btn=>btn.addEventListener("click",()=>{
+    setStatus(r,btn.dataset.k); el.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",String(x===btn)));
+    board(false); const nc=document.querySelector(`.tk[data-key="${CSS.escape(key)}"]`); if(nc){sheet.cardEl=nc; nc.classList.add("away");}
+  }));
+  if(still.matches){cardEl.classList.add("away"); el.animate([{opacity:0},{opacity:1}],{duration:160}); el.querySelector(".x").focus({preventScroll:true}); return;}
+  // 1) the card turns away on its own axis; 2) the receipt turns in from the card's spot, growing to full size
+  const from=`translate(${c.left-left}px,${c.top-top}px) scale(${c.width/b.width},${c.height/b.height})`;
+  cardEl.animate([{transform:`${P} rotateY(0deg)`},{transform:`${P} rotateY(90deg)`}],{duration:200,easing:"cubic-bezier(.5,0,.9,.5)",fill:"forwards"})
+    .finished.then(()=>{cardEl.classList.add("away"); cardEl.getAnimations().forEach(a=>a.cancel());});
+  el.animate([   // per-step easing, so the sheet waits edge-on until the card has turned away (200 ms)
+    {transform:`${from} ${P} rotateY(-90deg)`,offset:0},
+    {transform:`${from} ${P} rotateY(-90deg)`,offset:.26,easing:"cubic-bezier(.2,.8,.25,1)"},
+    {transform:`translate(0,0) scale(1) ${P} rotateY(10deg) rotateZ(-1.2deg)`,offset:.8,easing:"ease-in-out"},
+    {transform:`translate(0,0) scale(1) ${P} rotateY(0deg) rotateZ(0deg)`,offset:1}],
+    {duration:760});
+  el.querySelector(".tools").animate([{opacity:0,transform:"translateY(-6px)"},{opacity:0,offset:.6},{opacity:1,transform:"none"}],{duration:760,easing:"ease-out"});
+  setTimeout(()=>el.querySelector(".x").focus({preventScroll:true}),400);
+}
+function closeSheet(instant){
+  if(!sheet) return;
+  const {el,key}=sheet; sheet=null;
+  const cardEl=document.querySelector(`.tk[data-key="${CSS.escape(key)}"]`);
+  const done=()=>{el.remove(); if(cardEl) cardEl.classList.remove("away");};
+  if(instant||still.matches||!cardEl){done(); return;}
+  const b=el.getBoundingClientRect(), c=cardEl.getBoundingClientRect();
+  const to=`translate(${c.left-b.left}px,${c.top-b.top}px) scale(${c.width/b.width},${c.height/b.height})`;
+  el.animate([{transform:`translate(0,0) scale(1) ${P} rotateY(0deg)`},{transform:`${to} ${P} rotateY(90deg)`}],{duration:380,easing:"cubic-bezier(.6,0,.7,.4)",fill:"forwards"})
+    .finished.then(()=>{
+      el.remove(); cardEl.classList.remove("away");
+      cardEl.animate([{transform:`${P} rotateY(-90deg)`},{transform:`${P} rotateY(6deg)`,offset:.7},{transform:`${P} rotateY(0deg)`}],{duration:320,easing:"cubic-bezier(.2,.8,.3,1)"});
+      cardEl.focus({preventScroll:true});
+    });
+}
+addEventListener("pointerdown",e=>{if(sheet&&!sheet.el.contains(e.target)&&!e.target.closest(".tk")&&!e.target.closest("nav")) closeSheet();});
+addEventListener("keydown",e=>{if(e.key==="Escape"&&sheet) closeSheet();});
+addEventListener("resize",()=>{   // keep the open receipt beside its card, sized to the new window
+  if(!sheet) return; const b=fitSheet(sheet.el), {left,top}=placeFor(sheet.cardEl,b);
+  sheet.el.style.left=left+"px"; sheet.el.style.top=top+"px";
+});
+addEventListener("scroll",()=>{if(sheet){const c=sheet.cardEl.getBoundingClientRect(); if(c.bottom<0||c.top>innerHeight) closeSheet(true);}},{passive:true});
 
-// ---- the two views ----
+// ---- the two views; the pill slides to the current one ----
+const pill=document.querySelector("nav .pill");
+function movePill(a){pill.style.left=a.offsetLeft+"px"; pill.style.width=a.offsetWidth+"px";}
+let boardShown=false;
 function route(){
   const v=location.hash==="#pano"?"pano":"yazici";
+  closeSheet(true);
   document.getElementById("v-yazici").hidden=v!=="yazici"; document.getElementById("v-pano").hidden=v!=="pano";
-  document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.view===v) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current");});
-  if(v==="yazici"){if(!paperEl) buildFigure(); startPrint();} else cancelAnimationFrame(raf);
+  document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.view===v){a.setAttribute("aria-current","page"); movePill(a);} else a.removeAttribute("aria-current");});
+  if(v==="yazici"){if(!paperEl) buildFigure(); else size(); startPrint();}
+  else {cancelAnimationFrame(raf); board(!boardShown); boardShown=true;}
   scrollTo(0,0);
 }
 addEventListener("hashchange",route);
-board(); route();   // the figure is built the first time its view shows, so the receipt can be measured
+(document.fonts?document.fonts.ready:Promise.resolve()).then(()=>{const a=document.querySelector('nav a[aria-current="page"]'); if(a) movePill(a);});
+route();   // the figure is built the first time its view shows, so the receipt can be measured
 </script>
