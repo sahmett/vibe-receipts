@@ -154,7 +154,11 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 @keyframes rise{from{opacity:0}}
 
 /* the receipt that flips out of a card: a floating sheet, no backdrop, the page stays usable */
-.float{position:fixed;left:0;top:0;z-index:70;transform-origin:0 0;will-change:transform}
+/* the open receipt: in the middle of the window, over the page blurred behind it */
+.veil{position:fixed;inset:0;z-index:85;opacity:0;pointer-events:none;transition:opacity .4s var(--out);
+  background:color-mix(in srgb,var(--bg) 42%,transparent);backdrop-filter:blur(14px) saturate(.85);-webkit-backdrop-filter:blur(14px) saturate(.85)}
+.veil.on{opacity:1;pointer-events:auto}
+.float{position:fixed;left:0;top:0;z-index:86;transform-origin:0 0;will-change:transform;outline:none}
 .float .sheet{--sx:0px;--sy:28px;filter:drop-shadow(var(--sx) var(--sy) 40px var(--shadow)) drop-shadow(0 4px 8px var(--shadow))}
 /* the open receipt tips toward the pointer: the far side shades, a gloss slides across the paper */
 .float .tilt{transform-origin:50% 50%;will-change:transform}
@@ -162,10 +166,6 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 .float .shade,.float .gloss{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s}
 .float .gloss{mix-blend-mode:soft-light}
 .float.tilting .shade,.float.tilting .gloss{opacity:1}
-.float .tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
-.float .x{width:30px;height:30px;border-radius:8px;border:1px solid var(--line-2);background:var(--panel);cursor:pointer;display:grid;place-items:center;flex:none}
-.float .x svg{width:13px;height:13px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round}
-.float .seg{background:var(--panel)}
 
 @media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
 @media (prefers-reduced-motion:reduce){#fig,.cap,.enter .tk{animation:none}.tk,nav .pill{transition:none}}
@@ -409,19 +409,17 @@ let sheet=null;   // {key, el, cardEl}
 const P="perspective(1400px)";
 function fitSheet(el){
   let fs=11.4; el.querySelector(".rc").style.setProperty("--fs",fs+"px");
-  const h=el.getBoundingClientRect().height, w=34.67*fs, room=innerHeight-96;
+  const h=el.getBoundingClientRect().height, w=34.67*fs, room=innerHeight-56;
   const k=Math.min(1,room/h,(innerWidth-32)/w); fs*=k; el.querySelector(".rc").style.setProperty("--fs",fs+"px");
   el.style.width=(34.67*fs)+"px";
   return el.getBoundingClientRect();
 }
-function placeFor(card,b){
-  const c=card.getBoundingClientRect(), gap=18;
-  let left=c.right+gap;                                    // beside the card, on the side with room
-  if(left+b.width>innerWidth-16) left=c.left-gap-b.width;
-  if(left<16) left=Math.min(Math.max(16,c.left+c.width/2-b.width/2),innerWidth-16-b.width);
-  const top=Math.min(Math.max(72,c.top-24),Math.max(72,innerHeight-16-b.height));
-  return {left,top,c};
+function placeFor(card,b){   // the middle of the window
+  const c=card.getBoundingClientRect();
+  return {left:Math.max(16,(innerWidth-b.width)/2),top:Math.max(16,(innerHeight-b.height)/2),c};
 }
+const veil=document.createElement("div"); veil.className="veil"; veil.setAttribute("aria-hidden","true"); document.body.appendChild(veil);
+["wheel","touchmove"].forEach(n=>veil.addEventListener(n,e=>e.preventDefault(),{passive:false}));   // the page stays put behind it, with no scrollbar change
 // A spring follows the pointer: up to 9° left and right, 6° up and down; the shadow moves the other way.
 function tiltable(el){
   if(!fine.matches||still.matches) return null;
@@ -452,19 +450,14 @@ function openSheet(cardEl){
   if(sheet&&sheet.key===key){closeSheet(); return;}
   closeSheet(true);
   cardEl.style.transition="none"; cardEl.style.transform="";
-  const el=document.createElement("div"); el.className="float"; el.setAttribute("role","dialog"); el.setAttribute("aria-label",r.name);
-  el.innerHTML=`<div class="tools"><div class="seg" role="group" aria-label="${esc(UI.status)}">${COLS.map(c=>`<button type="button" data-k="${c.k}" aria-pressed="${r.shown===c.k}">${esc(UI.cols[c.k])}</button>`).join("")}</div>
-    <button class="x" type="button" aria-label="${esc(UI.close)}"><svg viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8"/></svg></button></div><div class="sheet"><div class="tilt">${receipt(r)}</div></div>`;
+  const el=document.createElement("div"); el.className="float"; el.setAttribute("role","dialog"); el.setAttribute("aria-modal","true"); el.setAttribute("aria-label",r.name); el.tabIndex=-1;
+  el.innerHTML=`<div class="sheet"><div class="tilt">${receipt(r)}</div></div>`;
   el.style.visibility="hidden"; document.body.appendChild(el);
   const b=fitSheet(el), {left,top,c}=placeFor(cardEl,b);
   el.style.left=left+"px"; el.style.top=top+"px"; el.style.visibility="";
   sheet={key,el,cardEl,left,top,tilt:tiltable(el)};
-  el.querySelector(".x").addEventListener("click",()=>closeSheet());
-  el.querySelectorAll(".seg button").forEach(btn=>btn.addEventListener("click",()=>{
-    setStatus(r,btn.dataset.k); el.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",String(x===btn)));
-    board(false); const nc=document.querySelector(`.tk[data-key="${CSS.escape(key)}"]`); if(nc){sheet.cardEl=nc; nc.classList.add("away");}
-  }));
-  if(still.matches){cardEl.classList.add("away"); el.animate([{opacity:0},{opacity:1}],{duration:160}); el.querySelector(".x").focus({preventScroll:true}); return;}
+  veil.classList.add("on");
+  if(still.matches){cardEl.classList.add("away"); el.animate([{opacity:0},{opacity:1}],{duration:160}); el.focus({preventScroll:true}); return;}
   // 1) the card turns away on its own axis; 2) the receipt turns in from the card's spot, growing to full size
   const from=`translate(${c.left-left}px,${c.top-top}px) scale(${c.width/b.width},${c.height/b.height})`;
   cardEl.animate([{transform:`${P} rotateY(0deg)`},{transform:`${P} rotateY(90deg)`}],{duration:200,easing:"cubic-bezier(.5,0,.9,.5)",fill:"forwards"})
@@ -475,12 +468,12 @@ function openSheet(cardEl){
     {transform:`translate(0,0) scale(1) ${P} rotateY(10deg) rotateZ(-1.2deg)`,offset:.8,easing:"ease-in-out"},
     {transform:`translate(0,0) scale(1) ${P} rotateY(0deg) rotateZ(0deg)`,offset:1}],
     {duration:760});
-  el.querySelector(".tools").animate([{opacity:0,transform:"translateY(-6px)"},{opacity:0,offset:.6},{opacity:1,transform:"none"}],{duration:760,easing:"ease-out"});
-  setTimeout(()=>el.querySelector(".x").focus({preventScroll:true}),400);
+  setTimeout(()=>el.focus({preventScroll:true}),400);
 }
-function closeSheet(instant){
+function closeSheet(instant,byKey){
   if(!sheet) return;
   const {el,key,tilt}=sheet; sheet=null; if(tilt) tilt.stop();
+  veil.classList.remove("on");
   const cardEl=document.querySelector(`.tk[data-key="${CSS.escape(key)}"]`);
   const done=()=>{el.remove(); if(cardEl){cardEl.classList.remove("away"); cardEl.style.transition="";}};
   if(instant||still.matches||!cardEl){done(); return;}
@@ -491,16 +484,15 @@ function closeSheet(instant){
       el.remove(); cardEl.classList.remove("away");
       cardEl.animate([{transform:`${P} rotateY(-90deg)`},{transform:`${P} rotateY(6deg)`,offset:.7},{transform:`${P} rotateY(0deg)`}],{duration:320,easing:"cubic-bezier(.2,.8,.3,1)"})
         .finished.then(()=>{cardEl.style.transition="";});
-      cardEl.focus({preventScroll:true});
+      if(byKey) cardEl.focus({preventScroll:true});   // back to the card for keyboard users; a click leaves no focus ring
     });
 }
-addEventListener("pointerdown",e=>{if(sheet&&!sheet.el.contains(e.target)&&!e.target.closest(".tk")&&!e.target.closest("nav")) closeSheet();});
-addEventListener("keydown",e=>{if(e.key==="Escape"&&sheet) closeSheet();});
-addEventListener("resize",()=>{   // keep the open receipt beside its card, sized to the new window
+addEventListener("pointerdown",e=>{if(sheet&&!sheet.el.contains(e.target)) closeSheet();});   // a click anywhere off the receipt closes it
+addEventListener("keydown",e=>{if(e.key==="Escape"&&sheet) closeSheet(false,true);});
+addEventListener("resize",()=>{   // keep the open receipt in the middle, sized to the new window
   if(!sheet) return; const b=fitSheet(sheet.el), {left,top}=placeFor(sheet.cardEl,b);
   sheet.el.style.left=left+"px"; sheet.el.style.top=top+"px";
 });
-addEventListener("scroll",()=>{if(sheet){const c=sheet.cardEl.getBoundingClientRect(); if(c.bottom<0||c.top>innerHeight) closeSheet(true);}},{passive:true});
 
 // ---- the two views; the pill slides to the current one ----
 const pill=document.querySelector("nav .pill");
