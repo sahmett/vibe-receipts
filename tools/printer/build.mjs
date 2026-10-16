@@ -93,7 +93,11 @@ function recess({ x0, x1, z0, z1, r, depth }, y, back = "", backClass = "pr-well
 }
 
 function feet() {
-  const out = [`<path class="iso-halo" d="${k.haloOf(k.insetPlan(SHELL, -4), 0, 10, P)}"/>`];
+  // a flat cast shadow on the floor from a high light on the left (as on the vesika figures), not a blurred halo
+  const SH = [0.24, -0.14];
+  const box = [];
+  for (const z of [0, TOP]) for (const x of [SHELL.x, SHELL.x + SHELL.w]) for (const y of [SHELL.y, SHELL.y + SHELL.d]) box.push(at([x + z * SH[0], y + z * SH[1], 0]));
+  const out = [`<path class="pr-shadow" d="${k.pathOf(G.hullOf(box), true)}"/>`];
   for (const [x, y] of byDepth(k.corners(SHELL, 16))) {
     out.push(S(k.cylinder(x, y, 7.5, 0, 1.2, P, 28), { tone: "lo" }));
     out.push(S(k.cylinder(x, y, 6, 1.2, FOOT_H - 1.2 + 0.4, P, 28), { tone: "lo" }));
@@ -201,6 +205,7 @@ function tearBar() {
 const CSS = `
 .iso-svg path,.iso-svg circle{vector-effect:none}
 .pr-dark{fill:#030303;stroke:none}
+.pr-shadow{fill:#000;opacity:.34;stroke:none}
 .pr-well{fill:var(--anatomy-shade-0)}
 .iso-face-text{letter-spacing:.3em;font-weight:700}
 /* the kit's dark theme, a step lighter and cooler so it reads on the video's near-black ground */
@@ -227,6 +232,7 @@ const u = sub(V([PAPER_W / 2, SLOT_Y, TOP]), o).map((v) => v / PAPER_W);
 const v = sub(V([-PAPER_W / 2, SLOT_Y - Math.sin(lean), TOP + Math.cos(lean)]), o);
 const geo = {
   paperW: PAPER_W, origin: o, u, v,
+  y: sub(V([0, 1, 0]), V([0, 0, 0])), z: sub(V([0, 0, 1]), V([0, 0, 0])),   // screen px per world unit, to bend the paper
   leds: LEDS.map(({ x, z }) => V([x, FRONT - 1.4, z])), ledR: 0.9 * VS,
   bottom: V([0, FRONT, 0])[1],
 };

@@ -59,17 +59,18 @@ nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;st
 .cap .readout{margin-top:6px;font:500 12px/1 var(--mono);color:var(--fg-3);display:flex;align-items:center;gap:8px}
 .cap .readout i{width:6px;height:6px;border-radius:50%;background:var(--fg-3);transition:background .2s}
 .cap .readout.live i{background:var(--fg);box-shadow:0 0 0 3px var(--line-2)}
-/* the sheet: a wrapper that moves and casts the shadow onto the lid, the paper inside it clipped at the slot */
-#paperwrap{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform,opacity;
-  filter:drop-shadow(0 1px 1px var(--pshadow)) drop-shadow(8px -7px 12px var(--pshadow))}
-#paper{position:relative}
-#paper .paper{background-image:linear-gradient(90deg,#0000001c,#0000 6%,#0000 94%,#0000001f),linear-gradient(180deg,#ffffff99,#fff0 24%),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0 0 0 -.07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+/* the sheet: horizontal strips of one receipt, each laid along the paper's curve as it bends back over the printer */
+#paperwrap{position:absolute;left:0;top:0;width:0;height:0;will-change:opacity}
+#paperwrap .strip{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform,clip-path;backface-visibility:hidden}
+#paperwrap .strip>i{position:absolute;inset:0;pointer-events:none;background:#000;opacity:0}
+#paperwrap .paper{background-image:linear-gradient(90deg,#0000001c,#0000 6%,#0000 94%,#0000001f),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0 0 0 -.07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 .lamp{position:absolute;width:0;height:0;pointer-events:none}
 .lamp::after{content:"";position:absolute;left:-14px;top:-14px;width:28px;height:28px;border-radius:50%;
   background:radial-gradient(circle,#fff 0 12%,#ffffffa0 22%,#ffffff00 70%);opacity:var(--on,0);transition:opacity .15s}
-#slotshade{position:absolute;left:0;right:0;height:0;background:linear-gradient(180deg,#0000,#00000059);pointer-events:none}
 
-/* the figure's printer: the kit's neutral tokens, one set per theme */
+/* the figure's printer: the kit's neutral tokens, one set per theme; its flat floor shadow */
+#fig .pr-shadow{fill:#000;opacity:.5}
+:root[data-theme="light"] #fig .pr-shadow{fill:#525252;opacity:.12}
 #fig .iso{--anatomy-paper:#0e0e10;--anatomy-face:#171719;--anatomy-top:#1a1a1c;--anatomy-shade-0:#0b0b0c;--anatomy-shade-1:#0d0d0e;--anatomy-shade-2:#101011;--anatomy-shade-3:#131314;
   --anatomy-lit-top:#262628;--anatomy-lit-shade:#1d1d1f;--anatomy-hi:#e8e8ea;--anatomy-mid:#7a7a80;--anatomy-lo:#46464b;--anatomy-faint:#2a2a2e;--anatomy-lit:#fff;--anatomy-halo:#000;--anatomy-halo-opacity:.85;--anatomy-dot:#e8e8ea}
 @media (prefers-color-scheme:light){:root:not([data-theme="dark"]) #fig .iso{--anatomy-paper:#fff;--anatomy-face:#fff;--anatomy-top:#fff;--anatomy-shade-0:#dcdcdc;--anatomy-shade-1:#e5e5e5;--anatomy-shade-2:#ededed;--anatomy-shade-3:#f4f4f4;
@@ -246,19 +247,36 @@ function receipt(r){
 }
 const count=r=>r.estimate?`${r.commits} ${UI.commits}`:`${r.prompts.toLocaleString("en-US")} ${UI.prompts}`;
 
-// ---- printer view: the printer and the newest receipt, centred together; the receipt feeds, sways, is torn off ----
+// ---- printer view: the printer and the newest receipt, centred together. The receipt feeds out along a curve:
+// it leaves the slot leaning back 24°, stays stiff for a few centimetres, then bends back over the printer under its
+// own weight, like thermal paper does. The sheet is drawn as strips, each laid flat along its piece of the curve.
 const G=PR.geo, VS=2.4, RW=34.67*15;            // video px per viewBox unit; the receipt's own width in px
 const LATEST=R[0];                               // receipts.py sorts newest first
 const fig=document.getElementById("fig"), readout=document.getElementById("readout"), rtext=readout.querySelector("span");
 fig.setAttribute("aria-label",UI.figLabel(LATEST.name,fmt(LATEST.min))); fig.title=UI.reprint;
-let VB, S=1, wrapEl, paperEl, shadeEl, lamps=[], H=0, q=0, PHw=0;
+let VB, S=1, wrapEl, strips=[], lamps=[], H=0, q=0, PHw=0, CURVE=[];
 const cap=document.querySelector(".cap");
+const LEAN=24*Math.PI/180, CURL=64*Math.PI/180, STIFF=34, BAND=26;   // exit angle, extra bend at full length, straight run, strip height (px)
+const angleAt=sw=>LEAN+CURL*Math.pow(Math.min(1,Math.max(0,(sw-STIFF)/Math.max(60,PHw-STIFF))),1.6);
+const dirAt=th=>[-Math.sin(th)*G.y[0]+Math.cos(th)*G.z[0],-Math.sin(th)*G.y[1]+Math.cos(th)*G.z[1]];   // screen px per world unit up the paper
+function buildCurve(){   // the curve's screen position every world unit from the slot (video px)
+  CURVE=[[G.origin[0],G.origin[1]]];
+  for(let i=0;i<PHw+100;i++){const d=dirAt(angleAt(i+.5)), p=CURVE[i]; CURVE.push([p[0]+d[0],p[1]+d[1]]);}
+}
+function curveAt(sw){const i=Math.max(0,Math.min(CURVE.length-2,Math.floor(sw))), f=sw-i, a=CURVE[i], b=CURVE[i+1]; return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f];}
 function buildFigure(){
-  fig.innerHTML=PR.back+`<div id="paperwrap"><div id="paper">${receipt(LATEST)}<div id="slotshade"></div></div></div>`+PR.front+G.leds.slice(0,2).map(()=>`<span class="lamp"></span>`).join("");
-  wrapEl=document.getElementById("paperwrap"); paperEl=document.getElementById("paper"); shadeEl=document.getElementById("slotshade"); lamps=[...fig.querySelectorAll(".lamp")];
-  H=paperEl.querySelector(".rc").getBoundingClientRect().height||900; q=G.paperW/RW; PHw=H*q;
-  // the box holds the printer and the fully printed sheet, so the two are centred together
-  const top=(G.origin[1]+(PHw+4)*G.v[1])/VS-10, bottom=1868/VS, left=26, right=1080/VS-26;
+  fig.innerHTML=PR.back+`<div id="paperwrap"></div>`+PR.front+G.leds.slice(0,2).map(()=>`<span class="lamp"></span>`).join("");
+  wrapEl=document.getElementById("paperwrap"); lamps=[...fig.querySelectorAll(".lamp")];
+  wrapEl.innerHTML=`<div class="strip">${receipt(LATEST)}<i></i></div>`;
+  H=wrapEl.querySelector(".rc").getBoundingClientRect().height||900; q=G.paperW/RW; PHw=H*q;
+  const n=Math.ceil(H/BAND), html=receipt(LATEST);
+  wrapEl.innerHTML=Array.from({length:n},()=>`<div class="strip">${html}<i></i></div>`).join("");
+  strips=[...wrapEl.querySelectorAll(".strip")].map((el,i)=>({el,shade:el.querySelector("i"),j0:i*BAND,j1:Math.min(H,(i+1)*BAND)}));
+  buildCurve();
+  // the box holds the printer and the fully printed, curled sheet, so the two are centred together
+  let top=Infinity; for(let i=0;i<=PHw;i+=4) top=Math.min(top,CURVE[i][1]);
+  top=top/VS-12;
+  const bottom=1868/VS, left=26, right=1080/VS-26;
   VB=[left,top,right-left,bottom-top];
   fig.querySelectorAll("svg").forEach(s=>{s.setAttribute("viewBox",VB.join(" ")); s.removeAttribute("width"); s.removeAttribute("height"); s.setAttribute("preserveAspectRatio","xMidYMid meet");});
   size(); addEventListener("resize",size);
@@ -268,20 +286,27 @@ function size(){
   const w=Math.max(200,Math.min(innerWidth-32,600,room*VB[2]/VB[3]));
   S=w/VB[2]; fig.style.width=w+"px"; fig.style.height=(VB[3]*S)+"px"; paint();
 }
-const state={o:0,feed:0,lift:0,alpha:1,tilt:0,free:false};
+const state={o:0,feed:0,lift:0,alpha:1};
 function paint(){
-  if(!paperEl) return;
-  const {o,feed,lift,alpha,tilt,free}=state, u=G.u, v=G.v, O=G.origin, t=o+lift;
-  const m=[q*u[0],q*u[1],-q*v[0],-q*v[1],O[0]+t*v[0],O[1]+t*v[1]].map(x=>x/VS);
-  m[4]-=VB[0]; m[5]-=VB[1];
-  // the sheet leans about the middle of the slot as it grows: paper is not stiff
-  const cx=((O[0]+u[0]*G.paperW/2)/VS-VB[0])*S, cy=((O[1]+u[1]*G.paperW/2)/VS-VB[1])*S;
-  const bend=free?`rotate(${tilt}rad)`:`matrix(1,0,${tilt},1,0,0)`;   // on the printer: a shear, so the edge in the slot never moves
-  wrapEl.style.transform=`translate(${cx}px,${cy}px) ${bend} translate(${-cx}px,${-cy}px) matrix(${m.map(x=>x*S).join(",")})`;
-  const L=Math.max(0,o/q);
-  wrapEl.style.clipPath=free?"none":`inset(-80px -80px ${Math.max(0,H-L)}px -80px)`;   // room for the shadow, cut at the slot
+  if(!wrapEl) return;
+  const {o,feed,lift,alpha}=state, u=G.u, k=S/VS, ox=VB[0]*S, oy=VB[1]*S;
+  const off=[G.v[0]*lift,G.v[1]*lift];            // torn off: the whole sheet lifts along its exit line
+  const outPx=o/q;                                  // px of receipt out of the slot
+  for(const st of strips){
+    const jm=(st.j0+st.j1)/2, sm=o-jm*q;            // the strip's middle, in world units above the slot
+    if(st.j0>=outPx&&!lift){st.el.style.visibility="hidden"; continue;}
+    st.el.style.visibility="";
+    const th=angleAt(Math.max(0,sm)), d=dirAt(th), P=curveAt(Math.max(0,sm));
+    const base=sm<0?[P[0]+d[0]*sm,P[1]+d[1]*sm]:P;
+    const e=(base[0]+jm*q*d[0]+off[0])*k-ox, f=(base[1]+jm*q*d[1]+off[1])*k-oy;
+    st.el.style.transform=`matrix(${q*u[0]*k},${q*u[1]*k},${-q*d[0]*k},${-q*d[1]*k},${e},${f})`;
+    const lo=Math.max(0,st.j0-.8), hi=Math.min(H,lift?st.j1+.8:Math.min(st.j1+.8,outPx));   // a hair of overlap hides the joints
+    st.el.style.clipPath=`inset(${lo}px 0 ${Math.max(0,H-hi)}px 0)`;
+    // shade: dark right at the slot, and where the paper bends away from the light
+    const nearSlot=lift?0:Math.max(0,1-Math.max(0,o-st.j1*q)/8)*.32;
+    st.shade.style.opacity=(Math.min(.14,(th-LEAN)/CURL*.14)+nearSlot).toFixed(3);
+  }
   wrapEl.style.opacity=alpha;
-  shadeEl.style.top=(L-7/q)+"px"; shadeEl.style.height=(7/q)+"px"; shadeEl.style.opacity=free?0:1;
   lamps.forEach((el,i)=>{const [x,y]=G.leds[i]; el.style.left=((x/VS-VB[0])*S)+"px"; el.style.top=((y/VS-VB[1])*S)+"px"; el.style.setProperty("--on",i?feed:1);});
 }
 const ACC=.14, DP=Math.min(6,Math.max(3.6,PHwGuess())), DONE=`${fmt(LATEST.min)} · ${count(LATEST)}`;
@@ -292,22 +317,20 @@ function say(text,live){rtext.textContent=text; readout.classList.toggle("live",
 const easeOut=k=>1-(1-k)*(1-k);
 function run(now){
   const t=(now-t0)/1000, idle=.6, end=idle+DP, hold=end+2.8, tear=hold+.16, out=tear+.8;
-  let o=0, feed=0, lift=0, alpha=1, free=false;
+  let o=0, feed=0, lift=0, alpha=1;
   if(t<idle){o=0;}
   else if(t<end){o=PHw*feedAt((t-idle)/DP); feed=.75+.25*Math.sin(t*44);}
   else if(t<hold){o=PHw;}
-  else if(t<tear){o=PHw; free=true; lift=3*easeOut((t-hold)/.16);}                        // torn off: a short pull up
-  else if(t<out){const k=(t-tear)/.8; o=PHw; free=true; lift=3+70*k*k; alpha=1-k*k;}     // lifted away
+  else if(t<tear){o=PHw; lift=3*easeOut((t-hold)/.16);}                          // torn off: a short pull up
+  else if(t<out){const k=(t-tear)/.8; o=PHw; lift=3+70*k*k; alpha=1-k*k;}        // lifted away
   else {t0=now;}
-  const grown=Math.min(1,o/(PHw*.6));
-  const tilt=t<tear?(.011*Math.sin(t*2.1)+.0035*Math.sin(t*5.3))*grown:-.05*((t-tear)/.8)**2;
-  Object.assign(state,{o,feed,lift,alpha,tilt,free}); paint();
-  if(t<idle) say(UI.ready); else if(t<end) say(`${UI.printing} · %${String(Math.round(o/PHw*100)).padStart(3,"\u2007")}`,true); else if(t<out) say(DONE); else say(UI.ready);
+  Object.assign(state,{o,feed,lift,alpha}); paint();
+  if(t<idle) say(UI.ready); else if(t<end) say(`${UI.printing} · %${String(Math.round(o/PHw*100)).padStart(3," ")}`,true); else if(t<out) say(DONE); else say(UI.ready);
   raf=requestAnimationFrame(run);
 }
 function startPrint(){
   cancelAnimationFrame(raf);
-  if(still.matches){Object.assign(state,{o:PHw,feed:0,lift:0,alpha:1,tilt:0,free:false}); paint(); say(DONE); return;}
+  if(still.matches){Object.assign(state,{o:PHw,feed:0,lift:0,alpha:1}); paint(); say(DONE); return;}
   t0=performance.now(); raf=requestAnimationFrame(run);
 }
 fig.addEventListener("click",startPrint);
@@ -483,7 +506,7 @@ function route(){
   closeSheet(true);
   document.getElementById("v-yazici").hidden=v!=="yazici"; document.getElementById("v-pano").hidden=v!=="pano";
   document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.view===v){a.setAttribute("aria-current","page"); movePill(a);} else a.removeAttribute("aria-current");});
-  if(v==="yazici"){if(!paperEl) buildFigure(); else size(); startPrint();}
+  if(v==="yazici"){if(!wrapEl) buildFigure(); else size(); startPrint();}
   else {cancelAnimationFrame(raf); board(!boardShown); boardShown=true;}
   scrollTo(0,0);
 }
