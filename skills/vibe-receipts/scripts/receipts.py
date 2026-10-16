@@ -682,7 +682,7 @@ def render_video(paper_png,dst,data,timeout=120):
     raw=os.path.splitext(dst)[0]+'.raw.'+ext
     open(raw,'wb').write(got['video'])
     ff=shutil.which('ffmpeg')
-    if ff and subprocess.run([ff,'-y','-loglevel','error','-i',raw,'-r','30','-c:v','libx264','-preset','medium','-crf','18',
+    if ff and subprocess.run([ff,'-y','-loglevel','error','-i',raw,'-r','60','-c:v','libx264','-preset','medium','-crf','18',
                               '-pix_fmt','yuv420p','-c:a','aac','-b:a','160k','-movflags','+faststart',dst],capture_output=True).returncode==0:
         os.remove(raw); return dst
     if os.path.exists(dst): os.remove(dst)   # a failed ffmpeg run may leave half a file
@@ -760,16 +760,16 @@ VIDEO_HTML=r"""<!doctype html><html><head><meta charset="utf-8"><title>vibe rece
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&display=swap">
 <style>html,body{margin:0;height:100%;background:#0b0c10;overflow:hidden}canvas{display:block;width:100%;height:100%;object-fit:contain}</style>
 </head><body><canvas id="c" width="1080" height="1920"></canvas><script>
-const D=__DATA__, W=1080, H=1920, FPS=30, REC=new URLSearchParams(location.search).has('rec');
+const D=__DATA__, W=1080, H=1920, FPS=60, REC=new URLSearchParams(location.search).has('rec');
 const FONT='"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace';
-const cv=document.getElementById('c'), g=cv.getContext('2d');
+const cv=document.getElementById('c'); let g=cv.getContext('2d');
 const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)), lerp=(a,b,t)=>a+(b-a)*t;
 const easeOut=t=>1-(1-t)*(1-t), easeIn=t=>t*t, easeInOut=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
 const fail=m=>fetch('/error',{method:'POST',body:String(m)});
 window.onerror=(m,s,l)=>{fail(m+' @'+l)};
 
 const PR=__PRINTER__, GEO=PR.geo;    // the printer from tools/printer/build.mjs: back and front SVG, where the paper leaves the slot
-let P, PHw, q, step, n, sd, DP, T, BACK, FRONT;  // paper canvas, its length and px size in world units, line step, steps, step time, print time, timeline, printer layers
+let P, PHw, q, step, n, DP, T, BACK, FRONT, SHADOW;  // paper canvas, its length and px size in world units, line step, steps, step time, print time, timeline, printer layers
 
 function trim(img){                  // cut the transparent margin around the receipt screenshot
   const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
@@ -783,23 +783,34 @@ function trim(img){                  // cut the transparent margin around the re
 function setup(img){
   P=trim(img); q=GEO.paperW/P.width; PHw=P.height*q;
   step=24*GEO.paperW/520;            // one receipt line (24 css px) per printer step
-  n=Math.ceil(PHw/step); DP=clamp(PHw*Math.hypot(...GEO.v)/260,4.5,7); sd=DP/n;
+  n=Math.ceil(PHw/step); DP=clamp(PHw*Math.hypot(...GEO.v)/260,4.5,7);
   const tp0=0.5, tp1=tp0+DP, tt=tp1+0.8, tf0=tt+0.18, tf1=tf0+1.0;
   T={tp0,tp1,tt,tf0,tf1,end:tf1+2.8};
 }
 
-function printed(t){                 // thermal printers feed in short jerks: move, stop, move
-  const i=Math.floor(t/sd), f=(t-i*sd)/sd;
-  return Math.min(PHw,(i+(f<.55?easeOut(f/.55):1))*step);
+const ACC=.12;                       // share of the print spent speeding up, and again slowing down
+function printed(t){                 // a steady feed with a soft start and stop: speed is a trapezoid, so no frame jumps
+  const x=clamp(t/DP), a=ACC, top=1/(1-a);
+  const f=x<a?top*x*x/(2*a):x>1-a?1-top*(1-x)*(1-x)/(2*a):top*(x-a/2);
+  return PHw*f;
+}
+function stepTimes(){                // when the feed passes each line, for the stepper sound
+  const out=[];
+  for(let i=0;i<n;i++){let lo=0, hi=DP; const want=i*step; for(let k=0;k<30;k++){const m=(lo+hi)/2; if(printed(m)<want) lo=m; else hi=m;} out.push(lo);}
+  return out;
 }
 
+let BG;                               // the backdrop never changes: painted once, blitted every frame
 function bg(){
+  if(BG){g.drawImage(BG,0,0); return;}
+  BG=document.createElement('canvas'); BG.width=W; BG.height=H; const keep=g; g=BG.getContext('2d');
   g.fillStyle='#0b0c10'; g.fillRect(0,0,W,H);
   let r=g.createRadialGradient(540,820,0,540,820,1050);
   r.addColorStop(0,'rgba(124,92,255,.20)'); r.addColorStop(.55,'rgba(124,92,255,.05)'); r.addColorStop(1,'rgba(0,0,0,0)');
   g.fillStyle=r; g.fillRect(0,0,W,H);
   r=g.createRadialGradient(540,960,700,540,960,1250); r.addColorStop(0,'rgba(0,0,0,0)'); r.addColorStop(1,'rgba(0,0,0,.6)');
   g.fillStyle=r; g.fillRect(0,0,W,H);
+  g=keep; g.drawImage(BG,0,0);
 }
 
 function layer(img,dy,a){if(a>0){g.save(); g.globalAlpha=a; g.drawImage(img,0,dy,W,H); g.restore();}}
@@ -828,8 +839,8 @@ function laidFlat(){
 function paper(M,clip,shade,shadow){
   g.save(); g.setTransform(...M);
   if(clip!==null){g.beginPath(); g.rect(0,0,P.width,clip/q); g.clip();}
-  if(shadow>0){g.shadowColor='rgba(0,0,0,'+(.6*shadow)+')'; g.shadowBlur=60*shadow; g.shadowOffsetY=26*shadow;}
-  g.imageSmoothingQuality='high'; g.drawImage(P,0,0); g.shadowColor='transparent';
+  if(shadow>0){g.save(); g.globalAlpha=shadow; g.drawImage(SHADOW,-SHADOW.pad,-SHADOW.pad+26/M[3]); g.restore();}   // a blurred sprite, not shadowBlur
+  g.imageSmoothingQuality='high'; g.drawImage(P,0,0);
   if(shade>0&&clip!==null){            // the paper darkens where it leaves the slot
     const y1=clip/q, y0=y1-7/q, s=g.createLinearGradient(0,y0,0,y1);
     s.addColorStop(0,'rgba(0,0,0,0)'); s.addColorStop(1,'rgba(0,0,0,'+(.38*shade)+')');
@@ -894,14 +905,19 @@ function sound(at){                  // schedules the whole soundtrack, `at` = A
     const e=ac.createGain(); e.gain.setValueAtTime(0,t0); e.gain.linearRampToValueAtTime(.05,t0+.008); e.gain.linearRampToValueAtTime(0,t0+dur);
     o.connect(fl).connect(e).connect(out); o.start(t0); o.stop(t0+dur+.02);
   };
-  for(let i=0;i<n;i++){const t0=at+T.tp0+i*sd; burst(t0,sd*.55,3200,.7,.16); whine(t0,sd*.55);}
+  const times=stepTimes(), gap=DP/n;
+  for(const t of times){const t0=at+T.tp0+t; burst(t0,gap*.8,3200,.7,.16); whine(t0,gap*.8);}
   burst(at+T.tt,.2,1400,.6,.45,'bandpass',6000);
 }
 
 async function main(){
   const svg=x=>{const i=new Image(); i.src=URL.createObjectURL(new Blob([x],{type:'image/svg+xml'})); return i.decode().then(()=>i);};
-  [BACK,FRONT]=await Promise.all([svg(PR.back),svg(PR.front)]);
+  const flat=i=>{const c=document.createElement('canvas'); c.width=W; c.height=H; c.getContext('2d').drawImage(i,0,0,W,H); return c;};
+  [BACK,FRONT]=(await Promise.all([svg(PR.back),svg(PR.front)])).map(flat);   // rasterised once
   const img=new Image(); img.src='paper.png'; await img.decode(); setup(img);
+  const pad=Math.round(30/Math.min(1220/P.height,880/P.width));             // the torn-off sheet's shadow, blurred once
+  SHADOW=document.createElement('canvas'); SHADOW.width=P.width+2*pad; SHADOW.height=P.height+2*pad; SHADOW.pad=pad;
+  const sx=SHADOW.getContext('2d'); sx.filter='blur('+(pad/2.2)+'px)'; sx.fillStyle='rgba(0,0,0,.6)'; sx.fillRect(pad,pad,P.width,P.height);
   const wait=ms=>new Promise(r=>setTimeout(r,ms));
   await Promise.race([Promise.all(['500','700','800'].map(w=>document.fonts.load(w+' 40px "JetBrains Mono"'))),wait(5000)]);
   draw(0);
@@ -920,7 +936,8 @@ async function main(){
   mr.ondataavailable=e=>{if(e.data.size) chunks.push(e.data)};
   mr.onstop=()=>fetch('/video',{method:'POST',headers:{'Content-Type':mime},body:new Blob(chunks,{type:mime})});
   mr.start(500);
-  const loop=()=>{const t=ac.currentTime-a0; draw(clamp(t,0,T.end)); if(t<T.end+.15) requestAnimationFrame(loop); else mr.stop();};
+  const p0=performance.now()+(a0-ac.currentTime)*1000;   // the frame clock, lined up with the sound once
+  const loop=now=>{const t=(now-p0)/1000; draw(clamp(t,0,T.end)); if(t<T.end+.15) requestAnimationFrame(loop); else mr.stop();};
   requestAnimationFrame(loop);
 }
 main().catch(e=>fail(e&&e.stack||e));
