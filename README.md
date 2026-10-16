@@ -85,7 +85,7 @@ name, handy for client work.
 - **Python 3.9 or newer**, standard library only
 - **Claude Code session logs** in `~/.claude/projects` (the CLI and the desktop app both write them)
 - Optional: **git** for commits and lines of code, and **Chrome, Chromium, Edge or Brave** for the
-  receipt PNG
+  receipt PNG and video; **ffmpeg** makes the video's MP4 play everywhere
 
 ## Share your receipt
 
@@ -96,6 +96,17 @@ Every run prints a `Share:` line, a ready-made caption for the PNG:
 ```
 
 Post it with **#vibereceipts**. We'd love to see yours.
+
+### Or as a video
+
+`--video` (or ask Claude for *"a video of my receipt"*) also writes `<repo>-receipt.mp4`: a vertical
+1080×1920 clip for Reels, TikTok and Shorts. Your receipt prints out of a thermal printer line by line,
+with the printer's sound, gets torn off, and ends on your total and the share line. It takes about 15
+seconds, because Chrome records the animation in real time.
+
+It needs nothing beyond the Chrome that renders the PNG. If **ffmpeg** is installed, the clip is
+re-encoded to constant-frame-rate H.264/AAC, which every platform accepts; without it you get what
+Chrome recorded (MP4, or WebM on older browsers).
 
 ## How it works
 
@@ -172,8 +183,9 @@ which models wrote them, a daily table and a daily commit log.
 
 Everything runs locally. vibe-receipts reads your Claude Code transcripts and git history on your
 machine and writes its outputs to `~/vibe-receipts/`. It never uploads your prompts, code, logs or
-reports. The only network request is the receipt card loading its font from Google Fonts while
-it is rendered.
+reports. The only network request is the receipt card (and the video) loading its font from
+Google Fonts while it is rendered. The video is recorded by a local headless Chrome talking to a
+throwaway server on `127.0.0.1`.
 
 ## Options
 
@@ -189,6 +201,7 @@ it is rendered.
 | `--transcripts DIR` | Claude log folder, overrides auto-detection (repeatable, e.g. for a repo cloned in two places) |
 | `--out DIR` | output folder (default `~/vibe-receipts`) |
 | `--no-png` | skip the receipt PNG |
+| `--video` | also make `<repo>-receipt.mp4`, the receipt printing out of a thermal printer (1080×1920) |
 
 Constants at the top of `receipts.py`: `IDLE` (fallback threshold), `CAP`, `MIN_GAPS`, `SENS`
 (thresholds in the sensitivity table), `PRICES`, `CODE_W`, `VENDOR_RE` / `GEN_RE` (excluded file
@@ -267,7 +280,7 @@ skills/vibe-receipts/
     ├── receipts.py        analysis, HTML report, receipt card
     └── to_jpg.sh          report → JPEG
 receipts.py, to_jpg.sh     shortcuts (symlinks)
-demo/make_demo.py          rebuilds the synthetic demo above
+demo/make_demo.py          rebuilds the synthetic demo above (--video for the clip)
 ```
 
 ## License

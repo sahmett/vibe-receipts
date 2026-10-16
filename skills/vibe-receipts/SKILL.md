@@ -43,6 +43,9 @@ python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [-
 - `--built "<what it is>"`: 1–3 words saying what the project is, for the `BUILT` line on the receipt
   (e.g. "e-commerce site", "mobile app", "CLI tool", "admin panel"). Infer it from the repo's README and
   manifest (`package.json`, `pyproject.toml`, …), in the report language. If you can't tell, leave it out.
+- `--video` when the user wants a video, a reel/TikTok/Short or "something to post" ("video yap", "paylaşmak
+  için video"): it also writes `<repo>-receipt.mp4`, the receipt printing out of a thermal printer (1080×1920,
+  with sound). It records in real time, so the run takes ~15 s longer; leave it out otherwise.
 - Leave `--break` out by default (automatic threshold). Pass `--break MIN` only when the user asks for
   a specific threshold ("recalculate with 20 minutes", "15 dk ile hesapla"); re-run and compare.
 - If the same repo lives in two folders (two clones, or a moved folder), pass every matching
@@ -72,8 +75,10 @@ After running, read the printed summary and the CSV, then answer in the user's l
   missing from `PRICES` in `scripts/receipts.py`.
 - The busiest days (from the CSV), and a short summary of what was done per day based on the
   commit subjects (`git -C <repo> log --since ... --until ... --pretty='%ad %s' --date=short`).
-- The path to the HTML report and the receipt PNG, and open them if the environment can show files.
-- The `Share:` line, as-is in a code block, as a ready-to-post caption for the receipt PNG. Never post it
+- The path to the HTML report and the receipt PNG (and the MP4 with `--video`), and open them if the
+  environment can show files. Without `--video`, offer it once: a clip of the receipt printing out is made
+  for posting.
+- The `Share:` line, as-is in a code block, as a ready-to-post caption for the receipt PNG or video. Never post it
   anywhere yourself. If the project name is private, offer to re-run with `--name` to hide it.
 
 ## Name things twice: plain words + the math term

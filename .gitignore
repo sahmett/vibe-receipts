@@ -11,3 +11,5 @@ __pycache__/
 demo/out/
 !docs/*.jpg
 !docs/*.png
+*.mp4
+*.webm

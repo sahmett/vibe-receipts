@@ -16,7 +16,7 @@ Usage:
 Besides the HTML report and CSV it writes <repo>-receipt.png, a shareable receipt card
 (rendered with a local Chrome/Chromium in headless mode; skipped if none is found).
 """
-import argparse, base64, datetime, glob, html, json, os, pathlib, re, shutil, subprocess
+import argparse, base64, datetime, glob, html, http.server, json, os, pathlib, re, shutil, subprocess, tempfile, threading
 
 IDLE       = 15            # minutes: fallback threshold when there are too few gaps for Tukey
 MIN_GAPS   = 20            # fewer gaps than this = Tukey threshold is not reliable
@@ -105,7 +105,8 @@ L={
    rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_q='Q',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
    share='{q} {t} later{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
-   rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")]),
+   rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")],
+   vid_later='{t} later.',vid_cta='Get your own receipt'),
  'tr':dict(
    h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
    title='Çalışma Süresi Fişi',commits='commit',prompts='prompt',
@@ -145,7 +146,8 @@ L={
    rc_est='OTURUM KAYDI YOK',rc_est_note="Commit oturumlarından tahmin.",
    rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_q='Ç',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
    share='{q} {t} sonra{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
-   rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')]),
+   rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')],
+   vid_later='{t} sonra.',vid_cta='Kendi fişini çıkar'),
 }
 
 def default_lang():
@@ -314,6 +316,7 @@ def main():
     ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='output folder (default ~/vibe-receipts)')
     ap.add_argument('--built',help='what the project is, 1-3 words (e.g. "e-commerce site"), shown on the receipt')
     ap.add_argument('--no-png',action='store_true',help='skip the receipt PNG (needs Chrome/Chromium; set CHROME=path to choose one)')
+    ap.add_argument('--video',action='store_true',help='also make <name>-receipt.mp4: the receipt printing out of a thermal printer, 1080x1920 for Reels/TikTok/Shorts (needs Chrome; ffmpeg optional)')
     a=ap.parse_args()
     a.out=os.path.abspath(os.path.expanduser(a.out))
     T=L[a.lang]; e=html.escape
@@ -535,7 +538,8 @@ def main():
     period=(d0 if d0==d1 else f"{d0} → {d1[5:] if d0[:4]==d1[:4] else d1}")+f" · {T['rc_days'](span)}"
     quote=next(q for lim,q in T['rc_quote'] if lim is None or hours<lim)
     value=(T['rc_value'],vtxt) if val['total'] else None
-    card,H=receipt_html(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),value,thr)
+    rargs=(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),value,thr)
+    card,H=receipt_html(*rargs)
     cardp=os.path.join(a.out,f'{name}-receipt.html')
     open(cardp,'w',encoding='utf-8').write(card)
     pngp=os.path.join(a.out,f'{name}-receipt.png')
@@ -544,6 +548,18 @@ def main():
     else: print(f"PNG : skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome). Card HTML: {cardp}")
     m=int(round(total/60))   # ready-to-post text to go with the PNG
     share=T['share'].format(q=quote,t=T['share_t'](m//60,m%60),v=T['share_v'].format(v=vtxt) if val['total'] else '')
+    if a.video:   # the receipt alone, transparent, at 3x, then the printer clip around it
+        tmp=tempfile.mkdtemp(prefix='vibe-receipts-')
+        try:
+            paperh,PH=receipt_html(*rargs,bare=True)
+            open(os.path.join(tmp,'paper.html'),'w',encoding='utf-8').write(paperh)
+            ok=render_png(os.path.join(tmp,'paper.html'),os.path.join(tmp,'paper.png'),520,PH,scale=3,transparent=True)
+            vid=ok and render_video(os.path.join(tmp,'paper.png'),os.path.join(a.out,f'{name}-receipt.mp4'),
+                dict(quote=quote,later=T['vid_later'].format(t=T['share_t'](m//60,m%60)),cta=T['vid_cta'],
+                     url='github.com/sahmett/vibe-receipts',tag='#vibereceipts'))
+        finally: shutil.rmtree(tmp,ignore_errors=True)
+        if vid: print("MP4 :",vid)
+        else:   print("MP4 : skipped, no Chrome/Chromium found or the recording failed (set CHROME=/path/to/chrome)")
 
     # the card goes at the end of the report, embedded so the HTML still works on its own
     if not a.no_png and os.path.exists(pngp):
@@ -567,15 +583,16 @@ def split_minutes(secs,total):
     for i in sorted(range(len(raw)),key=lambda i:fl[i]-raw[i])[:int(round(total/60))-sum(fl)]: fl[i]+=1
     return fl
 
-def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,value,thr):
-    """The share card: a thermal-paper receipt, straight, on a dark card. Returns (html, height)."""
+def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,value,thr,bare=False):
+    """The share card: a thermal-paper receipt, straight, on a dark card. Returns (html, height).
+    bare=True: just the paper on a transparent background (for the video)."""
     e=html.escape
     rows=''.join(f'<span>{q:,}</span><span>{e(l)}</span><span class="r">{t}</span>' for q,l,t in items)
     srows=''.join('<div class="sp"></div>' if r is None else f'<div class="row"><span>{e(r[0])}</span><span>{r[1]}</span></div>' for r in stats)
     H=2*CARD_PAD+804+24*(len(stats)-4)+26*len(items)+24*bool(built)+46*bool(value)+8   # card padding + receipt body + item/BUILT/value rows + slack
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(name)} · vibe receipt</title>'
       '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap">'
-      f'<style>{RCSS}</style></head><body><div class="card" style="height:{H}px">'
+      f'<style>{RCSS}{RCSS_BARE if bare else ""}</style></head><body><div class="card" style="height:{H}px">'
       '<div class="rc"><div class="tear t"></div><div class="paper">'
       f'<div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mute">github.com/sahmett/vibe-receipts</div><div class="mute ls">{T["rc_kind"]}</div></div>'
       '<div class="hr"></div>'
@@ -603,17 +620,72 @@ def find_chrome():
     for n in ['google-chrome','google-chrome-stable','chromium','chromium-browser','microsoft-edge','brave-browser']:
         if shutil.which(n): return shutil.which(n)
 
-def render_png(src,dst,w,h):
-    """Screenshot the card with headless Chrome at 2x. Returns True if the PNG was written."""
+def render_png(src,dst,w,h,scale=2,transparent=False):
+    """Screenshot the card with headless Chrome (2x by default). Returns True if the PNG was written."""
     chrome=find_chrome()
     if not chrome: return False
     if os.path.exists(dst): os.remove(dst)
     try:
-        subprocess.run([chrome,'--headless','--disable-gpu','--hide-scrollbars','--no-sandbox','--force-device-scale-factor=2',
-                        f'--window-size={w},{h}','--virtual-time-budget=5000',f'--screenshot={dst}',pathlib.Path(src).as_uri()],
+        subprocess.run([chrome,'--headless','--disable-gpu','--hide-scrollbars','--no-sandbox',f'--force-device-scale-factor={scale}',
+                        f'--window-size={w},{h}','--virtual-time-budget=5000',f'--screenshot={dst}']+
+                       (['--default-background-color=00000000'] if transparent else [])+[pathlib.Path(src).as_uri()],
                        capture_output=True,timeout=120)
     except (OSError,subprocess.SubprocessError): return False
     return os.path.exists(dst)
+
+def render_video(paper_png,dst,data,timeout=120):
+    """The receipt printing out of a thermal printer: a 1080x1920 clip for Reels, TikTok and Shorts.
+    Headless Chrome plays VIDEO_HTML (a canvas animation with a synthesized printer sound) and records it
+    in real time with MediaRecorder, so nothing beyond Chrome is needed. The page is served from 127.0.0.1
+    so it can post the finished clip back. With ffmpeg installed the clip is re-encoded to constant-frame-rate
+    H.264/AAC, which every platform accepts. Returns the path written (.mp4, or .webm if Chrome can only
+    record WebM and there is no ffmpeg), or None."""
+    chrome=find_chrome()
+    if not chrome: return None
+    page=VIDEO_HTML.replace('__DATA__',json.dumps(data)).encode()
+    paper=open(paper_png,'rb').read()
+    got={}; done=threading.Event()
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self,*_): pass
+        def do_GET(self):
+            path=self.path.split('?')[0]
+            if path not in ('/','/paper.png'): self.send_error(404); return
+            body,ct=(page,'text/html; charset=utf-8') if path=='/' else (paper,'image/png')
+            self.send_response(200); self.send_header('Content-Type',ct); self.send_header('Content-Length',str(len(body)))
+            self.end_headers(); self.wfile.write(body)
+        def do_POST(self):
+            body=self.rfile.read(int(self.headers.get('Content-Length') or 0))
+            if self.path.startswith('/video'): got['video']=body; got['type']=self.headers.get('Content-Type','')
+            else: got['error']=body.decode(errors='ignore')
+            self.send_response(204); self.end_headers(); done.set()
+    srv=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler)
+    threading.Thread(target=srv.serve_forever,daemon=True).start()
+    prof=tempfile.mkdtemp(prefix='vibe-receipts-chrome-')
+    try:
+        proc=subprocess.Popen([chrome,'--headless','--no-sandbox','--hide-scrollbars','--autoplay-policy=no-user-gesture-required',
+                               '--window-size=1080,1920','--force-device-scale-factor=1',f'--user-data-dir={prof}','--no-first-run',
+                               '--disable-background-timer-throttling','--disable-renderer-backgrounding',
+                               f'http://127.0.0.1:{srv.server_address[1]}/?rec=1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    except OSError:
+        srv.shutdown(); shutil.rmtree(prof,ignore_errors=True); return None
+    try: done.wait(timeout)
+    finally:
+        proc.terminate()
+        try: proc.wait(10)
+        except subprocess.TimeoutExpired: proc.kill()
+        srv.shutdown(); shutil.rmtree(prof,ignore_errors=True)
+    if 'error' in got: print('Video: the page failed:',got['error'][:300])
+    if not got.get('video'): return None
+    ext='webm' if 'webm' in got['type'] else 'mp4'
+    raw=os.path.splitext(dst)[0]+'.raw.'+ext
+    open(raw,'wb').write(got['video'])
+    ff=shutil.which('ffmpeg')
+    if ff and subprocess.run([ff,'-y','-loglevel','error','-i',raw,'-r','30','-c:v','libx264','-preset','medium','-crf','18',
+                              '-pix_fmt','yuv420p','-c:a','aac','-b:a','160k','-movflags','+faststart',dst],capture_output=True).returncode==0:
+        os.remove(raw); return dst
+    if os.path.exists(dst): os.remove(dst)   # a failed ffmpeg run may leave half a file
+    out=os.path.splitext(dst)[0]+'.'+ext
+    os.replace(raw,out); return out
 
 CSS="""*{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#0f1117;color:#e6e8ee;line-height:1.55;padding:40px 16px}
@@ -676,6 +748,185 @@ body{{background:#0e0f14;color:#ECEAF2;font-family:'JetBrains Mono',ui-monospace
 .bc{{width:300px;height:56px;background:repeating-linear-gradient(90deg,{INK} 0 3px,transparent 3px 5px,{INK} 5px 6px,transparent 6px 9px,{INK} 9px 13px,transparent 13px 15px,{INK} 15px 16px,transparent 16px 20px,{INK} 20px 22px,transparent 22px 23px)}}
 .ft .bn{{font-size:11px;line-height:14px;letter-spacing:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .ft .ty{{font-size:12px;line-height:18px;letter-spacing:2px}}"""
+# the receipt alone on a transparent background, for the video (the paper is cut out and printed line by line)
+RCSS_BARE=f"body{{background:transparent}}.card{{width:520px;padding:0;height:auto!important}}.rc{{filter:none}}"
+
+# The video: a thermal printer prints the receipt (paper.png), the receipt is torn off and lands in the middle,
+# then the share line. Opened with ?rec=1 it records itself and posts the clip to /video; opened without it,
+# it loops as a live preview (click for sound).
+VIDEO_HTML=r"""<!doctype html><html><head><meta charset="utf-8"><title>vibe receipt video</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&display=swap">
+<style>html,body{margin:0;height:100%;background:#0b0c10;overflow:hidden}canvas{display:block;width:100%;height:100%;object-fit:contain}</style>
+</head><body><canvas id="c" width="1080" height="1920"></canvas><script>
+const D=__DATA__, W=1080, H=1920, FPS=30, REC=new URLSearchParams(location.search).has('rec');
+const FONT='"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace';
+const cv=document.getElementById('c'), g=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)), lerp=(a,b,t)=>a+(b-a)*t;
+const easeOut=t=>1-(1-t)*(1-t), easeIn=t=>t*t, easeInOut=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const fail=m=>fetch('/error',{method:'POST',body:String(m)});
+window.onerror=(m,s,l)=>{fail(m+' @'+l)};
+
+const SY=1500, PW=700;              // slot line, paper width on screen
+let P, PH, k, step, n, sd, DP, T;   // paper canvas, its height on screen, scale, line step, steps, step time, print time, timeline
+
+function trim(img){                  // cut the transparent margin around the receipt screenshot
+  const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
+  const x=c.getContext('2d'); x.drawImage(img,0,0);
+  const d=x.getImageData(0,0,c.width,c.height).data; let t=c.height, b=0, l=c.width, r=0;
+  for(let y=0;y<c.height;y++) for(let i=0;i<c.width;i++) if(d[(y*c.width+i)*4+3]>8){if(y<t)t=y; if(y>b)b=y; if(i<l)l=i; if(i>r)r=i;}
+  const o=document.createElement('canvas'); o.width=r-l+1; o.height=b-t+1;
+  o.getContext('2d').drawImage(c,l,t,o.width,o.height,0,0,o.width,o.height); return o;
+}
+
+function setup(img){
+  P=trim(img); k=PW/P.width; PH=P.height*k;
+  step=24*PW/520;                    // one receipt line (24 css px) per printer step
+  n=Math.ceil(PH/step); DP=clamp(PH/260,4.5,7); sd=DP/n;
+  const tp0=0.5, tp1=tp0+DP, tt=tp1+0.8, tf0=tt+0.18, tf1=tf0+1.0;
+  T={tp0,tp1,tt,tf0,tf1,end:tf1+2.8};
+}
+
+function printed(t){                 // thermal printers feed in short jerks: move, stop, move
+  const i=Math.floor(t/sd), f=(t-i*sd)/sd;
+  return Math.min(PH,(i+(f<.55?easeOut(f/.55):1))*step);
+}
+
+function bg(){
+  g.fillStyle='#0b0c10'; g.fillRect(0,0,W,H);
+  let r=g.createRadialGradient(540,820,0,540,820,1050);
+  r.addColorStop(0,'rgba(124,92,255,.20)'); r.addColorStop(.55,'rgba(124,92,255,.05)'); r.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=r; g.fillRect(0,0,W,H);
+  r=g.createRadialGradient(540,960,700,540,960,1250); r.addColorStop(0,'rgba(0,0,0,0)'); r.addColorStop(1,'rgba(0,0,0,.6)');
+  g.fillStyle=r; g.fillRect(0,0,W,H);
+}
+
+function printer(dy,a,led){
+  g.save(); g.globalAlpha=a; g.translate(0,dy);
+  const x=90, w=900, top=SY-64, h=400;
+  let s=g.createRadialGradient(540,top+h+28,10,540,top+h+28,520);      // floor shadow
+  s.addColorStop(0,'rgba(0,0,0,.75)'); s.addColorStop(1,'rgba(0,0,0,0)');
+  g.save(); g.scale(1,.12); g.fillStyle=s; g.beginPath(); g.arc(540,(top+h+28)/.12,520,0,7); g.fill(); g.restore();
+  let b=g.createLinearGradient(0,top,0,top+h);                          // body
+  b.addColorStop(0,'#3a3e4b'); b.addColorStop(.2,'#2a2d37'); b.addColorStop(.21,'#22252e'); b.addColorStop(1,'#121318');
+  g.fillStyle=b; g.beginPath(); g.roundRect(x,top,w,h,[48,48,30,30]); g.fill();
+  g.strokeStyle='rgba(255,255,255,.10)'; g.lineWidth=2; g.beginPath(); g.roundRect(x+1,top+1,w-2,h-2,[47,47,29,29]); g.stroke();
+  g.fillStyle='rgba(0,0,0,.35)'; g.fillRect(x+30,top+82,w-60,3);       // lid seam
+  g.fillStyle='rgba(255,255,255,.05)'; g.fillRect(x+30,top+85,w-60,1);
+  const sw=PW+56;                                                       // paper slot
+  g.fillStyle='#040405'; g.beginPath(); g.roundRect(540-sw/2,SY-8,sw,16,8); g.fill();
+  g.fillStyle='rgba(255,255,255,.12)'; g.fillRect(540-sw/2+10,SY+9,sw-20,2);
+  g.fillStyle='#7d818d';                                                // tear bar teeth, in front of the paper
+  for(let i=540-PW/2-10;i<540+PW/2+10;i+=12){g.beginPath(); g.moveTo(i,SY+2); g.lineTo(i+6,SY-5); g.lineTo(i+12,SY+2); g.fill();}
+  g.fillStyle='#5d6170'; g.fillRect(540-PW/2-10,SY+2,PW+20,4);
+  g.font='800 26px '+FONT; g.letterSpacing='8px'; g.fillStyle='#5a5e6c'; g.textBaseline='middle';
+  g.fillText('VIBE RECEIPTS',x+60,SY+165); g.letterSpacing='0px';
+  g.fillStyle='#262932'; g.strokeStyle='#3c404c'; g.lineWidth=2;      // feed button
+  g.beginPath(); g.roundRect(x+w-190,SY+148,70,34,17); g.fill(); g.stroke();
+  g.beginPath(); g.arc(x+w-70,SY+165,10,0,7);                           // status LED
+  if(led>0){g.fillStyle='#34d399'; g.shadowColor='#34d399'; g.shadowBlur=26*led; g.globalAlpha=a*(.35+.65*led);}
+  else g.fillStyle='#1d3d31';
+  g.fill(); g.restore();
+}
+
+function paperAt(cx,top,sc,rot,clipY,slotShade,shadow){
+  g.save();
+  if(clipY!==null){g.beginPath(); g.rect(0,0,W,clipY); g.clip();}
+  const w=PW*sc, h=PH*sc;
+  g.translate(cx,top+h/2); g.rotate(rot);
+  if(shadow>0){g.shadowColor='rgba(0,0,0,'+(.6*shadow)+')'; g.shadowBlur=60*shadow; g.shadowOffsetY=26*shadow;}
+  g.imageSmoothingQuality='high'; g.drawImage(P,-w/2,-h/2,w,h); g.shadowColor='transparent';
+  if(slotShade>0){                    // the paper darkens where it leaves the slot
+    const y0=clipY-top-h/2, s=g.createLinearGradient(0,y0-90,0,y0);
+    s.addColorStop(0,'rgba(0,0,0,0)'); s.addColorStop(1,'rgba(0,0,0,'+(.32*slotShade)+')');
+    g.fillStyle=s; g.fillRect(-w/2,y0-90,w,90);
+  }
+  g.restore();
+}
+
+function text(t,y,weight,size,color,a,maxW=980){
+  if(a<=0||!t) return;
+  g.save(); g.globalAlpha=a; g.textAlign='center'; g.textBaseline='alphabetic'; g.fillStyle=color;
+  let s=size; g.font=weight+' '+s+'px '+FONT;
+  while(g.measureText(t).width>maxW&&s>18){s-=2; g.font=weight+' '+s+'px '+FONT;}
+  g.fillText(t,540,y); g.restore();
+}
+
+function draw(t){
+  bg();
+  const fp=clamp((t-T.tf0)/(T.tf1-T.tf0)), fe=easeInOut(fp);
+  const o=t<T.tp0?0:t>=T.tp1?PH:printed(t-T.tp0);
+  const jerk=-20*easeOut(clamp((t-T.tt)/.15));                          // the tear: a short pull up
+  const sway=tt=>.005*Math.sin(tt*2.3)*Math.min(1,printed(Math.max(0,Math.min(tt,T.tp1)-T.tp0))/700);
+  const led=t<T.tp0?(Math.sin(t*14)>0?1:0):t<T.tp1?.75+.25*Math.sin(t*40):.3;
+  printer(560*easeIn(fp),1-fp,led);
+  const cover=clamp((SY-o-280)/220);                                     // the hook fades as the paper rises past it
+  text(D.quote,210,'800',58,'#ECEAF2',clamp(.4+t/.25)*Math.max(cover,fe));   // the hook is there from frame one
+  if(t<T.tt){                                                            // printing, about the slot
+    g.save(); g.translate(540,SY); g.rotate(sway(t)); g.translate(-540,-SY);
+    paperAt(540,SY-o,1,0,SY,1,0); g.restore();
+  } else {                                                               // torn off: fly to the middle
+    const sF=Math.min(1.15,1220/PH,880/PW), r0=sway(T.tt), top0=SY-PH+jerk;
+    const cy=lerp(top0+PH/2,1020,fe), sc=lerp(1,sF,fe);
+    paperAt(540,cy-PH*sc/2,sc,lerp(r0,-.02,fe),fp>0?null:SY,1-clamp((t-T.tt)/.2),fe);
+  }
+  const la=clamp((t-T.tf1+.35)/.45);
+  text(D.later,320+24*(1-easeOut(la)),'800',80,'#c4b5fd',la);
+  const ca=clamp((t-T.tf1)/.5);
+  text(D.cta,1736,'500',32,'#8b90a0',ca);
+  text(D.url,1796,'700',40,'#ECEAF2',ca);
+  text(D.tag,1852,'700',34,'#a78bfa',ca);
+}
+
+// --- sound: a stepper whine + paper hiss on every feed step, a rip at the tear. Only recorded, never played
+// while recording (headless Chrome would play it out loud).
+let ac, dest, out;
+function sound(at){                  // schedules the whole soundtrack, `at` = AudioContext time of t=0
+  if(!out){out=ac.createGain(); out.gain.value=.9; dest=ac.createMediaStreamDestination(); out.connect(dest); if(!REC) out.connect(ac.destination);}
+  const nb=ac.createBuffer(1,ac.sampleRate,ac.sampleRate), ch=nb.getChannelData(0);
+  for(let i=0;i<ch.length;i++) ch[i]=Math.random()*2-1;
+  const burst=(t0,dur,f,q,vol,type='bandpass',f2)=>{
+    const s=ac.createBufferSource(); s.buffer=nb; s.loop=true;
+    const fl=ac.createBiquadFilter(); fl.type=type; fl.frequency.setValueAtTime(f,t0); fl.Q.value=q;
+    if(f2) fl.frequency.exponentialRampToValueAtTime(f2,t0+dur);
+    const e=ac.createGain(); e.gain.setValueAtTime(0,t0); e.gain.linearRampToValueAtTime(vol,t0+.006);
+    e.gain.setValueAtTime(vol,t0+dur*.8); e.gain.linearRampToValueAtTime(0,t0+dur);
+    s.connect(fl).connect(e).connect(out); s.start(t0); s.stop(t0+dur+.02);
+  };
+  const whine=(t0,dur)=>{
+    const o=ac.createOscillator(); o.type='square'; o.frequency.setValueAtTime(190,t0); o.frequency.linearRampToValueAtTime(240,t0+dur);
+    const fl=ac.createBiquadFilter(); fl.type='lowpass'; fl.frequency.value=1100;
+    const e=ac.createGain(); e.gain.setValueAtTime(0,t0); e.gain.linearRampToValueAtTime(.05,t0+.008); e.gain.linearRampToValueAtTime(0,t0+dur);
+    o.connect(fl).connect(e).connect(out); o.start(t0); o.stop(t0+dur+.02);
+  };
+  for(let i=0;i<n;i++){const t0=at+T.tp0+i*sd; burst(t0,sd*.55,3200,.7,.16); whine(t0,sd*.55);}
+  burst(at+T.tt,.2,1400,.6,.45,'bandpass',6000);
+}
+
+async function main(){
+  const img=new Image(); img.src='paper.png'; await img.decode(); setup(img);
+  const wait=ms=>new Promise(r=>setTimeout(r,ms));
+  await Promise.race([Promise.all(['500','700','800'].map(w=>document.fonts.load(w+' 40px "JetBrains Mono"'))),wait(5000)]);
+  draw(0);
+  if(!REC){                          // live preview: loops; a click restarts it with sound
+    let t0=performance.now();
+    addEventListener('click',async()=>{ac=ac||new AudioContext(); await ac.resume(); sound(ac.currentTime+.1); t0=performance.now()+100;});
+    const loop=now=>{draw(Math.max(0,(now-t0)/1000)%T.end); requestAnimationFrame(loop);};
+    requestAnimationFrame(loop); return;
+  }
+  ac=new AudioContext(); await ac.resume();
+  const a0=ac.currentTime+.1; sound(a0);   // picture and sound run on the audio clock
+  const stream=cv.captureStream(FPS); dest.stream.getAudioTracks().forEach(tr=>stream.addTrack(tr));
+  const mime=['video/mp4;codecs=avc1.640028,mp4a.40.2','video/mp4;codecs=avc1.42E01F,mp4a.40.2','video/mp4;codecs=avc1,opus',
+              'video/mp4','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m));
+  const mr=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:14e6,audioBitsPerSecond:160e3}), chunks=[];
+  mr.ondataavailable=e=>{if(e.data.size) chunks.push(e.data)};
+  mr.onstop=()=>fetch('/video',{method:'POST',headers:{'Content-Type':mime},body:new Blob(chunks,{type:mime})});
+  mr.start(500);
+  const loop=()=>{const t=ac.currentTime-a0; draw(clamp(t,0,T.end)); if(t<T.end+.15) requestAnimationFrame(loop); else mr.stop();};
+  requestAnimationFrame(loop);
+}
+main().catch(e=>fail(e&&e.stack||e));
+</script></body></html>"""
 
 if __name__=='__main__':
     main()
