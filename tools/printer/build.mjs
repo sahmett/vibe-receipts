@@ -233,6 +233,9 @@ const v = sub(V([-PAPER_W / 2, SLOT_Y - Math.sin(lean), TOP + Math.cos(lean)]), 
 const geo = {
   paperW: PAPER_W, origin: o, u, v,
   y: sub(V([0, 1, 0]), V([0, 0, 0])), z: sub(V([0, 0, 1]), V([0, 0, 0])),   // screen px per world unit, to bend the paper
+  zero: V([0, 0, 0]),                                                        // screen px of the world origin (the floor under the printer's middle)
+  view: [Math.cos(AZIMUTH * Math.PI / 180) * Math.cos(ELEVATION * Math.PI / 180), Math.sin(AZIMUTH * Math.PI / 180) * Math.cos(ELEVATION * Math.PI / 180), Math.sin(ELEVATION * Math.PI / 180)],
+  world: { slotY: SLOT_Y, top: TOP, shell: [SHELL.x, SHELL.y, SHELL.w, SHELL.d], lean: LEAN },
   leds: LEDS.map(({ x, z }) => V([x, FRONT - 1.4, z])), ledR: 0.9 * VS,
   bottom: V([0, FRONT, 0])[1],
 };

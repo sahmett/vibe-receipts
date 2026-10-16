@@ -1,4 +1,4 @@
-<title>Vibe Receipts</title>
+<title>Slipt</title>
 <script>/* before the first paint: the saved theme (dark by default), and hide the page until its fonts and figure are ready */
 (function(){var r=document.documentElement,t="dark";try{if(localStorage.getItem("vr-theme")==="light")t="light"}catch(e){}r.setAttribute("data-theme",t);r.classList.add("boot")})();</script>
 <style>
@@ -13,15 +13,16 @@
   --sans:system-ui,-apple-system,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
   --spring:cubic-bezier(.2,.9,.25,1.12); --out:cubic-bezier(.2,.8,.2,1);
-  --spot:#ffffff0e; --pshadow:#000000a6;
+  --spot:#ffffff0e; --floorsh:#000000e6;
+  --accent:#FF4A3D; --accent-soft:#ff4a3d33;   /* the logo's red: a dot, a ring, an edge, never a surface */
   color-scheme:dark;
 }
 @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
   --bg:#fafafa; --panel:#ffffff; --raise:#f4f4f5; --hover:#efeff1; --line:#0000000d; --line-2:#00000019; --line-3:#00000030;
-  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8d8d92; --invert:#0b0b0c; --on-invert:#fafafa; --shadow:#0000003d; --spot:#ffffff; --pshadow:#00000033; color-scheme:light}}
+  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8d8d92; --invert:#0b0b0c; --on-invert:#fafafa; --shadow:#0000003d; --spot:#ffffff; --floorsh:#0000004d; --accent:#E5322C; --accent-soft:#e5322c2e; color-scheme:light}}
 :root[data-theme="light"]{
   --bg:#fafafa; --panel:#ffffff; --raise:#f4f4f5; --hover:#efeff1; --line:#0000000d; --line-2:#00000019; --line-3:#00000030;
-  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8d8d92; --invert:#0b0b0c; --on-invert:#fafafa; --shadow:#0000003d; --spot:#ffffff; --pshadow:#00000033; color-scheme:light}
+  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8d8d92; --invert:#0b0b0c; --on-invert:#fafafa; --shadow:#0000003d; --spot:#ffffff; --floorsh:#0000004d; --accent:#E5322C; --accent-soft:#e5322c2e; color-scheme:light}
 *{box-sizing:border-box}
 html,body{min-height:100%}
 /* one calm reveal: nothing is shown until the fonts are in and the figure is measured, then it all fades in at once */
@@ -30,7 +31,8 @@ html.boot nav,html.boot .theme,html.boot main{opacity:0}
 html.boot #fig,html.boot .cap{animation:none}
 body{background:var(--bg);color:var(--fg);font:400 14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
 button{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::selection{background:var(--accent-soft)}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
 nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);left:50%;transform:translateX(-50%);z-index:80;display:flex;gap:2px;padding:3px;
@@ -49,7 +51,10 @@ nav a,nav svg{z-index:1}
 .theme svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .theme .sun{display:none}
 :root[data-theme="light"] .theme .sun{display:block}:root[data-theme="light"] .theme .moon{display:none}
-nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+nav .brand{display:flex;align-items:center;gap:8px;padding:0 10px 0 5px;font:600 13.5px/1 var(--sans);letter-spacing:-.015em;color:var(--fg);text-decoration:none}
+nav .brand .mark{width:22px;height:22px;flex:none;stroke:none;filter:drop-shadow(0 1px 2px #0000004d)}
+nav .sep{width:1px;margin:6px 4px 6px 2px;background:var(--line-2)}
+nav a svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 
 /* printer view: the printer and its finished receipt, centred together under a soft studio light, the caption below.
    overflow:clip, because the receipt's strips reach far past the figure and would otherwise bring up a scrollbar mid-print */
@@ -63,12 +68,16 @@ nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;st
 .cap p{margin:0;max-width:38ch;color:var(--fg-2);font-size:14px;line-height:1.55;text-wrap:balance}
 .cap .readout{width:24ch;justify-content:flex-start;margin-top:6px;font:500 12px/1 var(--mono);color:var(--fg-3);display:flex;align-items:center;gap:8px}
 .cap .readout i{width:6px;height:6px;border-radius:50%;background:var(--fg-3);transition:background .2s}
-.cap .readout.live i{background:var(--fg);box-shadow:0 0 0 3px var(--line-2)}
-/* the sheet: horizontal strips of one receipt, each laid along the paper's curve as it bends back over the printer */
-#paperwrap{position:absolute;left:0;top:0;width:0;height:0;will-change:opacity}
-#paperwrap .strip{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform,clip-path;backface-visibility:hidden}
-#paperwrap .strip>i{position:absolute;inset:0;pointer-events:none;background:#000;opacity:0}
-#paperwrap .paper{background-image:linear-gradient(90deg,#0000001c,#0000 6%,#0000 94%,#0000001f),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0 0 0 -.07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.cap .readout.live i{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+/* sheets: each receipt is horizontal strips laid along its bend in the printer's world; layers keep the floor
+   behind the printer, the printed sheet on it, and the floor in front */
+#fig .layer{position:absolute;left:0;top:0;width:0;height:0}
+#fig .sheet3{position:absolute;left:0;top:0}
+#fig .sheet3.floor{filter:drop-shadow(0 1px .5px var(--floorsh))}
+#fig .strip{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+#fig .strip>i{position:absolute;inset:0;pointer-events:none;background:#000;opacity:0}
+#fig .strip.back .paper>*{visibility:hidden}
+#fig .paper{background-image:linear-gradient(90deg,#0000001c,#0000 6%,#0000 94%,#0000001f),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0 0 0 -.07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 .lamp{position:absolute;width:0;height:0;pointer-events:none}
 .lamp::after{content:"";position:absolute;left:-14px;top:-14px;width:28px;height:28px;border-radius:50%;
   background:radial-gradient(circle,#fff 0 12%,#ffffffa0 22%,#ffffff00 70%);opacity:var(--on,0);transition:opacity .15s}
@@ -122,10 +131,10 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 .metrics b{font:500 20px/1 var(--mono);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .cols{margin-top:26px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;align-items:start}
 .col{min-height:200px;border-radius:14px;padding:4px;margin:-4px;outline:1px dashed transparent;outline-offset:2px;transition:outline-color .15s,background .15s}
-.col.over{outline-color:var(--line-3);background:color-mix(in srgb,var(--panel) 60%,transparent)}
+.col.over{outline-color:var(--accent);background:color-mix(in srgb,var(--panel) 60%,transparent)}
 .colh{display:flex;align-items:center;gap:8px;padding:2px 2px 12px;font:500 13px/1 var(--sans);color:var(--fg-2)}
 .colh .dot{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--fg-2)}
-.colh .dot.half{background:linear-gradient(90deg,var(--fg-2) 50%,transparent 50%)}
+.colh .dot.half{border-color:var(--accent);background:linear-gradient(90deg,var(--accent) 50%,transparent 50%)}
 .colh .dot.full{background:var(--fg-2)}
 .colh .dot.dash{border-style:dashed}
 .colh .n{color:var(--fg-3);font-family:var(--mono);font-size:12px}
@@ -173,6 +182,7 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 
 <nav aria-label="Views">
   <span class="pill" aria-hidden="true"></span>
+  <span class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="slipt-red" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#E0262C"/></linearGradient><clipPath id="slipt-clip"><rect width="32" height="32" rx="8"/></clipPath></defs><g clip-path="url(#slipt-clip)"><rect width="32" height="32" fill="url(#slipt-red)"/><path d="M0 19.6 3.2 16.6 6.4 19.6 9.6 16.6 12.8 19.6 16 16.6 19.2 19.6 22.4 16.6 25.6 19.6 28.8 16.6 32 19.6V32H0Z" fill="#F4F0E8"/></g></svg>Slipt</span><span class="sep" aria-hidden="true"></span>
   <a href="#yazici" data-view="yazici"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6V2.5h7V6"/><rect x="1.8" y="6" width="12.4" height="5.6" rx="1.4"/><path d="M4.5 9.5h7v4h-7z"/></svg><span data-ui="navPrinter"></span></a>
   <a href="#pano" data-view="pano"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.2" width="3.4" height="11.6" rx="1"/><rect x="6.3" y="2.2" width="3.4" height="7.6" rx="1"/><rect x="10.8" y="2.2" width="3.4" height="9.6" rx="1"/></svg><span data-ui="navBoard"></span></a>
 </nav>
@@ -252,93 +262,179 @@ function receipt(r){
 }
 const count=r=>r.estimate?`${r.commits} ${UI.commits}`:`${r.prompts.toLocaleString("en-US")} ${UI.prompts}`;
 
-// ---- printer view: the printer and the newest receipt, centred together. The receipt feeds out along a curve:
-// it leaves the slot leaning back 24°, stays stiff for a few centimetres, then bends back over the printer under its
-// own weight, like thermal paper does. The sheet is drawn as strips, each laid flat along its piece of the curve.
-const G=PR.geo, VS=2.4, RW=34.67*15;            // video px per viewBox unit; the receipt's own width in px
-const LATEST=R[0];                               // receipts.py sorts newest first
+// ---- printer view: the printer, a floor of earlier receipts around it, and the receipt it prints. ----
+// Every sheet is one receipt laid in the printer's 3D world, bent along its length: drawn as horizontal strips,
+// each a flat piece of the bend. The printed receipt leaves the slot leaning back, curls over under its own
+// weight, is torn off, tips back over the printer and drops onto the floor behind it, where it stays.
+const G=PR.geo, VS=2.4, RW=34.67*15, WD=G.world;    // video px per viewBox unit; a receipt's own width in px; the printer's sizes
+const q=G.paperW/RW;                                 // world units per receipt px (every receipt is 80 mm wide)
+const LATEST=R[0];                                   // receipts.py sorts newest first
 const fig=document.getElementById("fig"), readout=document.getElementById("readout"), rtext=readout.querySelector("span");
 fig.setAttribute("aria-label",UI.figLabel(LATEST.name,fmt(LATEST.min))); fig.title=UI.reprint;
-let VB, S=1, wrapEl, strips=[], lamps=[], H=0, q=0, PHw=0, CURVE=[];
 const cap=document.querySelector(".cap");
-const LEAN=24*Math.PI/180, CURL=64*Math.PI/180, STIFF=34, BAND=26;   // exit angle, extra bend at full length, straight run, strip height (px)
-const angleAt=sw=>LEAN+CURL*Math.pow(Math.min(1,Math.max(0,(sw-STIFF)/Math.max(60,PHw-STIFF))),1.6);
-const dirAt=th=>[-Math.sin(th)*G.y[0]+Math.cos(th)*G.z[0],-Math.sin(th)*G.y[1]+Math.cos(th)*G.z[1]];   // screen px per world unit up the paper
-function buildCurve(){   // the curve's screen position every world unit from the slot (video px)
-  CURVE=[[G.origin[0],G.origin[1]]];
-  for(let i=0;i<PHw+100;i++){const d=dirAt(angleAt(i+.5)), p=CURVE[i]; CURVE.push([p[0]+d[0],p[1]+d[1]]);}
+let VB, S=1, lamps=[], LY={}, built=false;
+
+// world (x across, y toward the viewer, z up) to video px
+const sp=p=>[G.zero[0]+p[0]*G.u[0]+p[1]*G.y[0]+p[2]*G.z[0],G.zero[1]+p[0]*G.u[1]+p[1]*G.y[1]+p[2]*G.z[1]];
+const sv=d=>[d[0]*G.u[0]+d[1]*G.y[0]+d[2]*G.z[0],d[0]*G.u[1]+d[1]*G.y[1]+d[2]*G.z[1]];
+const add=(a,b,k=1)=>[a[0]+b[0]*k,a[1]+b[1]*k,a[2]+b[2]*k];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const turn=(t,n,a)=>{const c=Math.cos(a),s=Math.sin(a); return [t[0]*c+n[0]*s,t[1]*c+n[1]*s,t[2]*c+n[2]*s];};
+const rz=(d,a)=>{const c=Math.cos(a),s=Math.sin(a); return [d[0]*c-d[1]*s,d[0]*s+d[1]*c,d[2]];};
+const lerp=(a,b,k)=>a+(b-a)*k, lerp3=(a,b,k)=>[lerp(a[0],b[0],k),lerp(a[1],b[1],k),lerp(a[2],b[2],k)];
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)), smooth=k=>k*k*(3-2*k), easeOut=k=>1-(1-k)*(1-k);
+const RAD=Math.PI/180, LIGHT=(()=>{const l=[-.35,.55,.76], n=Math.hypot(...l); return l.map(x=>x/n);})();
+
+// A sheet: a receipt, its strips, and a pose: base point B (the receipt's bottom-left corner), X across it,
+// T0 up it at the base, N0 the way it bends, bend(s) the angle at s world units from the base, and off,
+// how far up from the base the receipt's top is (less than its length while it is still in the printer).
+function makeSheet(r,layer,band){
+  const el=document.createElement("div"); el.className="sheet3"; layer.appendChild(el);
+  el.innerHTML=`<div class="strip">${receipt(r)}<i></i></div>`;
+  const H=el.querySelector(".rc").getBoundingClientRect().height||900, L=H*q, html=el.innerHTML;
+  const bands=band(H,L); el.innerHTML=bands.map(()=>html).join("");
+  const strips=[...el.children].map((s,i)=>({el:s,shade:s.querySelector("i"),j0:bands[i][0],j1:bands[i][1]}));
+  return {r,el,H,L,strips,pose:null};
 }
-function curveAt(sw){const i=Math.max(0,Math.min(CURVE.length-2,Math.floor(sw))), f=sw-i, a=CURVE[i], b=CURVE[i+1]; return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f];}
+const uniform=h=>(H)=>Array.from({length:Math.ceil(H/h)},(_,i)=>[i*h,Math.min(H,(i+1)*h)]);
+function endBands(lift){   // a flat sheet on the floor: one strip for the flat part, fine strips where its end lifts or rolls
+  return (H,L)=>{const jl=Math.min(H,lift/q), out=[]; for(let j=0;j<jl;j+=22) out.push([j,Math.min(jl,j+22)]); if(jl<H) out.push([jl,H]); return out;};
+}
+function place(sh){
+  const {B,X,T0,N0,bend,off,clip}=sh.pose, k=S/VS, ox=VB[0]*S, oy=VB[1]*S;
+  const n=Math.max(1,Math.ceil(off)), P=[B];
+  for(let i=0;i<n;i++) P.push(add(P[i],turn(T0,N0,bend(i+.5))));
+  const at=s=>{if(s<=0) return add(B,T0,s); const i=Math.min(n-1,Math.floor(s)), f=s-i; return lerp3(P[i],P[i+1],f);};
+  const dX=sv(X), out=off/q;
+  for(const st of sh.strips){
+    if(clip&&st.j0>=out){st.el.style.visibility="hidden"; continue;}
+    st.el.style.visibility="";
+    const jm=(st.j0+st.j1)/2, sm=off-jm*q, Tm=turn(T0,N0,bend(Math.max(0,sm))), Pm=at(sm), p=sp(Pm), dT=sv(Tm);
+    const a=q*dX[0], b=q*dX[1], c=-q*dT[0], d=-q*dT[1];
+    st.el.style.transform=`matrix(${a*k},${b*k},${c*k},${d*k},${(p[0]+jm*q*dT[0])*k-ox},${(p[1]+jm*q*dT[1])*k-oy})`;
+    const lo=Math.max(0,st.j0-.8), hi=Math.min(H(sh),clip?Math.min(st.j1+.8,out):st.j1+.8);
+    st.el.style.clipPath=`inset(${lo}px 0 ${Math.max(0,sh.H-hi)}px 0)`;
+    const front=a*d-b*c>0, nrm=cross(Tm,X), lit=dot(front?nrm:nrm.map(v=>-v),LIGHT);   // the face we see, and how much light it gets
+    st.el.classList.toggle("back",!front);
+    const slot=sh.pose.slotShade?Math.max(0,1-Math.max(0,sm)/8)*.3:0;
+    st.shade.style.opacity=(clamp((.86-lit)*.55,0,.3)+slot).toFixed(3);
+    st.el.style.zIndex=Math.round(500+dot(add(Pm,X,G.paperW/2),G.view)*2);
+  }
+}
+const H=sh=>sh.H;
+
+// the floor around the printer: real receipts, near it and up to about a quarter of the window away
+const FLOOR=[   // centre (world), heading in degrees (-90 = its top points away from you), how its end lifts
+  {c:[-168,92],h:-118,end:"lift"}, {c:[186,78],h:-58,end:"roll"}, {c:[-226,-58],h:-102,end:"lift"},
+  {c:[232,-88],h:-74,end:"roll"}, {c:[-318,36],h:-152,end:"lift"}, {c:[330,-14],h:-28,end:"lift"},
+];
+function floorPose(sh,cx,cy,headDeg,end){
+  const h=headDeg*RAD, T0=[Math.cos(h),Math.sin(h),0], X=[-Math.sin(h),Math.cos(h),0], L=sh.L;
+  const B=add(add([cx,cy,.6],T0,-L/2),X,-G.paperW/2);
+  const R0=7, Lr=2*Math.PI*R0*1.25;   // a roll: about one and a quarter turns at the top end
+  const bend=end==="roll"?(s=>s>L-Lr?(s-(L-Lr))/R0:0):(s=>.32*smooth(clamp((s-(L-26))/26)));
+  return {B,X,T0,N0:[0,0,1],bend,off:L,clip:false};
+}
+const behind=sh=>dot(add(sh.pose.B,sh.pose.T0,sh.L/2),G.view)<dot([0,-10,0],G.view);   // drawn behind the printer or in front of it
+
+// the printed receipt: on the slot, then torn off, tipped back, dropped behind the printer
+const SLOT=[-G.paperW/2,WD.slotY,WD.top], LEAN=WD.lean*RAD, CURL=64*RAD, STIFF=34;
+function printPose(sh,o,lift){
+  const T0=[0,-Math.sin(LEAN),Math.cos(LEAN)], N0=[0,-Math.cos(LEAN),-Math.sin(LEAN)], L=sh.L;
+  const f=s=>CURL*Math.pow(clamp((s-STIFF)/Math.max(60,L-STIFF)),1.6);
+  return {B:add(SLOT,T0,lift),X:[1,0,0],T0,N0,bend:f,off:o,clip:lift===0,slotShade:lift===0};
+}
+function fallPose(sh,k,drift){   // k: 0..1 over the whole fall
+  const L=sh.L, x0=SLOT[0]+drift.x, back=WD.shell[1]-4;
+  const a=clamp(k/.45), b=clamp((k-.45)/.55);                  // tip back over the printer, then slide off and drop
+  const lean=lerp(LEAN,90*RAD,easeOut(a));
+  let T0=[0,-Math.sin(lean),Math.cos(lean)], N0=[0,-Math.cos(lean),-Math.sin(lean)], X=[1,0,0];
+  const curl=1-easeOut(a), f=s=>curl*CURL*Math.pow(clamp((s-STIFF)/Math.max(60,L-STIFF)),1.6);
+  const slide=smooth(clamp(b/.4)), drop=clamp((b-.3)/.7), start=add(SLOT,[0,-Math.sin(LEAN),Math.cos(LEAN)],3);
+  let B=[lerp(start[0],x0,slide),lerp(start[1],back,slide),lerp(start[2],.6,drop*drop)];
+  const turnZ=drift.a*easeOut(b); T0=rz(T0,turnZ); N0=rz(N0,turnZ); X=rz(X,turnZ);
+  return {B,X,T0,N0,bend:f,off:L,clip:false};
+}
+function landedPose(sh,drift){
+  const h=-90*RAD+drift.a, T0=[Math.cos(h),Math.sin(h),0], X=[-Math.sin(h),Math.cos(h),0];
+  const B=[SLOT[0]+drift.x,WD.shell[1]-4,.6], L=sh.L;
+  return {B,X,T0,N0:[0,0,1],bend:s=>.28*smooth(clamp((s-(L-24))/24)),off:L,clip:false};
+}
+
+let floor=[], current=null, queue=[], printed=0;
 function buildFigure(){
-  fig.innerHTML=PR.back+`<div id="paperwrap"></div>`+PR.front+G.leds.slice(0,2).map(()=>`<span class="lamp"></span>`).join("");
-  wrapEl=document.getElementById("paperwrap"); lamps=[...fig.querySelectorAll(".lamp")];
-  wrapEl.innerHTML=`<div class="strip">${receipt(LATEST)}<i></i></div>`;
-  H=wrapEl.querySelector(".rc").getBoundingClientRect().height||900; q=G.paperW/RW; PHw=H*q;
-  const n=Math.ceil(H/BAND), html=receipt(LATEST);
-  wrapEl.innerHTML=Array.from({length:n},()=>`<div class="strip">${html}<i></i></div>`).join("");
-  strips=[...wrapEl.querySelectorAll(".strip")].map((el,i)=>({el,shade:el.querySelector("i"),j0:i*BAND,j1:Math.min(H,(i+1)*BAND)}));
-  buildCurve();
-  // the box holds the printer and the fully printed, curled sheet, so the two are centred together
-  let top=Infinity; for(let i=0;i<=PHw;i+=4) top=Math.min(top,CURVE[i][1]);
-  top=top/VS-12;
-  const bottom=1868/VS, left=26, right=1080/VS-26;
-  VB=[left,top,right-left,bottom-top];
+  fig.innerHTML=`<div class="layer floorlayer" id="lyBack"></div>`+PR.back+`<div class="layer" id="lyMid"></div>`+PR.front+
+    `<div class="layer floorlayer" id="lyFront"></div>`+G.leds.slice(0,2).map(()=>`<span class="lamp"></span>`).join("");
+  LY={back:fig.querySelector("#lyBack"),mid:fig.querySelector("#lyMid"),front:fig.querySelector("#lyFront")};
+  lamps=[...fig.querySelectorAll(".lamp")];
+  // the floor: the receipts after the newest one, as many as there are spots (repeating if the archive is small)
+  const others=R.length>1?R.slice(1):R;
+  floor=FLOOR.map((spot,i)=>{const sh=makeSheet(others[i%others.length],LY.back,endBands(spot.end==="roll"?70:26)); sh.pose=floorPose(sh,spot.c[0],spot.c[1],spot.h,spot.end); sh.el.classList.add("floor"); return sh;});
+  floor.forEach(sh=>{if(!behind(sh)) LY.front.appendChild(sh.el);});
+  queue=[...R];
+  // the box: printer, the printed sheet at its tallest, the floor in front and behind; the floor may run off the sides
+  VB=null; current=makeSheet(queue[0],LY.mid,uniform(26));
+  let top=Infinity, bottom=1868/VS;
+  const probe=(pose,sh)=>{sh.pose=pose; const {B,T0,N0,bend,off}=pose; let p=B; for(let s=0;s<off;s+=6){p=add(p,turn(T0,N0,bend(s+3)),6); top=Math.min(top,sp(p)[1]/VS); top=Math.min(top,sp(add(p,pose.X,G.paperW))[1]/VS);}};
+  probe(printPose(current,current.L,0),current);
+  probe(landedPose(current,{x:0,a:0}),current);
+  for(const sh of floor){const {B,X,T0,L}=sh.pose; for(const c of [B,add(B,X,G.paperW),add(B,T0,sh.L),add(add(B,T0,sh.L),X,G.paperW)]){const y=sp(c)[1]/VS; top=Math.min(top,y); bottom=Math.max(bottom,y+4);}}
+  top-=10;
+  VB=[26,top,1080/VS-52,bottom-top];
   fig.querySelectorAll("svg").forEach(s=>{s.setAttribute("viewBox",VB.join(" ")); s.removeAttribute("width"); s.removeAttribute("height"); s.setAttribute("preserveAspectRatio","xMidYMid meet");});
-  size(); if(!buildFigure.wired){addEventListener("resize",size); buildFigure.wired=true;}
+  current.pose=printPose(current,0,0);
+  built=true; size();
+  if(!buildFigure.wired){addEventListener("resize",size); buildFigure.wired=true;}
 }
 function size(){
   const room=innerHeight-96-cap.offsetHeight-28;   // nav and padding above, the caption below
   const w=Math.max(200,Math.min(innerWidth-32,600,room*VB[2]/VB[3]));
-  S=w/VB[2]; fig.style.width=w+"px"; fig.style.height=(VB[3]*S)+"px"; paint();
+  S=w/VB[2]; fig.style.width=w+"px"; fig.style.height=(VB[3]*S)+"px"; paintAll();
 }
-const state={o:0,feed:0,lift:0,alpha:1};
-function paint(){
-  if(!wrapEl) return;
-  const {o,feed,lift,alpha}=state, u=G.u, k=S/VS, ox=VB[0]*S, oy=VB[1]*S;
-  const off=[G.v[0]*lift,G.v[1]*lift];            // torn off: the whole sheet lifts along its exit line
-  const outPx=o/q;                                  // px of receipt out of the slot
-  for(const st of strips){
-    const jm=(st.j0+st.j1)/2, sm=o-jm*q;            // the strip's middle, in world units above the slot
-    if(st.j0>=outPx&&!lift){st.el.style.visibility="hidden"; continue;}
-    st.el.style.visibility="";
-    const th=angleAt(Math.max(0,sm)), d=dirAt(th), P=curveAt(Math.max(0,sm));
-    const base=sm<0?[P[0]+d[0]*sm,P[1]+d[1]*sm]:P;
-    const e=(base[0]+jm*q*d[0]+off[0])*k-ox, f=(base[1]+jm*q*d[1]+off[1])*k-oy;
-    st.el.style.transform=`matrix(${q*u[0]*k},${q*u[1]*k},${-q*d[0]*k},${-q*d[1]*k},${e},${f})`;
-    const lo=Math.max(0,st.j0-.8), hi=Math.min(H,lift?st.j1+.8:Math.min(st.j1+.8,outPx));   // a hair of overlap hides the joints
-    st.el.style.clipPath=`inset(${lo}px 0 ${Math.max(0,H-hi)}px 0)`;
-    // shade: dark right at the slot, and where the paper bends away from the light
-    const nearSlot=lift?0:Math.max(0,1-Math.max(0,o-st.j1*q)/8)*.32;
-    st.shade.style.opacity=(Math.min(.14,(th-LEAN)/CURL*.14)+nearSlot).toFixed(3);
-  }
-  wrapEl.style.opacity=alpha;
+let feed=0;
+function paintAll(){
+  if(!built) return;
+  floor.forEach(place); if(current) place(current);
   lamps.forEach((el,i)=>{const [x,y]=G.leds[i]; el.style.left=((x/VS-VB[0])*S)+"px"; el.style.top=((y/VS-VB[1])*S)+"px"; el.style.setProperty("--on",i?feed:1);});
 }
-const ACC=.14, DP=Math.min(6,Math.max(3.6,PHwGuess())), DONE=`${fmt(LATEST.min)} · ${count(LATEST)}`;
-function PHwGuess(){return 2.2+LATEST.items.length*.35;}   // longer receipts print a little longer
-const feedAt=x=>{const a=ACC, k=1/(1-a); return x<a?k*x*x/(2*a):x>1-a?1-k*(1-x)*(1-x)/(2*a):k*(x-a/2);};
-let t0=0, raf=0;
+
+// one print: feed, hold, tear, fall, land; the next one starts after a pause, three on their own, then on a click
+const ACC=.14, feedAt=x=>{const a=ACC, k=1/(1-a); return x<a?k*x*x/(2*a):x>1-a?1-k*(1-x)*(1-x)/(2*a):k*(x-a/2);};
+let t0=0, raf=0, DP=4, drift={x:0,a:0}, auto=3;
 function say(text,live){rtext.textContent=text; readout.classList.toggle("live",!!live);}
-const easeOut=k=>1-(1-k)*(1-k);
+function begin(){
+  if(!current||current.done){
+    const r=queue[printed%queue.length]; current=makeSheet(r,LY.mid,uniform(26)); current.pose=printPose(current,0,0);
+  }
+  DP=Math.min(6,Math.max(3.4,2.2+current.r.items.length*.35));
+  drift={x:(Math.random()-.5)*60,a:(Math.random()-.5)*34*RAD};
+  t0=performance.now(); cancelAnimationFrame(raf); raf=requestAnimationFrame(run);
+}
 function run(now){
-  const t=(now-t0)/1000, idle=.6, end=idle+DP, hold=end+2.8, tear=hold+.16, out=tear+.8;
-  let o=0, feed=0, lift=0, alpha=1;
-  if(t<idle){o=0;}
-  else if(t<end){o=PHw*feedAt((t-idle)/DP); feed=.75+.25*Math.sin(t*44);}
-  else if(t<hold){o=PHw;}
-  else if(t<tear){o=PHw; lift=3*easeOut((t-hold)/.16);}                          // torn off: a short pull up
-  else if(t<out){const k=(t-tear)/.8; o=PHw; lift=3+70*k*k; alpha=1-k*k;}        // lifted away
-  else {t0=now;}
-  Object.assign(state,{o,feed,lift,alpha}); paint();
-  if(t<idle) say(UI.ready); else if(t<end) say(`${UI.printing} · %${String(Math.round(o/PHw*100)).padStart(3," ")}`,true); else if(t<out) say(DONE); else say(UI.ready);
-  raf=requestAnimationFrame(run);
+  const t=(now-t0)/1000, idle=.5, end=idle+DP, hold=end+1.1, tear=hold+.16, fall=tear+1.15, sh=current, label=`${fmt(sh.r.min)} · ${count(sh.r)}`;
+  feed=0;
+  if(t<idle){sh.pose=printPose(sh,0,0); say(UI.ready);}
+  else if(t<end){sh.pose=printPose(sh,sh.L*feedAt((t-idle)/DP),0); feed=.75+.25*Math.sin(t*44); say(`${UI.printing} · %${String(Math.round(feedAt((t-idle)/DP)*100)).padStart(3," ")}`,true);}
+  else if(t<hold){sh.pose=printPose(sh,sh.L,0); say(label);}
+  else if(t<tear){sh.pose=printPose(sh,sh.L,3*easeOut((t-hold)/.16));}                  // torn off: a short pull up
+  else if(t<fall){const k=(t-tear)/1.15; sh.pose=fallPose(sh,k,drift); if(sh.pose.B[1]<WD.shell[1]&&sh.el.parentNode!==LY.back) LY.back.appendChild(sh.el);}   // behind the printer once past its back edge
+  else {                                                                                  // on the floor, for good
+    sh.pose=landedPose(sh,drift); sh.el.classList.add("floor"); sh.done=true; floor.push(sh); printed++;
+    if(floor.length>FLOOR.length+8){const old=floor.splice(FLOOR.length,1)[0]; old.el.remove();}   // the oldest fallen sheet gives way after a dozen or so
+    paintAll(); say(label);
+    if(auto-->1) setTimeout(()=>{if(!document.getElementById("v-yazici").hidden) begin();},2600);
+    return;
+  }
+  paintAll(); raf=requestAnimationFrame(run);
 }
 function startPrint(){
   cancelAnimationFrame(raf);
-  if(still.matches){Object.assign(state,{o:PHw,feed:0,lift:0,alpha:1}); paint(); say(DONE); return;}
-  t0=performance.now(); raf=requestAnimationFrame(run);
+  if(still.matches){current.pose=printPose(current,current.L,0); paintAll(); say(`${fmt(current.r.min)} · ${count(current.r)}`); return;}
+  if(current&&!current.done&&current.pose&&current.pose.off>0&&!current.pose.clip) return;   // mid-fall: let it land first
+  begin();
 }
-fig.addEventListener("click",startPrint);
+fig.addEventListener("click",()=>{auto=0; startPrint();});
 
 // ---- board view ----
 const COLS=[{k:"due",dot:"half"},{k:"paid",dot:"full"},{k:"personal",dot:"dash"}];
@@ -503,7 +599,7 @@ function route(){
   closeSheet(true);
   document.getElementById("v-yazici").hidden=v!=="yazici"; document.getElementById("v-pano").hidden=v!=="pano";
   document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.view===v){a.setAttribute("aria-current","page"); movePill(a);} else a.removeAttribute("aria-current");});
-  if(v==="yazici"){if(!wrapEl) buildFigure(); else size(); startPrint();}
+  if(v==="yazici"){if(!built){buildFigure(); startPrint();} else size();}
   else {cancelAnimationFrame(raf); board(!boardShown); boardShown=true;}
   scrollTo(0,0);
 }
@@ -520,8 +616,7 @@ fontsReady().then(()=>{
   // a face that arrives after the reveal: measure again, so the receipt's strips and the pill match the text
   if(document.fonts) document.fonts.addEventListener("loadingdone",()=>{
     const a=document.querySelector('nav a[aria-current="page"]'); if(a) movePill(a);
-    if(wrapEl&&!document.getElementById("v-yazici").hidden){const h=wrapEl.querySelector(".rc").getBoundingClientRect().height; if(Math.abs(h-H)>.5){wrapEl=null; buildFigure(); startPrint();}}
   });
-  new ResizeObserver(()=>{if(wrapEl) size();}).observe(cap);
+  new ResizeObserver(()=>{if(built) size();}).observe(cap);
 });
 </script>
