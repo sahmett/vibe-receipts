@@ -136,20 +136,21 @@ html.boot .lang{opacity:0}
 .more>span{position:relative;display:inline-flex;align-items:center;gap:8px}
 .more svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 @media (prefers-reduced-motion:reduce){.more{animation:none}}
-/* the start section: centred under the printer, a hairline above and below it with a faint red beam running along */
-.start{position:relative;max-width:760px;margin:0 auto;padding:56px 16px 52px;scroll-margin-top:84px}
+/* the start section: centred under the printer; a vertical hairline joins it to the printer above and to the foot
+   below, with a faint red beam falling down each */
+.start{position:relative;max-width:760px;margin:0 auto;padding:136px 16px 128px}
 .start>.sh,.start>.sl{text-align:center}
-.start::before,.start::after{content:"";position:absolute;left:16px;right:16px;height:1px;pointer-events:none;
-  background:linear-gradient(90deg,#0000,color-mix(in srgb,var(--accent) 75%,transparent),#0000) no-repeat -60% 0/32% 100%,
-             linear-gradient(90deg,#0000,var(--line-3) 18% 82%,#0000);animation:sweep 7s linear infinite}
-.start::before{top:0}
-.start::after{bottom:0;animation-delay:-3.5s}
-@keyframes sweep{to{background-position:160% 0,0 0}}
+.start::before,.start::after{content:"";position:absolute;left:50%;width:1px;height:96px;transform:translateX(-50%);pointer-events:none;
+  background:linear-gradient(180deg,#0000,color-mix(in srgb,var(--accent) 80%,transparent),#0000) no-repeat 0 -70%/100% 38%,
+             linear-gradient(180deg,#0000,var(--line-3) 22% 78%,#0000);animation:fall 3.4s linear infinite}
+.start::before{top:16px}
+.start::after{bottom:16px;animation-delay:-1.7s}
+@keyframes fall{to{background-position:0 170%,0 0}}
 /* the foot of the site: the mark and the name, centred, under the start section's lower line */
-.foot{display:flex;flex-direction:column;align-items:center;gap:12px;padding:40px 16px 64px;color:var(--fg)}
+.foot{display:flex;flex-direction:column;align-items:center;gap:12px;padding:0 16px 72px;color:var(--fg)}
 .foot svg{width:40px;height:40px;filter:drop-shadow(0 2px 6px #0000004d)}
 .foot b{font:600 17px/1 var(--sans);letter-spacing:-.015em}
-@media (prefers-reduced-motion:reduce){.start::before,.start::after{animation:none;background-position:50% 0,0 0}}
+@media (prefers-reduced-motion:reduce){.start::before,.start::after{animation:none;background-position:0 50%,0 0}}
 .sh{margin:0;font:600 24px/1.2 var(--sans);letter-spacing:-.02em}
 .sl{margin:8px 0 0;color:var(--fg-2);font-size:15px}
 .steps{list-style:none;padding:0;margin:26px 0 0;display:flex;flex-direction:column;gap:12px}
@@ -173,7 +174,8 @@ html.boot .lang{opacity:0}
 .ask code{align-self:flex-start;margin-top:4px;font:500 11px/1 var(--mono);color:var(--fg-2);background:var(--raise);padding:4px 6px;border-radius:5px}
 /* each card's drawing (tools/site/art, prepared by art.py): its own dark tile; on hover it rises to the hover
    drawing's position and its light comes up, and each drawing does one small thing of its own */
-.pv{position:relative;aspect-ratio:470/418;border-radius:7.66%/8.61%;overflow:hidden}
+.pv{position:relative;aspect-ratio:470/418;border-radius:7.66%/8.61%;overflow:hidden;--art-shade:1}
+:root[data-theme="light"] .pv{--art-shade:.42;--art-paper:#fff}   /* on a light tile the paper needs to be whiter than the tile */
 .pv svg{display:block;width:100%;height:100%}
 .pv .lift{transform-origin:0 0;transition:transform .55s var(--spring)}
 .ask:hover .pv .lift{transform:translate(-7px,-13px) scale(1.03)}
@@ -437,7 +439,7 @@ if(SITE){
     catch(e){const r=document.createRange(); r.selectNodeContents(code); const s=getSelection(); s.removeAllRanges(); s.addRange(r);}
   }));
   // to the start section: in the middle of the window when it fits, else its top just under the nav
-  more.addEventListener("click",()=>st.scrollIntoView({behavior:still.matches?"auto":"smooth",block:st.offsetHeight<innerHeight-120?"center":"start"}));
+  more.addEventListener("click",()=>st.scrollIntoView({behavior:still.matches?"auto":"smooth",block:st.offsetHeight<innerHeight?"center":"start"}));
   lang.addEventListener("click",()=>{location.href=location.pathname+"?lang="+(LANG==="tr"?"en":"tr")+location.hash;});
 }
 
