@@ -97,6 +97,14 @@ Every run prints a `Share:` line, a ready-made caption for the PNG:
 
 Post it with **#vibereceipts**. We'd love to see yours.
 
+### The share kit
+
+Every run also writes `~/vibe-receipts/<repo>-share.md`: a ready post per platform, filled in with that
+receipt's numbers. Three short posts for X, Threads and Bluesky (the joke, the numbers, what Claude read and
+wrote), one for LinkedIn with two `[ ]` lines left for your own takeaways, and a caption for the video on Reels,
+TikTok and Shorts, with a few tips on posting. With `--share` every post carries the link that previews as
+your receipt. In Claude Code, just say "share my receipt".
+
 ### Or as a video
 
 `--video` (or ask Claude for *"a video of my receipt"*) also writes `<repo>-receipt.mp4`: a vertical
@@ -378,6 +386,7 @@ skills/vibe-receipts/
     ├── printer.json       the printer in the video and on the board (built by tools/printer)
     ├── board_template.html  the board page --board fills in
     ├── invoice.py           --invoice: a client's receipts as an invoice or a timesheet
+    ├── share.py             the share kit: a ready post per platform for each receipt
     ├── wrapped.py           --wrapped: the year's numbers from the archive
     ├── wrapped_template.html  the story page --wrapped fills in
     └── to_jpg.sh          report → JPEG

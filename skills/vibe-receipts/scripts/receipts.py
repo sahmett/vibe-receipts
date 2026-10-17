@@ -587,6 +587,7 @@ def main():
     else: print(f"PNG : skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome). Card HTML: {cardp}")
     m=int(round(total/60))   # ready-to-post text to go with the PNG
     share=T['share'].format(q=quote,t=T['share_t'](m//60,m%60),v=T['share_v'].format(v=vtxt) if val['total'] else '')
+    vid=None
     if a.video:   # the receipt alone, transparent, at 3x, then the printer clip around it
         tmp=tempfile.mkdtemp(prefix='vibe-receipts-')
         try:
@@ -633,10 +634,16 @@ def main():
         f.write('date,prompts,work_min,commits,effective_lines,added,deleted,commit_estimate_min\n')
         for d in days:
             f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
-    print("HTML:",out); print("CSV :",csvp); print("JSON:",archp)
+    # the share kit: a ready post per platform with this receipt's numbers, next to the PNG (and the MP4)
+    import sys; sys.path.insert(0,os.path.dirname(os.path.abspath(__file__))); import share as sharekit
+    plink=share_link(rec,preview=True) if a.share else SITE_URL
+    kitp=os.path.join(a.out,f'{name}-share.md')
+    with open(kitp,'w',encoding='utf-8') as f:
+        f.write(sharekit.kit(rec,a.lang,quote,plink,SITE_URL,png=pngp if os.path.exists(pngp) and not a.no_png else None,mp4=vid or None))
+    print("HTML:",out); print("CSV :",csvp); print("JSON:",archp); print("Kit :",kitp)
     if a.board: print("Board:",build_board(a.out,a.lang))
     if a.link: print("Link:",share_link(rec))
-    if a.share: print("Share link:",share_link(rec,preview=True))
+    if a.share: print("Share link:",plink)
     print("Share:",share)
 
 def clock_of(ts):

@@ -70,6 +70,23 @@ python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [-
 - If the same repo lives in two folders (two clones, or a moved folder), pass every matching
   `~/.claude/projects/...` folder with repeated `--transcripts`.
 
+## When the user wants to share the receipt
+
+"Fişi paylaş", "paylaşmak istiyorum", "share my receipt", "post this", "make it go viral": they want something
+ready to post, not a report.
+
+1. Run with `--share` (the link previews as the receipt) and `--video` (the clip for Reels, TikTok and Shorts).
+   If the receipt was already made for this range, still re-run: it is quick and gives the kit the link.
+2. Read `<out>/<name>-share.md`, the share kit the run printed as `Kit :`. Show the receipt PNG (open it), then
+   every post from the kit in its own code block, under its platform name: X / Threads / Bluesky (three), LinkedIn,
+   Reels / TikTok / Shorts. Then the kit's "before you post" tips, in a short list.
+3. Ask which one they will use, and offer to tune it: shorter, funnier, more technical, in the other language,
+   or with their own takeaways in the two `[ ]` lines of the LinkedIn post. Keep every number exactly as the kit
+   has it; never round or inflate the hours, prompts or token value.
+4. If the project name is private, offer `--name` to re-run under another name before they post.
+
+Never post, send or schedule anything yourself, and never open the user's social accounts.
+
 ## Report back
 
 After running, read the printed summary and the CSV, then answer in the user's language:
@@ -99,7 +116,8 @@ After running, read the printed summary and the CSV, then answer in the user's l
   for posting.
 - With `--share` or `--link`, the `Share link:` or `Link:` line as-is. Never post it anywhere yourself.
 - The `Share:` line, as-is in a code block, as a ready-to-post caption for the receipt PNG or video. Never post it
-  anywhere yourself. If the project name is private, offer to re-run with `--name` to hide it.
+  anywhere yourself. If the project name is private, offer to re-run with `--name` to hide it. Mention that
+  `<name>-share.md` (the `Kit :` line) has a post per platform, and offer to show it.
 
 ## Name things twice: plain words + the math term
 
