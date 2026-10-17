@@ -14,3 +14,5 @@ demo/out/
 *.mp4
 *.webm
 !skills/vibe-receipts/scripts/board_template.html
+!tools/site/og.html
+!tools/site/og.png

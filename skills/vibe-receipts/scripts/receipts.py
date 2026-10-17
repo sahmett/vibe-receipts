@@ -605,28 +605,33 @@ def main():
 
 def build_board(out,lang):
     """Every archived receipt on one page, <out>/board.html: the printer view (the newest receipt printing out
-    of the isometric printer) and the board (columns by status, a drawer with the full receipt). Statuses changed
-    on the page are kept in that browser. Newest receipts first."""
-    here=os.path.dirname(os.path.abspath(__file__))
+    of the isometric printer) and the board (columns by status, the full receipt opening from its card). Statuses
+    changed on the page are kept in that browser. Newest receipts first."""
     recs=[]
     for p in glob.glob(os.path.join(out,'archive','*.json')):
         try: recs.append(json.load(open(p,encoding='utf-8')))
         except (OSError,ValueError): continue
     if not recs: raise SystemExit(L[lang]['b_none'])
     recs.sort(key=lambda r:(r.get('end',''),r.get('start',''),r.get('made','')),reverse=True)
+    dst=os.path.join(out,'board.html')
+    with open(dst,'w',encoding='utf-8') as f: f.write(board_page(recs,lang))
+    return dst
+
+def board_page(recs,lang,site=None,head=''):
+    """The board as one HTML document. site (the public site, tools/site) adds the install steps, a language
+    switch and its own example receipts; head is extra markup for <head>, such as Open Graph tags."""
+    here=os.path.dirname(os.path.abspath(__file__))
+    js=lambda v:json.dumps(v,ensure_ascii=False).replace('</','<\\/')
     fill={'__PRINTER__':open(os.path.join(here,'printer.json'),encoding='utf-8').read(),
-          '__RECEIPTS__':json.dumps(recs,ensure_ascii=False).replace('</','<\\/'),
+          '__RECEIPTS__':js(recs),'__SITE__':js(site) if site else 'null',
           '__LANG__':lang,'__TODAY__':datetime.date.today().isoformat()}
     body=re.sub('|'.join(fill),lambda mt:fill[mt.group(0)],open(os.path.join(here,'board_template.html'),encoding='utf-8').read())
     # the first paint is already the right colour: the theme and the page background are set in the head
-    page=(f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
-          '<meta name="color-scheme" content="dark light">'
-          '<script>(function(){var r=document.documentElement,t="dark";try{if(localStorage.getItem("vr-theme")==="light")t="light"}catch(e){}r.setAttribute("data-theme",t);r.classList.add("boot")})();</script>'
-          '<style>html{background:#09090b;color-scheme:dark}html[data-theme="light"]{background:#fafafa;color-scheme:light}body{margin:0}[hidden]{display:none!important}</style>'
-          '</head><body>'+body+'</body></html>')
-    dst=os.path.join(out,'board.html')
-    with open(dst,'w',encoding='utf-8') as f: f.write(page)
-    return dst
+    return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
+            '<meta name="color-scheme" content="dark light">'+head+
+            '<script>(function(){var r=document.documentElement,t="dark";try{if(localStorage.getItem("vr-theme")==="light")t="light"}catch(e){}r.setAttribute("data-theme",t);r.classList.add("boot")})();</script>'
+            '<style>html{background:#09090b;color-scheme:dark}html[data-theme="light"]{background:#fafafa;color-scheme:light}body{margin:0}[hidden]{display:none!important}</style>'
+            '</head><body>'+body+'</body></html>')
 
 def split_minutes(secs,total):
     """Round each item to whole minutes so the items add up to the rounded total (largest remainder)."""

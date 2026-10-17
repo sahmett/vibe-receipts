@@ -123,6 +123,40 @@ nav a svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;
 .rc .ft .bn{font-size:.73em;letter-spacing:.2em}.rc .ft .ty{font-size:.8em;letter-spacing:.13em}
 
 
+/* the public site: the start section under the printer, the badge, the language switch */
+.lang{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);right:72px;z-index:80;height:48px;min-width:48px;padding:0 12px;border-radius:16px;cursor:pointer;
+  font:600 12.5px/1 var(--mono);letter-spacing:.04em;color:var(--fg-2);background:color-mix(in srgb,var(--panel) 78%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-2);transition:color .2s,opacity .5s var(--out)}
+.lang:hover{color:var(--fg)}
+html.boot .lang{opacity:0}
+.more{margin-top:12px;border:0;background:none;color:var(--fg-2);font:500 13px/1 var(--sans);cursor:pointer;padding:8px 12px;border-radius:9px}
+.more:hover{color:var(--fg);background:var(--raise)}
+.more::after{content:" ↓"}
+.start{max-width:760px;margin:0 auto;padding:8px 16px 96px}
+.sh{margin:0;font:600 24px/1.2 var(--sans);letter-spacing:-.02em}
+.sl{margin:8px 0 0;color:var(--fg-2);font-size:15px}
+.steps{list-style:none;padding:0;margin:26px 0 0;display:flex;flex-direction:column;gap:12px}
+.steps li{display:grid;grid-template-columns:30px minmax(0,1fr);gap:14px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
+.sn{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;font:600 13px/1 var(--mono);background:var(--raise);color:var(--fg-2)}
+.sb{display:flex;flex-direction:column;gap:4px;min-width:0}
+.sb b{font:600 15px/1.35 var(--sans)}.sb>span{color:var(--fg-2);font-size:13.5px;line-height:1.5}
+.code{margin-top:10px;display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 12px;min-width:0}
+.code code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font:500 12.5px/1.6 var(--mono);color:var(--fg);scrollbar-width:none}
+.code button{flex:none;height:30px;padding:0 11px;border-radius:7px;border:1px solid var(--line-2);background:var(--raise);cursor:pointer;font:500 12px/1 var(--sans);color:var(--fg)}
+.code button:hover{border-color:var(--accent)}
+.alt{margin:16px 0 0;color:var(--fg-2);font-size:13.5px;line-height:1.9}
+.alt em{color:var(--fg);font-style:normal}
+.alt code{font:500 12px/1 var(--mono);background:var(--raise);padding:4px 7px;border-radius:6px;color:var(--fg);white-space:nowrap}
+.sf{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--fg-3);font-size:13px}
+.sf a{color:var(--fg-2);text-decoration:none}.sf a:hover{color:var(--accent)}
+.ttl{display:flex;align-items:center;gap:10px}
+.badge{font:500 11px/1 var(--mono);color:var(--accent);border:1px solid var(--accent-soft);border-radius:6px;padding:5px 7px;letter-spacing:.02em}
+@media (max-width:600px){
+  nav{left:16px;transform:none}
+  nav a>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}   /* icons only; the names stay for screen readers */
+  nav a{padding:9px 12px}
+}
+
 /* board view */
 .view{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:104px 64px}
 .bhead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
@@ -202,18 +236,24 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 
 <button class="theme" type="button" id="theme"><svg class="moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.6A5.6 5.6 0 0 1 6.4 2.5a5.6 5.6 0 1 0 7.1 7.1z"/></svg><svg class="sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg></button>
 
+<button class="lang" type="button" id="lang" hidden></button>
+
 <main>
-<section id="v-yazici" class="stage" aria-labelledby="t1">
-  <div id="fig" role="img"></div>
-  <div class="cap">
-    <h1 id="t1" data-ui="title"></h1>
-    <p data-ui="lede"></p>
-    <div class="readout" id="readout"><i></i><span></span></div>
+<section id="v-yazici" aria-labelledby="t1">
+  <div class="stage">
+    <div id="fig" role="img"></div>
+    <div class="cap">
+      <h1 id="t1" data-ui="title"></h1>
+      <p data-ui="lede"></p>
+      <div class="readout" id="readout"><i></i><span></span></div>
+      <button class="more" type="button" id="more" hidden></button>
+    </div>
   </div>
+  <div class="start" id="start" hidden></div>
 </section>
 
 <section class="view" id="v-pano" aria-labelledby="t2" hidden>
-  <div class="bhead"><h2 id="t2" data-ui="board"></h2><div class="seg" role="group" id="periods"></div></div>
+  <div class="bhead"><div class="ttl"><h2 id="t2" data-ui="board"></h2><span class="badge" id="badge" hidden></span></div><div class="seg" role="group" id="periods"></div></div>
   <div class="metrics" id="metrics"></div>
   <div class="cols" id="cols"></div>
 </section>
@@ -221,7 +261,11 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 
 <script>
 // Filled in by receipts.py --board: the printer (tools/printer), every archived receipt, the language and today.
-const PR=__PRINTER__, R=__RECEIPTS__, LANG="__LANG__", TODAY="__TODAY__";
+// SITE is set only on the public site (tools/site): install steps, a language switch, example receipts in both
+// languages and the day they are dated from. On your own board it is null.
+const SITE=__SITE__;
+const LANG=SITE?(new URLSearchParams(location.search).get("lang")||((navigator.language||"").toLowerCase().startsWith("tr")?"tr":"en")):"__LANG__";
+const PR=__PRINTER__, R=SITE?SITE.receipts[LANG==="tr"?"tr":"en"]:__RECEIPTS__, TODAY=SITE?SITE.today:"__TODAY__";
 // dark by default, light only when the viewer asks for it
 const root=document.documentElement, themeBtn=document.getElementById("theme");
 let theme="dark"; try{if(localStorage.getItem("vr-theme")==="light") theme="light";}catch(e){}
@@ -233,14 +277,26 @@ const UI={
    board:"Pano",periods:[["month","Bu ay"],["q","90 gün"],["all","Tümü"]],period:"Dönem",
    metrics:["Toplam süre","Faturalanacak","Token değeri","Fiş"],cols:{due:"Faturalanacak",paid:"Faturalandı",personal:"Kişisel"},
    empty:"Fişi buraya sürükle",status:"Durum",est:"commit tahmini",close:"Kapat",open:"aç",h:"s",m:"d",reprint:"Yeniden bas",
-   figLabel:(n,t)=>`Bir termal fiş yazıcısı, ${n} projesinin ${t} çalışma fişini basıyor.`,toLight:"Açık temaya geç",toDark:"Koyu temaya geç"},
+   figLabel:(n,t)=>`Bir termal fiş yazıcısı, ${n} projesinin ${t} çalışma fişini basıyor.`,toLight:"Açık temaya geç",toDark:"Koyu temaya geç",
+   example:"Örnek veri",more:"Nasıl başlarım?",start:"Başla",startLede:"Üç adım. Hepsi kendi bilgisayarında, Claude Code'un içinde.",
+   steps:[["Kur","Aracı Claude Code'a skill olarak ekle: bir klasör kopyalanır, başka hiçbir şey kurulmaz.","git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
+          ["Çalıştır","Bir projenin klasöründe Claude'a sor ya da komutu kendin çalıştır. Fişin, raporun ve panon hazırlanır.","python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --board"],
+          ["Panonu aç","Bütün fişlerin tek sayfada: yazıcı ve pano, bu sitedeki gibi, ama senin verinle.","open ~/vibe-receipts/board.html"]],
+   ask:"Ya da Claude'a sadece şunu söyle:",askText:"“Bu projede kaç saat çalıştım? Panoma ekle.”",plugin:"Plugin olarak kurmayı tercih edersen:",
+   privacy:"Prompt'ların, kodun ve fişlerin bilgisayarından çıkmaz. Bu sayfa yalnızca örnek veri gösterir.",github:"Kaynak kod GitHub'da",copy:"Kopyala",copied:"Kopyalandı",other:"EN",otherLabel:"Switch to English"},
  en:{navPrinter:"Printer",navBoard:"Board",title:"A receipt for the hours you worked",
    lede:"Measured from the gaps between your own prompts in Claude Code. It all stays on your machine.",
    ready:"ready",printing:"printing",prompts:"prompts",commits:"commits",
    board:"Board",periods:[["month","This month"],["q","90 days"],["all","All"]],period:"Period",
    metrics:["Total time","To bill","Token value","Receipts"],cols:{due:"To bill",paid:"Billed",personal:"Personal"},
    empty:"Drag a receipt here",status:"Status",est:"commit estimate",close:"Close",open:"open",h:"h",m:"m",reprint:"Print again",
-   figLabel:(n,t)=>`A thermal receipt printer printing the ${t} work receipt for ${n}.`,toLight:"Switch to light",toDark:"Switch to dark"},
+   figLabel:(n,t)=>`A thermal receipt printer printing the ${t} work receipt for ${n}.`,toLight:"Switch to light",toDark:"Switch to dark",
+   example:"Example data",more:"How do I start?",start:"Get started",startLede:"Three steps, all on your own machine, inside Claude Code.",
+   steps:[["Install","Add it to Claude Code as a skill: one folder is copied, nothing else is installed.","git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
+          ["Run it","In a project's folder, ask Claude or run the command yourself. Your receipt, report and board are made.","python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --board"],
+          ["Open your board","All your receipts on one page: the printer and the board, like this site, with your own data.","open ~/vibe-receipts/board.html"]],
+   ask:"Or just tell Claude:",askText:"“How many hours did I work on this project? Add it to my board.”",plugin:"Prefer a plugin?",
+   privacy:"Your prompts, code and receipts never leave your machine. This page shows example data only.",github:"Source on GitHub",copy:"Copy",copied:"Copied",other:"TR",otherLabel:"Türkçeye geç"},
 }[LANG==="tr"?"tr":"en"];
 const fmt=m=>`${Math.floor(m/60)}${UI.h} ${String(m%60).padStart(2,"0")}${UI.m}`;
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -250,6 +306,26 @@ document.documentElement.lang=LANG==="tr"?"tr":"en";
 setTheme(theme);
 themeBtn.addEventListener("click",()=>{setTheme(theme==="dark"?"light":"dark"); try{localStorage.setItem("vr-theme",theme);}catch(e){}});
 document.querySelectorAll("[data-ui]").forEach(el=>{const v=UI[el.dataset.ui]; if(typeof v==="string") el.textContent=v;});
+
+// ---- the public site only: how to start, an example-data badge, a language switch ----
+if(SITE){
+  const st=document.getElementById("start"), more=document.getElementById("more"), lang=document.getElementById("lang"), badge=document.getElementById("badge");
+  st.hidden=false; more.hidden=false; lang.hidden=false; badge.hidden=false;
+  more.textContent=UI.more; badge.textContent=UI.example; lang.textContent=UI.other; lang.setAttribute("aria-label",UI.otherLabel);
+  st.innerHTML=`<h2 class="sh">${esc(UI.start)}</h2><p class="sl">${esc(UI.startLede)}</p>
+    <ol class="steps">${UI.steps.map(([t,d,c],i)=>`<li><span class="sn">${i+1}</span><div class="sb"><b>${esc(t)}</b><span>${esc(d)}</span>
+      <div class="code"><code>${esc(c)}</code><button type="button" data-copy="${i}">${esc(UI.copy)}</button></div></div></li>`).join("")}</ol>
+    <p class="alt">${esc(UI.ask)} <em>${esc(UI.askText)}</em></p>
+    <p class="alt">${esc(UI.plugin)} <code>/plugin marketplace add sahmett/vibe-receipts</code> <code>/plugin install vibe-receipts@vibe-receipts</code></p>
+    <footer class="sf"><span>${esc(UI.privacy)}</span><a href="${esc(SITE.github)}" target="_blank" rel="noopener">${esc(UI.github)} ↗</a></footer>`;
+  st.querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",async()=>{
+    const code=b.previousElementSibling;
+    try{await navigator.clipboard.writeText(UI.steps[+b.dataset.copy][2]); b.textContent=UI.copied; setTimeout(()=>b.textContent=UI.copy,1600);}
+    catch(e){const r=document.createRange(); r.selectNodeContents(code); const s=getSelection(); s.removeAllRanges(); s.addRange(r);}
+  }));
+  more.addEventListener("click",()=>st.scrollIntoView({behavior:still.matches?"auto":"smooth",block:"start"}));
+  lang.addEventListener("click",()=>{location.href=location.pathname+"?lang="+(LANG==="tr"?"en":"tr")+location.hash;});
+}
 
 // a receipt in its own run's language and units, the layout receipts.py prints
 function receipt(r){
