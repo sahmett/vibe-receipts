@@ -139,7 +139,8 @@ html.boot .lang{opacity:0}
 /* the start section: centred under the printer; a vertical hairline joins it to the printer above and to the foot
    below, with a faint red beam falling down each */
 .start{position:relative;max-width:760px;margin:0 auto;padding:136px 16px 128px}
-.start>.sh,.start>.sl{text-align:center}
+.start>.sh,.start>.sl,.start>.alt{text-align:center}
+.start>.sf{flex-direction:column;align-items:center;text-align:center;gap:8px}   /* the closing lines sit centred too, over the line down to the foot */
 .start::before,.start::after{content:"";position:absolute;left:50%;width:1px;height:96px;transform:translateX(-50%);pointer-events:none;
   background:linear-gradient(180deg,#0000,color-mix(in srgb,var(--accent) 80%,transparent),#0000) no-repeat 0 -70%/100% 38%,
              linear-gradient(180deg,#0000,var(--line-3) 22% 78%,#0000);animation:fall 3.4s linear infinite}
@@ -194,10 +195,11 @@ html.boot .lang{opacity:0}
 @keyframes breathe{50%{transform:scaleY(.8)}}
 @media (prefers-reduced-motion:reduce){.pv .lift,.pv .feed,.pv .title,.pv .pop{transition:none}.ask:hover .pv .spark,.ask:hover .pv .bar{animation:none}}
 /* the Ask Claude page: three columns of upright cards, the drawing on top and larger */
-.asks.page{margin-top:28px;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-.asks.page .ask{grid-template-columns:minmax(0,1fr);align-items:stretch;gap:14px;padding:12px 12px 18px;border-radius:36px}
+#v-sor{max-width:900px}
+.asks.page{margin-top:24px;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.asks.page .ask{grid-template-columns:minmax(0,1fr);align-items:stretch;gap:12px;padding:10px 10px 16px;border-radius:30px}   /* 30 = drawing corner ~20 + padding 10 */
 .asks.page .tx{padding:0 4px}
-.asks.page q{font-size:15px}
+.asks.page q{font-size:14px}
 .ask-more{margin-top:26px}
 .ask-more a,.sl a{color:var(--fg);text-decoration:none;border-bottom:1px solid var(--line-3);transition:border-color .2s}
 .ask-more a:hover,.sl a:hover{border-color:var(--accent)}
@@ -239,10 +241,15 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 .metrics div{display:flex;flex-direction:column;gap:6px;min-width:0}
 .metrics span{font-size:12px;color:var(--fg-3)}
 .metrics b{font:500 20px/1 var(--mono);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.cols{margin-top:26px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;align-items:start}
-.col{min-height:200px;border-radius:14px;padding:4px;margin:-4px;outline:1px dashed transparent;outline-offset:2px;transition:outline-color .15s,background .15s}
-.col.over{outline-color:var(--accent);background:color-mix(in srgb,var(--panel) 60%,transparent)}
-.colh{display:flex;align-items:center;gap:8px;padding:2px 2px 12px;font:500 13px/1 var(--sans);color:var(--fg-2)}
+/* each column is a kanban lane: a framed, slightly sunken tray the cards sit in (lane radius 20 = card 12 + padding 8) */
+.cols{margin-top:26px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
+.col{display:flex;flex-direction:column;min-height:260px;border-radius:20px;padding:8px;
+  background:color-mix(in srgb,var(--raise) 45%,var(--bg));border:1px solid var(--line-2);
+  outline:1px dashed transparent;outline-offset:3px;transition:outline-color .15s,border-color .15s,background .15s}
+.col.over{outline-color:var(--accent);border-color:transparent;background:color-mix(in srgb,var(--raise) 75%,var(--bg))}
+.colh{display:flex;align-items:center;gap:8px;padding:8px 6px 14px;margin-bottom:2px;border-bottom:1px solid var(--line);font:500 13px/1 var(--sans);color:var(--fg-2)}
+.col .stack{flex:1;padding-top:8px}
+.col .empty{flex:1;display:grid;place-items:center}
 .colh .dot{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--fg-2)}
 .colh .dot.half{border-color:var(--accent);background:linear-gradient(90deg,var(--accent) 50%,transparent 50%)}
 .colh .dot.full{background:var(--fg-2)}
@@ -294,7 +301,7 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 .float .gloss{mix-blend-mode:soft-light}
 .float.tilting .shade,.float.tilting .gloss{opacity:1}
 
-@media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}.col{min-height:0}}
 @media (prefers-reduced-motion:reduce){#fig,.cap,.enter .tk{animation:none}.tk,nav .pill{transition:none}}
 </style>
 
@@ -881,6 +888,7 @@ if(SITE){
 // ---- the two views; the pill slides to the current one ----
 const pill=document.querySelector("nav .pill");
 function movePill(a){pill.style.left=a.offsetLeft+"px"; pill.style.width=a.offsetWidth+"px";}
+new ResizeObserver(()=>{const a=document.querySelector('nav a[aria-current="page"]'); if(a) movePill(a);}).observe(document.querySelector("nav"));   // the tabs shrink to icons on a narrow window
 let boardShown=false, goStart=false;   // goStart: land on the install steps, not the top
 function route(){
   const v=location.hash==="#pano"?"pano":location.hash==="#sor"&&SITE?"sor":"yazici";
