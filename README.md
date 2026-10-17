@@ -128,6 +128,23 @@ python3 receipts.py --board                                          # rebuild t
 `--client` names the client and `--status due|paid|personal` picks the column; both are kept for later runs
 of the same range. Dragging a card to another column on the page is remembered in that browser.
 
+The public site, [slipt-phi.vercel.app](https://slipt-phi.vercel.app), shows the same page with example
+receipts. Drag your `~/vibe-receipts/archive` folder (or its JSON files) onto it to see your own: the files
+are read in the browser and kept there until you go back to the examples; nothing is uploaded.
+
+### Share one receipt as a link
+
+`--link` prints a link that opens the receipt on the site, printing out of the printer:
+
+```bash
+python3 receipts.py . --link
+# Link: https://slipt-phi.vercel.app/#r=bVLBjtow...
+```
+
+The receipt (its numbers and labels, without the client or the board column) is compressed into the part
+after `#`, which browsers never send to the server, so no server keeps it. The project name is in it: use
+`--name` to show another one. A preview of the link in a chat app shows the site's card, not the receipt.
+
 ## How it works
 
 ### Working time = gaps between *your* prompts
@@ -225,6 +242,7 @@ throwaway server on `127.0.0.1`.
 | `--board` | also rebuild `board.html` from every archived receipt; with no `repo`, only rebuild it |
 | `--client` | client of this receipt, shown on the board |
 | `--status` | board column: `due`, `paid` or `personal` (default: `due` with a client, else `personal`) |
+| `--link` | also print a link that opens this receipt on the public site (the receipt rides in the `#` part) |
 
 Constants at the top of `receipts.py`: `IDLE` (fallback threshold), `CAP`, `MIN_GAPS`, `SENS`
 (thresholds in the sensitivity table), `PRICES`, `CODE_W`, `VENDOR_RE` / `GEN_RE` (excluded file

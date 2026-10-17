@@ -16,10 +16,11 @@ Usage:
 Besides the HTML report and CSV it writes <repo>-receipt.png, a shareable receipt card
 (rendered with a local Chrome/Chromium in headless mode; skipped if none is found).
 """
-import argparse, base64, datetime, glob, html, http.server, json, os, pathlib, re, shutil, subprocess, tempfile, threading
+import argparse, base64, datetime, glob, html, http.server, json, os, pathlib, re, shutil, subprocess, tempfile, threading, zlib
 
 IDLE       = 15            # minutes: fallback threshold when there are too few gaps for Tukey
 MIN_GAPS   = 20            # fewer gaps than this = Tukey threshold is not reliable
+SITE_URL   = 'https://slipt-phi.vercel.app'   # --link: the public site opens a receipt carried in the link
 CAP        = 30            # minutes: the automatic threshold never goes above this (a 30+ min gap is a break)
 SENS       = [5,10,15,20,30,45,60]   # thresholds shown in the sensitivity table
 BANDS      = [(0,2),(2,5),(5,15),(15,30),(30,60),(60,None)]
@@ -322,6 +323,7 @@ def main():
     ap.add_argument('--board',action='store_true',help='also rebuild board.html: every archived receipt on one page, a printer view and a status board')
     ap.add_argument('--client',help='client this receipt is for, shown on the board (kept for later runs of the same range)')
     ap.add_argument('--status',choices=['due','paid','personal'],help='board column for this receipt (default: due with a client, else personal)')
+    ap.add_argument('--link',action='store_true',help=f'also print a link that opens this receipt on {SITE_URL}: the receipt rides in the #part, which is never sent to the server (no client, no status)')
     a=ap.parse_args()
     a.out=os.path.abspath(os.path.expanduser(a.out))
     T=L[a.lang]; e=html.escape
@@ -601,7 +603,16 @@ def main():
             f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
     print("HTML:",out); print("CSV :",csvp); print("JSON:",archp)
     if a.board: print("Board:",build_board(a.out,a.lang))
+    if a.link: print("Link:",share_link(rec))
     print("Share:",share)
+
+def share_link(rec):
+    """A link to this receipt on the public site. The receipt (its numbers and labels, never the client or the
+    board status) is compressed into the part after #, which browsers keep to themselves: no server sees it."""
+    keep={k:v for k,v in rec.items() if k not in ('client','status','key')}
+    c=zlib.compressobj(9,zlib.DEFLATED,-15)   # raw deflate: the page reads it with DecompressionStream("deflate-raw")
+    z=c.compress(json.dumps(keep,ensure_ascii=False,separators=(',',':')).encode())+c.flush()
+    return f"{SITE_URL}/#r={base64.urlsafe_b64encode(z).decode().rstrip('=')}"
 
 def build_board(out,lang):
     """Every archived receipt on one page, <out>/board.html: the printer view (the newest receipt printing out

@@ -155,6 +155,18 @@ html.boot .lang{opacity:0}
 .sf a{color:var(--fg-2);text-decoration:none}.sf a:hover{color:var(--accent)}
 .ttl{display:flex;align-items:center;gap:10px}
 .badge{font:500 11px/1 var(--mono);color:var(--accent);border:1px solid var(--accent-soft);border-radius:6px;padding:5px 7px;letter-spacing:.02em}
+/* where the board's receipts come from: the examples, your own archive (read in this browser) or a shared link */
+.src{margin-top:18px;display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 12px 11px 14px;border:1px dashed var(--line-2);border-radius:12px;color:var(--fg-2);font-size:13px;line-height:1.5}
+.src code{font:500 12px/1 var(--mono);background:var(--raise);padding:4px 6px;border-radius:6px;color:var(--fg);white-space:nowrap}
+.src .err{color:var(--accent)}
+.src .acts{margin-left:auto;display:flex;gap:8px}
+.src button{height:30px;padding:0 11px;border-radius:8px;border:1px solid var(--line-2);background:var(--raise);cursor:pointer;font:500 12px/1 var(--sans);color:var(--fg);white-space:nowrap}
+.src button:hover{border-color:var(--accent)}
+.drop{position:fixed;inset:12px;z-index:95;display:grid;place-items:center;pointer-events:none;opacity:0;transition:opacity .2s var(--out);
+  border:1.5px dashed var(--accent);border-radius:22px;background:color-mix(in srgb,var(--bg) 72%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.drop.on{opacity:1}
+.drop span{font:500 15px/1.4 var(--sans);color:var(--fg);padding:0 24px;text-align:center}
+.cap .badge{margin-bottom:4px}
 @media (max-width:600px){
   nav{left:16px;transform:none}
   nav a>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}   /* icons only; the names stay for screen readers */
@@ -247,6 +259,7 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
   <div class="stage">
     <div id="fig" role="img"></div>
     <div class="cap">
+      <span class="badge" id="shared" hidden></span>
       <h1 id="t1" data-ui="title"></h1>
       <p data-ui="lede"></p>
       <div class="readout" id="readout"><i></i><span></span></div>
@@ -258,6 +271,7 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 
 <section class="view" id="v-pano" aria-labelledby="t2" hidden>
   <div class="bhead"><div class="ttl"><h2 id="t2" data-ui="board"></h2><span class="badge" id="badge" hidden></span></div><div class="seg" role="group" id="periods"></div></div>
+  <div class="src" id="src" hidden></div>
   <div class="metrics" id="metrics"></div>
   <div class="cols" id="cols"></div>
 </section>
@@ -269,7 +283,8 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 // languages and the day they are dated from. On your own board it is null.
 const SITE=__SITE__;
 const LANG=SITE?(new URLSearchParams(location.search).get("lang")||((navigator.language||"").toLowerCase().startsWith("tr")?"tr":"en")):"__LANG__";
-const PR=__PRINTER__, R=SITE?SITE.receipts[LANG==="tr"?"tr":"en"]:__RECEIPTS__, TODAY=SITE?SITE.today:"__TODAY__";
+const PR=__PRINTER__, EXAMPLES=SITE?SITE.receipts[LANG==="tr"?"tr":"en"]:null;
+let R=EXAMPLES||__RECEIPTS__, TODAY=SITE?SITE.today:"__TODAY__", SOURCE=SITE?"example":"own";   // example | mine | shared | own (your local board)
 // dark by default, light only when the viewer asks for it
 const root=document.documentElement, themeBtn=document.getElementById("theme");
 let theme="dark"; try{if(localStorage.getItem("vr-theme")==="light") theme="light";}catch(e){}
@@ -285,9 +300,16 @@ const UI={
    example:"Örnek veri",more:"Nasıl başlarım?",start:"Başla",startLede:"Üç adım. Hepsi kendi bilgisayarında, Claude Code'un içinde.",
    steps:[["Kur","Aracı Claude Code'a skill olarak ekle: bir klasör kopyalanır, başka hiçbir şey kurulmaz.","git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
           ["Çalıştır","Bir projenin klasöründe Claude'a sor ya da komutu kendin çalıştır. Fişin, raporun ve panon hazırlanır.","python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --board"],
-          ["Panonu aç","Bütün fişlerin tek sayfada: yazıcı ve pano, bu sitedeki gibi, ama senin verinle.","open ~/vibe-receipts/board.html"]],
+          ["Panonu aç","Bütün fişlerin tek sayfada. Ya da archive klasörünü bu sitedeki panoya sürükle.","open ~/vibe-receipts/board.html"]],
    ask:"Ya da Claude'a sadece şunu söyle:",askText:"“Bu projede kaç saat çalıştım? Panoma ekle.”",plugin:"Plugin olarak kurmayı tercih edersen:",
-   privacy:"Prompt'ların, kodun ve fişlerin bilgisayarından çıkmaz. Bu sayfa yalnızca örnek veri gösterir.",github:"Kaynak kod GitHub'da",copy:"Kopyala",copied:"Kopyalandı",other:"EN",otherLabel:"Switch to English"},
+   privacy:"Prompt'ların ve kodun bilgisayarından çıkmaz. Buraya açtığın fişler yalnızca tarayıcında okunur.",
+   linkAlt:"Bir fişi linkle paylaş:",
+   srcExample:"Bunlar örnek fişler. Kendi fişlerin için {code} klasörünü bu sayfaya sürükle. Hiçbir şey yüklenmez.",pick:"Dosya seç",
+   srcMine:n=>`Senin fişlerin: ${n} fiş. Yalnızca bu tarayıcıda tutulur.`,add:"Fiş ekle",back:"Örneğe dön",
+   srcShared:n=>`Paylaşılan fiş: ${n}. Linkin içinde taşınır, hiçbir sunucuda tutulmaz.`,
+   none:"Bu dosyalarda fiş bulunamadı.",badLink:"Bu link açılamadı, örnek fişler gösteriliyor.",
+   dropHere:"Fişlerini bırak: archive klasörü ya da içindeki JSON dosyaları",mine:"Senin verin",sharedBadge:"Paylaşılan",
+   sharedChip:n=>`Paylaşılan fiş · ${n}`,own:"Kendi fişini çıkar",github:"Kaynak kod GitHub'da",copy:"Kopyala",copied:"Kopyalandı",other:"EN",otherLabel:"Switch to English"},
  en:{navPrinter:"Printer",navBoard:"Board",title:"Your hours, on a receipt",
    lede:"Measured from your own Claude Code prompts. It all stays on your machine.",
    ready:"ready",printing:"printing",prompts:"prompts",commits:"commits",
@@ -298,9 +320,16 @@ const UI={
    example:"Example data",more:"How do I start?",start:"Get started",startLede:"Three steps, all on your own machine, inside Claude Code.",
    steps:[["Install","Add it to Claude Code as a skill: one folder is copied, nothing else is installed.","git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
           ["Run it","In a project's folder, ask Claude or run the command yourself. Your receipt, report and board are made.","python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --board"],
-          ["Open your board","All your receipts on one page: the printer and the board, like this site, with your own data.","open ~/vibe-receipts/board.html"]],
+          ["Open your board","All your receipts on one page. Or drag the archive folder onto this site's board.","open ~/vibe-receipts/board.html"]],
    ask:"Or just tell Claude:",askText:"“How many hours did I work on this project? Add it to my board.”",plugin:"Prefer a plugin?",
-   privacy:"Your prompts, code and receipts never leave your machine. This page shows example data only.",github:"Source on GitHub",copy:"Copy",copied:"Copied",other:"TR",otherLabel:"Türkçeye geç"},
+   privacy:"Your prompts and code never leave your machine. Receipts you open here are read in your browser only.",
+   linkAlt:"Share one receipt as a link:",
+   srcExample:"These are example receipts. For yours, drag your {code} folder onto this page. Nothing is uploaded.",pick:"Choose files",
+   srcMine:n=>`Your receipts: ${n}. Kept in this browser only.`,add:"Add receipts",back:"Back to examples",
+   srcShared:n=>`A shared receipt: ${n}. It travels inside the link, no server keeps it.`,
+   none:"No receipts found in those files.",badLink:"This link could not be opened, showing example receipts.",
+   dropHere:"Drop your receipts: the archive folder or the JSON files in it",mine:"Your data",sharedBadge:"Shared",
+   sharedChip:n=>`Shared receipt · ${n}`,own:"Get your own receipt",github:"Source on GitHub",copy:"Copy",copied:"Copied",other:"TR",otherLabel:"Türkçeye geç"},
 }[LANG==="tr"?"tr":"en"];
 const fmt=m=>`${Math.floor(m/60)}${UI.h} ${String(m%60).padStart(2,"0")}${UI.m}`;
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -321,6 +350,7 @@ if(SITE){
       <div class="code"><code>${esc(c)}</code><button type="button" data-copy="${i}">${esc(UI.copy)}</button></div></div></li>`).join("")}</ol>
     <p class="alt">${esc(UI.ask)} <em>${esc(UI.askText)}</em></p>
     <p class="alt">${esc(UI.plugin)} <code>/plugin marketplace add sahmett/vibe-receipts</code> <code>/plugin install vibe-receipts@vibe-receipts</code></p>
+    <p class="alt">${esc(UI.linkAlt)} <code>python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --link</code></p>
     <footer class="sf"><span>${esc(UI.privacy)}</span><a href="${esc(SITE.github)}" target="_blank" rel="noopener">${esc(UI.github)} ↗</a></footer>`;
   st.querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",async()=>{
     const code=b.previousElementSibling;
@@ -342,7 +372,7 @@ function receipt(r){
     <div class="row"><span>${esc(L.project)}</span><span class="nm">${esc(r.name)}</span></div>
     ${r.built?`<div class="row"><span>${esc(L.built)}</span><span class="nm">${esc(r.built.toUpperCase())}</span></div>`:""}
     <div class="row"><span>${esc(L.period)}</span><span>${esc(r.period)}</span></div>
-    ${r.active?`<div class="row"><span>${esc(L.active)}</span><span>${r.active}</span></div>`:""}
+    ${r.active?`<div class="row"><span>${esc(L.active)}</span><span>${esc(r.active)}</span></div>`:""}
     <div class="hr"></div>
     <div class="items"><span class="h">${esc(L.qty)}</span><span class="h">${esc(L.item)}</span><span class="h r">${esc(L.time)}</span>${rows}</div>
     <div class="hr"></div>${stats}<div class="hr2"></div>
@@ -361,9 +391,9 @@ const count=r=>r.estimate?`${r.commits} ${UI.commits}`:`${r.prompts.toLocaleStri
 // weight, is torn off, tips back over the printer and drops onto the floor behind it, where it stays.
 const G=PR.geo, VS=2.4, RW=34.67*15, WD=G.world;    // video px per viewBox unit; a receipt's own width in px; the printer's sizes
 const q=G.paperW/RW;                                 // world units per receipt px (every receipt is 80 mm wide)
-const LATEST=R[0];                                   // receipts.py sorts newest first
 const fig=document.getElementById("fig"), readout=document.getElementById("readout"), rtext=readout.querySelector("span");
-fig.setAttribute("aria-label",UI.figLabel(LATEST.name,fmt(LATEST.min)));   // no title tooltip: it would sit over the caption
+const labelFig=()=>fig.setAttribute("aria-label",UI.figLabel(R[0].name,fmt(R[0].min)));   // R[0] is the newest; no title tooltip, it would sit over the caption
+labelFig();
 const cap=document.querySelector(".cap");
 let VB, S=1, lamps=[], LY={}, built=false;
 
@@ -449,7 +479,7 @@ function buildFigure(){
   LY={back:fig.querySelector("#lyBack"),mid:fig.querySelector("#lyMid"),front:fig.querySelector("#lyFront")};
   lamps=[...fig.querySelectorAll(".lamp")];
   // the floor: the receipts after the newest one, as many as there are spots (repeating if the archive is small)
-  const others=R.length>1?R.slice(1):R;
+  const others=SOURCE==="shared"?EXAMPLES:R.length>1?R.slice(1):R;   // a shared receipt prints among the examples
   floor=FLOOR.map((spot,i)=>{const sh=makeSheet(others[i%others.length],LY.back,endBands(spot.end==="roll"?34:12),FLOOR_SCALE); sh.pose=floorPose(sh,spot.c[0],spot.c[1],spot.h,spot.end); sh.el.classList.add("floor","far"); return sh;});
   floor.forEach(sh=>{if(!behind(sh)) LY.front.appendChild(sh.el);});
   queue=[...R];
@@ -506,7 +536,8 @@ const COLS=[{k:"due",dot:"half"},{k:"paid",dot:"full"},{k:"personal",dot:"dash"}
 // A status changed here is kept in this browser, until a run with --status sets a new one for that receipt.
 const SAVE="vr-board-status";
 let saved={}; try{saved=JSON.parse(localStorage.getItem(SAVE)||"{}")||{};}catch(e){saved={};}
-R.forEach(r=>{const s=saved[r.key]; r.shown=s&&s.base===r.status?s.s:r.status;});
+const applyStatuses=()=>R.forEach(r=>{const s=saved[r.key]; r.shown=s&&s.base===r.status?s.s:r.status;});
+applyStatuses();
 function setStatus(r,k){r.shown=k; saved[r.key]={s:k,base:r.status}; try{localStorage.setItem(SAVE,JSON.stringify(saved));}catch(e){}}
 let period="q";
 const daysAgo=n=>{const d=new Date(TODAY+"T12:00:00"); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10);};
@@ -514,9 +545,8 @@ const inPeriod=r=>period==="all"?true:period==="month"?r.end>=TODAY.slice(0,7)+"
 const periodsEl=document.getElementById("periods");
 periodsEl.setAttribute("aria-label",UI.period);
 periodsEl.innerHTML=UI.periods.map(([k,l])=>`<button type="button" data-p="${k}" aria-pressed="${k===period}">${esc(l)}</button>`).join("");
-periodsEl.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
-  period=b.dataset.p; periodsEl.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); closeSheet(true); board(true);
-}));
+function setPeriod(k){period=k; periodsEl.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.p===k)));}
+periodsEl.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{setPeriod(b.dataset.p); closeSheet(true); board(true);}));
 
 function card(r,i){
   const mx=Math.max(1,...r.items.map(x=>x[2]));
@@ -655,6 +685,114 @@ addEventListener("resize",()=>{   // keep the open receipt in the middle, sized 
   sheet.el.style.left=left+"px"; sheet.el.style.top=top+"px";
 });
 
+// ---- the public site: your own receipts, read in this browser, or one shared receipt carried in the link ----
+// Nothing is uploaded. Dropped files are read here and kept in this browser's storage until "back to examples";
+// a shared receipt is the #r= part of the link, which browsers never send to the server.
+const MINE="vr-mine";
+const today=()=>{const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
+const txt=(v,n)=>String(v??"").slice(0,n), num=v=>{const x=Number(v); return Number.isFinite(x)?x:0;}, day=v=>/^\d{4}-\d{2}-\d{2}$/.test(v)?v:"";
+// a receipt from outside (a file, a link) in the archive's shape, every field the type the page expects
+function clean(r){
+  if(!r||typeof r!=="object"||!Array.isArray(r.items)||!r.items.length||!r.L||typeof r.L!=="object") return null;
+  const end=day(r.end)||day(r.start); if(!end) return null;
+  const start=day(r.start)||end, name=txt(r.name,80)||"receipt", L={};
+  ["kind","project","built","period","active","qty","item","time","value","total","h","m"].forEach(k=>L[k]=txt(r.L[k],40));
+  const items=r.items.slice(0,400).filter(Array.isArray).map(i=>[Math.max(0,Math.round(num(i[0]))),txt(i[1],60),Math.max(0,Math.round(num(i[2])))]);
+  const status=["due","paid","personal"].includes(r.status)?r.status:r.client?"due":"personal";
+  return {key:txt(r.key,200)||`${name}_${start}_${end}`,name,built:r.built?txt(r.built,60):null,period:txt(r.period,80),active:r.active?Math.round(num(r.active)):null,
+    start,end,items,min:Math.round(num(r.min))||items.reduce((s,i)=>s+i[2],0),prompts:Math.round(num(r.prompts)),commits:Math.round(num(r.commits)),estimate:!!r.estimate,
+    stats:(Array.isArray(r.stats)?r.stats:[]).slice(0,20).map(x=>Array.isArray(x)?[txt(x[0],40),txt(x[1],80)]:null),
+    value:r.value==null?null:num(r.value),value_text:r.value_text?txt(r.value_text,30):null,thr:[0,1,2].map(i=>txt((Array.isArray(r.thr)?r.thr:[])[i],120)),
+    client:r.client?txt(r.client,60):null,status,lang:r.lang==="tr"?"tr":"en",made:txt(r.made,30),L};
+}
+const newest=list=>list.sort((a,b)=>(b.end+b.start+b.made).localeCompare(a.end+a.start+a.made));
+let note="";   // a one-off message in the source bar: nothing found, a broken link
+function use(list,source){
+  R=list; SOURCE=source; TODAY=source==="example"?SITE.today:today();
+  if(source==="mine"){try{localStorage.setItem(MINE,JSON.stringify(list));}catch(e){}}
+  if(source==="example"){try{localStorage.removeItem(MINE);}catch(e){}}
+  applyStatuses(); labelFig();
+  setPeriod(source==="shared"||!R.some(inPeriod)?"all":"q");   // never open on an empty board
+  const badge=document.getElementById("badge"), chip=document.getElementById("shared"), more=document.getElementById("more");
+  badge.textContent=source==="mine"?UI.mine:source==="shared"?UI.sharedBadge:UI.example;
+  chip.hidden=source!=="shared"; if(source==="shared") chip.textContent=UI.sharedChip(R[0].name);
+  more.querySelector("span").firstChild.textContent=source==="shared"?UI.own:UI.more;
+  srcBar();
+}
+function srcBar(){
+  const el=document.getElementById("src"); el.hidden=false;
+  const msg=SOURCE==="mine"?esc(UI.srcMine(R.length)):SOURCE==="shared"?esc(UI.srcShared(R[0].name)):esc(UI.srcExample).replace("{code}","<code>~/vibe-receipts/archive</code>");
+  const acts=SOURCE==="mine"?`<button type="button" data-a="pick">${esc(UI.add)}</button><button type="button" data-a="back">${esc(UI.back)}</button>`
+    :SOURCE==="shared"?`<button type="button" data-a="back">${esc(UI.back)}</button>`:`<button type="button" data-a="pick">${esc(UI.pick)}</button>`;
+  el.innerHTML=`<span>${note?`<span class="err">${esc(note)}</span> `:""}${msg}</span><span class="acts">${acts}</span>`;
+}
+function rebuild(){   // the visible view again, with the new receipts; the printer starts over
+  cancelAnimationFrame(raf); printing=false; printed=0; closeSheet(true);
+  if(built){built=false; current=null; floor=[];}
+  boardShown=false; route();
+}
+async function readFiles(files){
+  const got=[];
+  for(const f of files){
+    if(!/\.json$/i.test(f.name)||f.size>2e6) continue;
+    try{const r=clean(JSON.parse(await f.text())); if(r) got.push(r);}catch(e){}
+  }
+  if(!got.length){note=UI.none; srcBar(); return;}
+  const keep=new Map((SOURCE==="mine"?R:[]).map(r=>[r.key,r]));   // adding to your own receipts; a newer run of the same range wins
+  got.forEach(r=>{const o=keep.get(r.key); if(!o||r.made>=o.made) keep.set(r.key,r);});
+  note=""; if(location.hash.startsWith("#r=")) history.replaceState(null,"",location.pathname+location.search+"#pano");
+  use(newest([...keep.values()]),"mine"); rebuild();
+}
+// a dropped folder: every .json in it and its subfolders (the archive folder, or ~/vibe-receipts itself)
+async function entries(items){
+  const out=[], walk=async(en,depth)=>{
+    if(en.isFile){if(/\.json$/i.test(en.name)) out.push(await new Promise((ok,no)=>en.file(ok,no)).catch(()=>null));}
+    else if(en.isDirectory&&depth<3){const rd=en.createReader(); let batch;
+      do{batch=await new Promise((ok,no)=>rd.readEntries(ok,no)).catch(()=>[]); for(const e of batch) await walk(e,depth+1);}while(batch.length);}
+  };
+  for(const en of items) if(en) await walk(en,0);
+  return out.filter(Boolean);
+}
+const unpack=async b64=>{
+  const bin=atob(b64.replace(/-/g,"+").replace(/_/g,"/")), bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
+  const text=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+  return clean(JSON.parse(text.slice(0,2e5)));
+};
+async function openSite(){
+  const m=location.hash.match(/^#r=([A-Za-z0-9_-]{8,20000})$/);
+  if(m){
+    let r=null; try{if("DecompressionStream" in window) r=await unpack(m[1]);}catch(e){}
+    if(r){r.client=null; r.status="personal"; use([r],"shared"); return;}
+    note=UI.badLink;
+  }
+  let mine=null; try{mine=JSON.parse(localStorage.getItem(MINE)||"null");}catch(e){}
+  const list=Array.isArray(mine)?mine.map(clean).filter(Boolean):[];
+  use(list.length?newest(list):EXAMPLES,list.length?"mine":"example");
+}
+if(SITE){
+  const input=Object.assign(document.createElement("input"),{type:"file",multiple:true,accept:".json,application/json",hidden:true});
+  document.body.appendChild(input);
+  input.addEventListener("change",()=>{readFiles([...input.files]); input.value="";});
+  document.getElementById("src").addEventListener("click",e=>{
+    const a=e.target.closest("button")?.dataset.a;
+    if(a==="pick") input.click();
+    if(a==="back"){note=""; if(location.hash.startsWith("#r=")) history.replaceState(null,"",location.pathname+location.search); use(EXAMPLES,"example"); rebuild();}
+  });
+  // files dragged in from outside the page; a card dragged between columns carries no files and is left alone
+  const drop=document.createElement("div"); drop.className="drop"; drop.setAttribute("aria-hidden","true"); drop.innerHTML=`<span>${esc(UI.dropHere)}</span>`;
+  document.body.appendChild(drop);
+  const hasFiles=e=>[...(e.dataTransfer?.types||[])].includes("Files");
+  let depth=0;
+  addEventListener("dragenter",e=>{if(!hasFiles(e)) return; depth++; drop.classList.add("on");});
+  addEventListener("dragleave",e=>{if(!hasFiles(e)) return; if(--depth<=0){depth=0; drop.classList.remove("on");}});
+  addEventListener("dragover",e=>{if(hasFiles(e)){e.preventDefault(); e.dataTransfer.dropEffect="copy";}});
+  addEventListener("drop",async e=>{
+    if(!hasFiles(e)) return; e.preventDefault(); depth=0; drop.classList.remove("on");
+    const items=[...e.dataTransfer.items].filter(i=>i.kind==="file"), en=items.map(i=>i.webkitGetAsEntry?.());
+    readFiles(en.some(Boolean)?await entries(en):[...e.dataTransfer.files]);
+  });
+}
+
 // ---- the two views; the pill slides to the current one ----
 const pill=document.querySelector("nav .pill");
 function movePill(a){pill.style.left=a.offsetLeft+"px"; pill.style.width=a.offsetWidth+"px";}
@@ -672,7 +810,7 @@ addEventListener("hashchange",route);
 function fontsReady(){   // system faces are there at once; this only waits for the document to settle
   return document.fonts?Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,300))]):Promise.resolve();
 }
-fontsReady().then(()=>{
+Promise.all([fontsReady(),SITE?openSite():null]).then(()=>{
   try{route();}                                         // builds and measures the visible view, still hidden
   finally{requestAnimationFrame(()=>{
     root.classList.remove("boot");
