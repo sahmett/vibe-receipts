@@ -50,9 +50,11 @@ python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [-
   timesheet across projects): every run archives its receipt in `~/vibe-receipts/archive/`, and `--board`
   rebuilds `~/vibe-receipts/board.html` from all of them. With no repo (`receipts.py --board`) it only rebuilds.
   For client work pass `--client "<name>"` (the card goes to "to bill"), and `--status paid` once it is invoiced.
-- `--link` when the user wants to share one receipt as a link ("link ver", "share a link"): it prints a `Link:`
-  that opens the receipt on the public site. The receipt rides in the link's `#` part (no server sees it; the
-  client is left out), but the project name is in it, so offer `--name` if the name is private.
+- `--share` when the user wants to post a receipt as a link ("paylaşmak için link", "share a link"): it prints a
+  `Share link:` whose preview card shows the receipt. The site reads the receipt from the link to draw the card
+  and stores nothing; the client is left out, but the project name is in it, so offer `--name` if it is private.
+  `--link` instead keeps the receipt in the `#` part, which no server sees, but its preview is the site's card:
+  use it when the user does not want the numbers to reach any server.
 - Leave `--break` out by default (automatic threshold). Pass `--break MIN` only when the user asks for
   a specific threshold ("recalculate with 20 minutes", "15 dk ile hesapla"); re-run and compare.
 - If the same repo lives in two folders (two clones, or a moved folder), pass every matching
@@ -85,7 +87,7 @@ After running, read the printed summary and the CSV, then answer in the user's l
 - The path to the HTML report and the receipt PNG (and the MP4 with `--video`, the board with `--board`), and
   open them if the environment can show files. Without `--video`, offer it once: a clip of the receipt printing out is made
   for posting.
-- With `--link`, the `Link:` line as-is. Never post it anywhere yourself.
+- With `--share` or `--link`, the `Share link:` or `Link:` line as-is. Never post it anywhere yourself.
 - The `Share:` line, as-is in a code block, as a ready-to-post caption for the receipt PNG or video. Never post it
   anywhere yourself. If the project name is private, offer to re-run with `--name` to hide it.
 

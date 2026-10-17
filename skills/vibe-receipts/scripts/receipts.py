@@ -324,6 +324,7 @@ def main():
     ap.add_argument('--client',help='client this receipt is for, shown on the board (kept for later runs of the same range)')
     ap.add_argument('--status',choices=['due','paid','personal'],help='board column for this receipt (default: due with a client, else personal)')
     ap.add_argument('--link',action='store_true',help=f'also print a link that opens this receipt on {SITE_URL}: the receipt rides in the #part, which is never sent to the server (no client, no status)')
+    ap.add_argument('--share',action='store_true',help=f'also print a link to this receipt on {SITE_URL} whose preview shows the receipt: the server reads it from the link to draw the preview, and stores nothing (no client, no status)')
     a=ap.parse_args()
     a.out=os.path.abspath(os.path.expanduser(a.out))
     T=L[a.lang]; e=html.escape
@@ -604,15 +605,19 @@ def main():
     print("HTML:",out); print("CSV :",csvp); print("JSON:",archp)
     if a.board: print("Board:",build_board(a.out,a.lang))
     if a.link: print("Link:",share_link(rec))
+    if a.share: print("Share link:",share_link(rec,preview=True))
     print("Share:",share)
 
-def share_link(rec):
-    """A link to this receipt on the public site. The receipt (its numbers and labels, never the client or the
-    board status) is compressed into the part after #, which browsers keep to themselves: no server sees it."""
+def share_link(rec,preview=False):
+    """A link to this receipt on the public site: the receipt (its numbers and labels, never the client or the
+    board status), compressed. By default it goes after #, which browsers keep to themselves: no server sees it.
+    preview=True puts it in the path, /r/<receipt>, so the site can draw the link's preview card from it; the
+    site stores nothing, the link is the receipt."""
     keep={k:v for k,v in rec.items() if k not in ('client','status','key')}
     c=zlib.compressobj(9,zlib.DEFLATED,-15)   # raw deflate: the page reads it with DecompressionStream("deflate-raw")
     z=c.compress(json.dumps(keep,ensure_ascii=False,separators=(',',':')).encode())+c.flush()
-    return f"{SITE_URL}/#r={base64.urlsafe_b64encode(z).decode().rstrip('=')}"
+    d=base64.urlsafe_b64encode(z).decode().rstrip('=')
+    return f"{SITE_URL}/r/{d}" if preview else f"{SITE_URL}/#r={d}"
 
 def build_board(out,lang):
     """Every archived receipt on one page, <out>/board.html: the printer view (the newest receipt printing out

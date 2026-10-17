@@ -1,0 +1,8 @@
+{
+  "name": "slipt-site",
+  "private": true,
+  "type": "module",
+  "description": "The public Slipt site: the board page (built by build.py) and the shared-receipt functions in api/",
+  "engines": { "node": "22.x" },
+  "dependencies": { "@vercel/og": "0.11.1" }
+}

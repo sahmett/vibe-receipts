@@ -1,0 +1,10 @@
+{
+  "rewrites": [
+    { "source": "/r/:d/og.png", "destination": "/api/og?d=:d" },
+    { "source": "/r/:d", "destination": "/api/r?d=:d" }
+  ],
+  "functions": {
+    "api/og.js": { "includeFiles": "fonts/**" },
+    "api/r.js": { "includeFiles": "index.html" }
+  }
+}

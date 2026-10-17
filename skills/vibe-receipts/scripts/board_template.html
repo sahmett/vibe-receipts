@@ -303,7 +303,7 @@ const UI={
           ["Panonu aç","Bütün fişlerin tek sayfada. Ya da archive klasörünü bu sitedeki panoya sürükle.","open ~/vibe-receipts/board.html"]],
    ask:"Ya da Claude'a sadece şunu söyle:",askText:"“Bu projede kaç saat çalıştım? Panoma ekle.”",plugin:"Plugin olarak kurmayı tercih edersen:",
    privacy:"Prompt'ların ve kodun bilgisayarından çıkmaz. Buraya açtığın fişler yalnızca tarayıcında okunur.",
-   linkAlt:"Bir fişi linkle paylaş:",
+   linkAlt:"Bir fişi önizlemeli bir linkle paylaş:",
    srcExample:"Bunlar örnek fişler. Kendi fişlerin için {code} klasörünü bu sayfaya sürükle. Hiçbir şey yüklenmez.",pick:"Dosya seç",
    srcMine:n=>`Senin fişlerin: ${n} fiş. Yalnızca bu tarayıcıda tutulur.`,add:"Fiş ekle",back:"Örneğe dön",
    srcShared:n=>`Paylaşılan fiş: ${n}. Linkin içinde taşınır, hiçbir sunucuda tutulmaz.`,
@@ -323,7 +323,7 @@ const UI={
           ["Open your board","All your receipts on one page. Or drag the archive folder onto this site's board.","open ~/vibe-receipts/board.html"]],
    ask:"Or just tell Claude:",askText:"“How many hours did I work on this project? Add it to my board.”",plugin:"Prefer a plugin?",
    privacy:"Your prompts and code never leave your machine. Receipts you open here are read in your browser only.",
-   linkAlt:"Share one receipt as a link:",
+   linkAlt:"Share one receipt as a link with a preview:",
    srcExample:"These are example receipts. For yours, drag your {code} folder onto this page. Nothing is uploaded.",pick:"Choose files",
    srcMine:n=>`Your receipts: ${n}. Kept in this browser only.`,add:"Add receipts",back:"Back to examples",
    srcShared:n=>`A shared receipt: ${n}. It travels inside the link, no server keeps it.`,
@@ -350,7 +350,7 @@ if(SITE){
       <div class="code"><code>${esc(c)}</code><button type="button" data-copy="${i}">${esc(UI.copy)}</button></div></div></li>`).join("")}</ol>
     <p class="alt">${esc(UI.ask)} <em>${esc(UI.askText)}</em></p>
     <p class="alt">${esc(UI.plugin)} <code>/plugin marketplace add sahmett/vibe-receipts</code> <code>/plugin install vibe-receipts@vibe-receipts</code></p>
-    <p class="alt">${esc(UI.linkAlt)} <code>python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --link</code></p>
+    <p class="alt">${esc(UI.linkAlt)} <code>python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --share</code></p>
     <footer class="sf"><span>${esc(UI.privacy)}</span><a href="${esc(SITE.github)}" target="_blank" rel="noopener">${esc(UI.github)} ↗</a></footer>`;
   st.querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",async()=>{
     const code=b.previousElementSibling;
@@ -686,8 +686,9 @@ addEventListener("resize",()=>{   // keep the open receipt in the middle, sized 
 });
 
 // ---- the public site: your own receipts, read in this browser, or one shared receipt carried in the link ----
-// Nothing is uploaded. Dropped files are read here and kept in this browser's storage until "back to examples";
-// a shared receipt is the #r= part of the link, which browsers never send to the server.
+// Nothing is uploaded. Dropped files are read here and kept in this browser's storage until "back to examples".
+// A shared receipt is in the link: after #r= (--link: browsers never send it to the server) or after /r/
+// (--share: the server reads it to draw the link's preview, and stores nothing).
 const MINE="vr-mine";
 const today=()=>{const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
 const txt=(v,n)=>String(v??"").slice(0,n), num=v=>{const x=Number(v); return Number.isFinite(x)?x:0;}, day=v=>/^\d{4}-\d{2}-\d{2}$/.test(v)?v:"";
@@ -740,7 +741,7 @@ async function readFiles(files){
   if(!got.length){note=UI.none; srcBar(); return;}
   const keep=new Map((SOURCE==="mine"?R:[]).map(r=>[r.key,r]));   // adding to your own receipts; a newer run of the same range wins
   got.forEach(r=>{const o=keep.get(r.key); if(!o||r.made>=o.made) keep.set(r.key,r);});
-  note=""; if(location.hash.startsWith("#r=")) history.replaceState(null,"",location.pathname+location.search+"#pano");
+  note=""; if(SOURCE==="shared") leaveShared("#pano");
   use(newest([...keep.values()]),"mine"); rebuild();
 }
 // a dropped folder: every .json in it and its subfolders (the archive folder, or ~/vibe-receipts itself)
@@ -753,13 +754,15 @@ async function entries(items){
   for(const en of items) if(en) await walk(en,0);
   return out.filter(Boolean);
 }
+const sharedPath=()=>location.pathname.match(/^\/r\/([A-Za-z0-9_-]{8,20000})\/?$/);
+function leaveShared(hash){history.replaceState(null,"",(sharedPath()?"/":location.pathname)+location.search+hash);}   // the address no longer names the receipt
 const unpack=async b64=>{
   const bin=atob(b64.replace(/-/g,"+").replace(/_/g,"/")), bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
   const text=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
   return clean(JSON.parse(text.slice(0,2e5)));
 };
 async function openSite(){
-  const m=location.hash.match(/^#r=([A-Za-z0-9_-]{8,20000})$/);
+  const m=location.hash.match(/^#r=([A-Za-z0-9_-]{8,20000})$/)||sharedPath();
   if(m){
     let r=null; try{if("DecompressionStream" in window) r=await unpack(m[1]);}catch(e){}
     if(r){r.client=null; r.status="personal"; use([r],"shared"); return;}
@@ -776,7 +779,7 @@ if(SITE){
   document.getElementById("src").addEventListener("click",e=>{
     const a=e.target.closest("button")?.dataset.a;
     if(a==="pick") input.click();
-    if(a==="back"){note=""; if(location.hash.startsWith("#r=")) history.replaceState(null,"",location.pathname+location.search); use(EXAMPLES,"example"); rebuild();}
+    if(a==="back"){note=""; if(SOURCE==="shared") leaveShared(location.hash.startsWith("#r=")?"":location.hash); use(EXAMPLES,"example"); rebuild();}
   });
   // files dragged in from outside the page; a card dragged between columns carries no files and is left alone
   const drop=document.createElement("div"); drop.className="drop"; drop.setAttribute("aria-hidden","true"); drop.innerHTML=`<span>${esc(UI.dropHere)}</span>`;

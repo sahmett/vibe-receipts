@@ -145,6 +145,20 @@ The receipt (its numbers and labels, without the client or the board column) is 
 after `#`, which browsers never send to the server, so no server keeps it. The project name is in it: use
 `--name` to show another one. A preview of the link in a chat app shows the site's card, not the receipt.
 
+For a post, `--share` makes a link whose preview *is* the receipt: the project, its total time and the receipt
+itself, drawn on a 1200×630 card:
+
+```bash
+python3 receipts.py . --share
+# Share link: https://slipt-phi.vercel.app/r/bVLBjtow...
+```
+
+Here the receipt is in the path (`/r/...`), so the site's server reads it to draw that card and the page's
+title. It stores nothing: there is no database, the link is the receipt. The same fields as `--link` go in.
+
+The site is built by `tools/site/build.py`: the page, plus `api/r.js` (the `/r/...` page with the receipt's
+own tags) and `api/og.js` (its card, with `@vercel/og` and the Geist fonts in `tools/site/fonts`, OFL).
+
 ## How it works
 
 ### Working time = gaps between *your* prompts
@@ -243,6 +257,7 @@ throwaway server on `127.0.0.1`.
 | `--client` | client of this receipt, shown on the board |
 | `--status` | board column: `due`, `paid` or `personal` (default: `due` with a client, else `personal`) |
 | `--link` | also print a link that opens this receipt on the public site (the receipt rides in the `#` part) |
+| `--share` | also print a link whose preview shows this receipt (the receipt rides in the path; nothing is stored) |
 
 Constants at the top of `receipts.py`: `IDLE` (fallback threshold), `CAP`, `MIN_GAPS`, `SENS`
 (thresholds in the sensitivity table), `PRICES`, `CODE_W`, `VENDOR_RE` / `GEN_RE` (excluded file

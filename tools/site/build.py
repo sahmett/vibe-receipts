@@ -4,7 +4,9 @@ install steps under the printer, a language switch and Open Graph tags.
 
   python3 tools/site/build.py OUT_DIR [--url https://slipt-phi.vercel.app]
 
-Writes OUT_DIR/index.html and OUT_DIR/og.png (copied from og.png here; og.html is its source)."""
+Writes OUT_DIR/index.html and OUT_DIR/og.png (copied from og.png here; og.html is its source), and copies the
+shared-receipt functions next to them: api/ (the /r/<receipt> page and its preview image), fonts/ for the image,
+package.json and vercel.json. Deploy OUT_DIR as it is."""
 import argparse, importlib.util, os, shutil, sys, urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -23,12 +25,13 @@ ICON = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><line
 def head(url):
     e = lambda s: s.replace('&', '&amp;').replace('"', '&quot;')
     title, desc = 'Slipt · Çalıştığın saatin fişi', "Claude Code'daki kendi prompt aralıklarından ölçülür. Yerelde kalır."
-    return (f'<meta name="description" content="{e(desc)}">'
+    # the shared-receipt page (api/r.js) puts its own tags between the markers
+    return (f'<!--og--><meta name="description" content="{e(desc)}">'
             f'<meta property="og:type" content="website"><meta property="og:site_name" content="Slipt"><meta property="og:title" content="{e(title)}">'
             f'<meta property="og:description" content="{e(desc)}"><meta property="og:url" content="{url}/">'
             f'<meta property="og:image" content="{url}/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">'
             f'<meta property="og:image:alt" content="Slipt: Çalıştığın saatin fişi."><meta name="twitter:card" content="summary_large_image">'
-            f'<meta name="twitter:title" content="{e(title)}"><meta name="twitter:image" content="{url}/og.png">'
+            f'<meta name="twitter:title" content="{e(title)}"><meta name="twitter:image" content="{url}/og.png"><!--/og-->'
             f'<link rel="icon" href="data:image/svg+xml,{urllib.parse.quote(ICON)}">')
 
 
@@ -42,7 +45,11 @@ def main():
     page = receipts.board_page(site['receipts']['tr'], 'tr', site=site, head=head(a.url.rstrip('/')))
     with open(os.path.join(a.out, 'index.html'), 'w', encoding='utf-8') as f: f.write(page)
     shutil.copyfile(os.path.join(HERE, 'og.png'), os.path.join(a.out, 'og.png'))
-    print('wrote', os.path.join(a.out, 'index.html'), 'and og.png')
+    for d in ('api', 'fonts'):
+        shutil.copytree(os.path.join(HERE, d), os.path.join(a.out, d), dirs_exist_ok=True)
+    for f in ('package.json', 'vercel.json'):
+        shutil.copyfile(os.path.join(HERE, f), os.path.join(a.out, f))
+    print('wrote', a.out, ': index.html, og.png, api/, fonts/, package.json, vercel.json')
 
 
 if __name__ == '__main__':
