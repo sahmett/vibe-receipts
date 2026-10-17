@@ -334,9 +334,18 @@ def main():
     inv.add_argument('--bill-to',help='the client\'s address under its name; \\n for a new line')
     inv.add_argument('--number',help='invoice number (default: this year\'s next, e.g. 2026-003)')
     inv.add_argument('--mark-billed',action='store_true',help='move the billed receipts to the board\'s "billed" column')
+    ap.add_argument('--wrapped',metavar='YEAR',nargs='?',const=str(datetime.date.today().year),help='with no repo: your year from the archive as a story, <out>/wrapped-<year>.html and a 1080x1920 wrapped-<year>.png (default: this year)')
     a=ap.parse_args()
     a.out=os.path.abspath(os.path.expanduser(a.out))
     T=L[a.lang]; e=html.escape
+    if a.wrapped and a.repo is None:   # the year in review, from the archive
+        import sys; sys.path.insert(0,os.path.dirname(os.path.abspath(__file__))); import wrapped
+        if not re.fullmatch(r'\d{4}',a.wrapped): raise SystemExit('--wrapped takes a year, e.g. --wrapped 2026')
+        htmlp,png,W=wrapped.build_wrapped(a.out,int(a.wrapped),a.lang,None if a.no_png else render_png)
+        print(f"Wrapped {a.wrapped}: {W['total']//60}{T['h']} {W['total']%60:02d}{T['m']}, {len(W['projects'])} projects, {W['receipts']} receipts"
+              +(" (older receipts spread over their lines)" if W['approx'] else ""))
+        print("HTML:",htmlp); print("PNG :",png or ("skipped" if a.no_png else "skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome)"))
+        return
     if a.invoice and a.repo is None:   # an invoice from the archive, no new run
         import sys; sys.path.insert(0,os.path.dirname(os.path.abspath(__file__))); import invoice
         htmlp,pdf,recs=invoice.build_invoice(a.out,a.invoice,a.lang,find_chrome(),status=a.status or 'due',since=a.since,until=a.until,
@@ -603,6 +612,9 @@ def main():
              items=[[q,l,mm] for (q,l,_),mm in zip(items,mins_split)],min=m,prompts=len(prompts),commits=len(commits),estimate=not has_p,
              stats=stats,value=round(val['total'],2) if val['total'] else None,value_text=vtxt if val['total'] else None,thr=list(thr),
              client=client,status=a.status or old.get('status') or ('due' if client else 'personal'),
+             # for --wrapped: minutes and prompts per day, prompts per weekday x hour (local time), tokens and the model mix
+             days={d:round(dtotal.get(d,0)/60) for d in days if dtotal.get(d,0)},dprompts=dict(sorted(dprompt.items())),
+             clock=clock_of(prompts),tokens=[tread,twrote],models=[[f,pc] for f,pc in mix],
              lang=a.lang,made=datetime.datetime.now().isoformat(timespec='seconds'),
              L=dict(kind=T['rc_kind'],project=T['rc_project'],built=T['rc_built'],period=T['rc_period'],active=T['rc_active'],qty=T['rc_qty'],
                     item=T['rc_item'],time=T['rc_time'],value=T['rc_value'],total=T['rc_total'],h=T['h'],m=T['m']))
@@ -627,12 +639,18 @@ def main():
     if a.share: print("Share link:",share_link(rec,preview=True))
     print("Share:",share)
 
+def clock_of(ts):
+    """Prompts per weekday (Monday first) and hour of day, local time: 7 rows of 24."""
+    c=[[0]*24 for _ in range(7)]
+    for t in ts: x=datetime.datetime.fromtimestamp(t); c[x.weekday()][x.hour]+=1
+    return c
+
 def share_link(rec,preview=False):
     """A link to this receipt on the public site: the receipt (its numbers and labels, never the client or the
     board status), compressed. By default it goes after #, which browsers keep to themselves: no server sees it.
     preview=True puts it in the path, /r/<receipt>, so the site can draw the link's preview card from it; the
     site stores nothing, the link is the receipt."""
-    keep={k:v for k,v in rec.items() if k not in ('client','status','key')}
+    keep={k:v for k,v in rec.items() if k not in ('client','status','key','days','dprompts','clock','tokens','models')}   # no hours of the day, no day-by-day
     c=zlib.compressobj(9,zlib.DEFLATED,-15)   # raw deflate: the page reads it with DecompressionStream("deflate-raw")
     z=c.compress(json.dumps(keep,ensure_ascii=False,separators=(',',':')).encode())+c.flush()
     d=base64.urlsafe_b64encode(z).decode().rstrip('=')

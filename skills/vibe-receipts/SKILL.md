@@ -56,6 +56,10 @@ python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [-
   only), `--currency`, `--tax <percent>` for VAT/KDV, `--bill-from "Name\nAddress"` and `--bill-to`, and
   `--since`/`--until` for a month. Ask for the rate and currency if the user did not give them; never guess a
   rate. Pass `--mark-billed --board` only when the user says the invoice is sent or final.
+- `--wrapped [YEAR]` with no repo for a year in review ("yılım nasıl geçti", "Wrapped", "year in review"): it writes
+  `~/vibe-receipts/wrapped-<year>.html` (a story to tap through) and `wrapped-<year>.png` (1080×1920, to post).
+  Open both. Its numbers come only from archived receipts, so if the user has projects they never ran
+  receipts.py on, offer to run it on them first (each run archives its receipt).
 - `--share` when the user wants to post a receipt as a link ("paylaşmak için link", "share a link"): it prints a
   `Share link:` whose preview card shows the receipt. The site reads the receipt from the link to draw the card
   and stores nothing; the client is left out, but the project name is in it, so offer `--name` if it is private.

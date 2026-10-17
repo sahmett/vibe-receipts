@@ -177,6 +177,26 @@ python3 receipts.py --invoice Northwind --rate 1500 --tax 20 --mark-billed --boa
 - **Numbers:** this year's next one (`2026-001`, `2026-002`, …) unless you pass `--number`.
 - **`--mark-billed`:** moves those receipts to the board's "billed" column; `--status paid` bills those instead.
 
+## Your year, wrapped
+
+`--wrapped` turns a year of the archive into a story you tap through, like a year-in-review, and a
+1080×1920 picture of its last card to post:
+
+```bash
+python3 receipts.py --wrapped          # this year: ~/vibe-receipts/wrapped-2026.html and wrapped-2026.png
+python3 receipts.py --wrapped 2025
+```
+
+The cards: your total time, month by month, where the hours went (every project on one receipt), the hour
+of the day you prompt most, your busiest day and longest streak, the project that was "a 2-hour project",
+what Claude read and wrote, your vibe type, and the year on one receipt with a caption to copy. A card is
+left out when the archive has nothing for it.
+
+Receipts made by this version also archive their minutes and prompts per day, a weekday × hour count of
+your prompts, the token counts and the model mix, which the clock, busiest-day and streak cards need.
+Older receipts only have their lines (a day, week, month or quarter each); their time is spread over
+those dates, so the months stay right. None of this goes into `--link` or `--share` links.
+
 ## How it works
 
 ### Working time = gaps between *your* prompts
@@ -276,6 +296,7 @@ throwaway server on `127.0.0.1`.
 | `--status` | board column: `due`, `paid` or `personal` (default: `due` with a client, else `personal`) |
 | `--link` | also print a link that opens this receipt on the public site (the receipt rides in the `#` part) |
 | `--invoice CLIENT` | with no `repo`: that client's "to bill" receipts as an invoice (`--rate`, `--currency`, `--tax`) or a timesheet, HTML and PDF |
+| `--wrapped [YEAR]` | with no `repo`: the year from the archive as a story, `wrapped-<year>.html` and `.png` (default: this year) |
 | `--mark-billed` | with `--invoice`: move the billed receipts to the board's "billed" column |
 | `--share` | also print a link whose preview shows this receipt (the receipt rides in the path; nothing is stored) |
 
@@ -357,6 +378,8 @@ skills/vibe-receipts/
     ├── printer.json       the printer in the video and on the board (built by tools/printer)
     ├── board_template.html  the board page --board fills in
     ├── invoice.py           --invoice: a client's receipts as an invoice or a timesheet
+    ├── wrapped.py           --wrapped: the year's numbers from the archive
+    ├── wrapped_template.html  the story page --wrapped fills in
     └── to_jpg.sh          report → JPEG
 receipts.py, to_jpg.sh     shortcuts (symlinks)
 demo/make_demo.py          rebuilds the synthetic demo above (--video for the clip)
