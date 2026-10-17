@@ -136,7 +136,20 @@ html.boot .lang{opacity:0}
 .more>span{position:relative;display:inline-flex;align-items:center;gap:8px}
 .more svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 @media (prefers-reduced-motion:reduce){.more{animation:none}}
-.start{max-width:760px;margin:0 auto;padding:8px 16px 96px}
+/* the start section: centred under the printer, a hairline above and below it with a faint red beam running along */
+.start{position:relative;max-width:760px;margin:0 auto;padding:56px 16px 52px;scroll-margin-top:84px}
+.start>.sh,.start>.sl{text-align:center}
+.start::before,.start::after{content:"";position:absolute;left:16px;right:16px;height:1px;pointer-events:none;
+  background:linear-gradient(90deg,#0000,color-mix(in srgb,var(--accent) 75%,transparent),#0000) no-repeat -60% 0/32% 100%,
+             linear-gradient(90deg,#0000,var(--line-3) 18% 82%,#0000);animation:sweep 7s linear infinite}
+.start::before{top:0}
+.start::after{bottom:0;animation-delay:-3.5s}
+@keyframes sweep{to{background-position:160% 0,0 0}}
+/* the foot of the site: the mark and the name, centred, under the start section's lower line */
+.foot{display:flex;flex-direction:column;align-items:center;gap:12px;padding:40px 16px 64px;color:var(--fg)}
+.foot svg{width:40px;height:40px;filter:drop-shadow(0 2px 6px #0000004d)}
+.foot b{font:600 17px/1 var(--sans);letter-spacing:-.015em}
+@media (prefers-reduced-motion:reduce){.start::before,.start::after{animation:none;background-position:50% 0,0 0}}
 .sh{margin:0;font:600 24px/1.2 var(--sans);letter-spacing:-.02em}
 .sl{margin:8px 0 0;color:var(--fg-2);font-size:15px}
 .steps{list-style:none;padding:0;margin:26px 0 0;display:flex;flex-direction:column;gap:12px}
@@ -207,7 +220,7 @@ html.boot .lang{opacity:0}
 .alt{margin:16px 0 0;color:var(--fg-2);font-size:13.5px;line-height:1.9}
 .alt em{color:var(--fg);font-style:normal}
 .alt code{font:500 12px/1 var(--mono);background:var(--raise);padding:4px 7px;border-radius:6px;color:var(--fg);white-space:nowrap}
-.sf{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--fg-3);font-size:13px}
+.sf{margin-top:34px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--fg-3);font-size:13px}
 .sf a{color:var(--fg-2);text-decoration:none}.sf a:hover{color:var(--accent)}
 .ttl{display:flex;align-items:center;gap:10px}
 .badge{font:500 11px/1 var(--mono);color:var(--accent);border:1px solid var(--accent-soft);border-radius:6px;padding:5px 7px;letter-spacing:.02em}
@@ -324,6 +337,7 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
     </div>
   </div>
   <div class="start" id="start" hidden></div>
+  <footer class="foot" id="foot" hidden><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="foot-red" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#E0262C"/></linearGradient><clipPath id="foot-clip"><rect width="32" height="32" rx="11.4"/></clipPath></defs><g clip-path="url(#foot-clip)"><rect width="32" height="32" fill="url(#foot-red)"/><path d="M0 19.6 3.2 16.6 6.4 19.6 9.6 16.6 12.8 19.6 16 16.6 19.2 19.6 22.4 16.6 25.6 19.6 28.8 16.6 32 19.6V32H0Z" fill="#F4F0E8"/></g></svg><b>Slipt</b></footer>
 </section>
 
 <section class="view" id="v-sor" aria-labelledby="t3" hidden>
@@ -427,7 +441,7 @@ const PV={r:`<div class="pv-rw"><div class="pv-r"><i></i><i class="s"></i><i></i
   s:`<div class="pv-s"><div class="h"><i></i></div><i></i><i class="s"></i><div class="m"><i></i><i class="s"></i></div></div>`};
 if(SITE){
   const st=document.getElementById("start"), more=document.getElementById("more"), lang=document.getElementById("lang"), badge=document.getElementById("badge");
-  st.hidden=false; more.hidden=false; lang.hidden=false; badge.hidden=false;
+  st.hidden=false; document.getElementById("foot").hidden=false; more.hidden=false; lang.hidden=false; badge.hidden=false;
   more.innerHTML=`<span>${esc(UI.more)}<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M4 9l4 4 4-4"/></svg></span>`; badge.textContent=UI.example; lang.textContent=UI.other; lang.setAttribute("aria-label",UI.otherLabel);
   st.innerHTML=`<h2 class="sh">${esc(UI.start)}</h2><p class="sl">${esc(UI.startLede)}</p>
     <ol class="steps">${UI.steps.map(([t,d,c],i)=>`<li><span class="sn">${i+1}</span><div class="sb"><b>${esc(t)}</b><span>${esc(d)}</span>
@@ -444,7 +458,8 @@ if(SITE){
     try{await navigator.clipboard.writeText(UI.steps[+b.dataset.copy][2]); b.textContent=UI.copied; setTimeout(()=>b.textContent=UI.copy,1600);}
     catch(e){const r=document.createRange(); r.selectNodeContents(code); const s=getSelection(); s.removeAllRanges(); s.addRange(r);}
   }));
-  more.addEventListener("click",()=>st.scrollIntoView({behavior:still.matches?"auto":"smooth",block:"start"}));
+  // to the start section: in the middle of the window when it fits, else its top just under the nav
+  more.addEventListener("click",()=>st.scrollIntoView({behavior:still.matches?"auto":"smooth",block:st.offsetHeight<innerHeight-120?"center":"start"}));
   lang.addEventListener("click",()=>{location.href=location.pathname+"?lang="+(LANG==="tr"?"en":"tr")+location.hash;});
 }
 
