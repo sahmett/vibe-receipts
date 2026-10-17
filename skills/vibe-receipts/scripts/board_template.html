@@ -175,7 +175,7 @@ html.boot .lang{opacity:0}
 .ask code{align-self:flex-start;margin-top:4px;font:500 11px/1 var(--mono);color:var(--fg-2);background:var(--raise);padding:4px 6px;border-radius:5px}
 /* each card's drawing (tools/site/art, prepared by art.py): its own dark tile; on hover it rises to the hover
    drawing's position and its light comes up, and each drawing does one small thing of its own */
-.pv{position:relative;width:100%;height:auto;min-width:0;align-self:start;aspect-ratio:470/418;border-radius:7.66%/8.61%;overflow:hidden;--art-shade:1}
+.pv{position:relative;width:100%;height:auto;min-width:0;aspect-ratio:470/418;border-radius:7.66%/8.61%;overflow:hidden;--art-shade:1}
 :root[data-theme="light"] .pv{--art-shade:.42;--art-paper:#fff}   /* on a light tile the paper needs to be whiter than the tile */
 .pv svg{position:absolute;inset:0;display:block;width:100%;height:100%}   /* out of the flow: an inline SVG's own 300×150 must not size the card */
 .pv .lift{transform-origin:0 0;transition:transform .55s var(--spring)}
@@ -199,6 +199,29 @@ html.boot .lang{opacity:0}
 .asks.page{margin-top:24px;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .asks.page .ask{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;align-content:start;align-items:stretch;gap:12px;padding:10px 10px 16px;border-radius:26px}   /* 26 = drawing corner ~16 + padding 10 */
 .asks.page .tx{padding:0 4px}
+/* hover a card (or reach it by keyboard): its command rises over the foot of the drawing, ready to copy.
+   Corners nest: drawing ~17, bar 11 at 6 from its edge, button 7 at 4 inside the bar */
+.art{position:relative;min-width:0;align-self:start;border-radius:7.66%/8.61%;overflow:hidden}
+.cmd{position:absolute;left:6px;right:6px;bottom:6px;display:flex;align-items:center;gap:8px;padding:4px 4px 4px 10px;border-radius:11px;
+  background:color-mix(in srgb,var(--panel) 80%,transparent);backdrop-filter:blur(12px) saturate(1.2);-webkit-backdrop-filter:blur(12px) saturate(1.2);
+  border:1px solid var(--line-2);box-shadow:0 8px 20px -10px var(--shadow);
+  opacity:0;transform:translateY(16px) scale(.97);pointer-events:none;transition:opacity .22s var(--out),transform .5s var(--spring),border-color .25s}
+.ask:hover .cmd,.ask:focus-within .cmd{opacity:1;transform:none;pointer-events:auto;transition-delay:.05s,.05s,0s}
+.cmd code{flex:1;min-width:0;align-self:center;margin:0;padding:2px 0;background:none;border-radius:0;font:500 11px/1.45 var(--mono);color:var(--fg);
+  white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}   /* a long command takes two lines, never an ellipsis */
+.cmd code b{color:var(--accent);font-weight:600;margin-right:5px}
+.cmd code i{font-style:normal;white-space:nowrap}   /* each word of the command whole: lines break between them, never inside --video */
+.cmd button{flex:none;align-self:center;width:30px;height:30px;padding:0;justify-content:center;border-radius:7px;border:1px solid var(--line-2);background:var(--raise);color:var(--fg);cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;font:500 11.5px/1 var(--sans);transition:background .2s,border-color .2s,color .2s}
+.cmd button:hover{border-color:var(--accent)}
+.cmd button span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}   /* the label stays for screen readers */
+.cmd button svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.cmd.done{border-color:var(--accent-soft)}
+.cmd.done button{background:var(--accent);border-color:var(--accent);color:#fff}
+.cmd.done button{animation:copied .35s var(--spring)}
+@keyframes copied{40%{transform:scale(1.08)}}
+@media (hover:none){.cmd{opacity:1;transform:none;pointer-events:auto}}   /* no hover on a touch screen: the bar is always there */
+@media (prefers-reduced-motion:reduce){.cmd{transition:opacity .15s}.cmd.done button{animation:none}}
 .asks.page q{font-size:13.5px}
 .ask-more{margin-top:26px}
 .ask-more a,.sl a{color:var(--fg);text-decoration:none;border-bottom:1px solid var(--line-3);transition:border-color .2s}
@@ -445,7 +468,24 @@ if(SITE){
     <p class="alt ask-more"><a href="#sor">${esc(UI.askMore)}</a></p>
     <footer class="sf"><span>${esc(UI.privacy)}</span><a href="${esc(SITE.github)}" target="_blank" rel="noopener">${esc(UI.github)} ↗</a></footer>`;
   document.querySelector('nav a[data-view="sor"]').hidden=false;
-  document.getElementById("asks").innerHTML=UI.asks.map(([k,q,d,c])=>`<li class="ask"><div class="pv" aria-hidden="true">${(SITE.art||{})[k]||""}</div><div class="tx"><q>${esc(q)}</q><span class="d">${esc(d)}</span><code>${esc(c)}</code></div></li>`).join("");
+  // each card's command: shown short, copied whole (the path is where the install step puts the skill)
+  const RUN="python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py", ARGS={r:".",v:". --video",b:". --board",i:"--invoice Northwind --rate 85",w:"--wrapped",s:". --share"};
+  const SHOWN={i:"--invoice Northwind"};   // what fits on the card; the copy is always the whole command
+  const words=t=>("receipts.py "+t).split(" ").map(w=>`<i>${esc(w)}</i>`).join(" ");
+  const COPY_ICON=`<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.2" y="5.2" width="8.3" height="8.3" rx="2"/><path d="M10.8 5.2V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5.3A1.5 1.5 0 0 0 4 10.8h1.2"/></svg>`;
+  const DONE_ICON=`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8.4l3 3 6.6-6.8"/></svg>`;
+  const asksEl=document.getElementById("asks");
+  asksEl.innerHTML=UI.asks.map(([k,q,d,c])=>`<li class="ask"><div class="art"><div class="pv" aria-hidden="true">${(SITE.art||{})[k]||""}</div>
+    <div class="cmd" data-cmd="${esc(RUN+" "+ARGS[k])}"><code><b>$</b>${words(SHOWN[k]||ARGS[k])}</code><button type="button">${COPY_ICON}<span>${esc(UI.copy)}</span></button></div></div>
+    <div class="tx"><q>${esc(q)}</q><span class="d">${esc(d)}</span><code>${esc(c)}</code></div></li>`).join("");
+  asksEl.addEventListener("click",async e=>{
+    const bar=e.target.closest(".cmd"); if(!bar) return;
+    const btn=bar.querySelector("button"), label=btn.querySelector("span");
+    try{await navigator.clipboard.writeText(bar.dataset.cmd);}
+    catch(err){const r=document.createRange(); r.selectNodeContents(bar.querySelector("code")); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); return;}
+    bar.classList.add("done"); btn.innerHTML=DONE_ICON+`<span>${esc(UI.copied)}</span>`;
+    clearTimeout(bar.t); bar.t=setTimeout(()=>{bar.classList.remove("done"); btn.innerHTML=COPY_ICON+`<span>${esc(UI.copy)}</span>`;},1600);
+  });
   const toStart=document.getElementById("toStart"); toStart.textContent=UI.toStart;
   toStart.addEventListener("click",e=>{e.preventDefault(); goStart=true; location.hash="#yazici";});   // the printer page, at its install steps
   st.querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",async()=>{
