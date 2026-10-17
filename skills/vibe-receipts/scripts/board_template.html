@@ -369,7 +369,7 @@ const UI={
    empty:"Fişi buraya sürükle",status:"Durum",est:"commit tahmini",close:"Kapat",open:"aç",h:"s",m:"d",reprint:"Yeniden bas",
    figLabel:(n,t)=>`Bir termal fiş yazıcısı, ${n} projesinin ${t} çalışma fişini basıyor.`,toLight:"Açık temaya geç",toDark:"Koyu temaya geç",
    example:"Örnek veri",more:"Nasıl başlarım?",start:"Başla",startLede:"Üç adım. Hepsi kendi bilgisayarında, Claude Code'un içinde.",
-   steps:[["Kur","Aracı Claude Code'a skill olarak ekle: bir klasör kopyalanır, başka hiçbir şey kurulmaz.","git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
+   steps:[["Kur","Aracı Claude Code'a skill olarak ekle: bir klasör kopyalanır, başka hiçbir şey kurulmaz.","git clone --depth 1 https://github.com/sercanylmzzz/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
           ["Çalıştır","Bir projenin klasöründe Claude'a sor ya da komutu kendin çalıştır. Fişin, raporun ve panon hazırlanır.","python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --board"],
           ["Panonu aç","Bütün fişlerin tek sayfada. Ya da archive klasörünü bu sitedeki panoya sürükle.","open ~/vibe-receipts/board.html"]],
    navAsk:"Claude'a sor",askMore:"Claude'a neler sorabileceğini gör →",toStart:"← Kurulum adımları",
@@ -396,7 +396,7 @@ const UI={
    empty:"Drag a receipt here",status:"Status",est:"commit estimate",close:"Close",open:"open",h:"h",m:"m",reprint:"Print again",
    figLabel:(n,t)=>`A thermal receipt printer printing the ${t} work receipt for ${n}.`,toLight:"Switch to light",toDark:"Switch to dark",
    example:"Example data",more:"How do I start?",start:"Get started",startLede:"Three steps, all on your own machine, inside Claude Code.",
-   steps:[["Install","Add it to Claude Code as a skill: one folder is copied, nothing else is installed.","git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
+   steps:[["Install","Add it to Claude Code as a skill: one folder is copied, nothing else is installed.","git clone --depth 1 https://github.com/sercanylmzzz/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
           ["Run it","In a project's folder, ask Claude or run the command yourself. Your receipt, report and board are made.","python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --board"],
           ["Open your board","All your receipts on one page. Or drag the archive folder onto this site's board.","open ~/vibe-receipts/board.html"]],
    navAsk:"Ask Claude",askMore:"See what you can ask Claude →",toStart:"← The install steps",
@@ -433,7 +433,7 @@ if(SITE){
   st.innerHTML=`<h2 class="sh">${esc(UI.start)}</h2><p class="sl">${esc(UI.startLede)}</p>
     <ol class="steps">${UI.steps.map(([t,d,c],i)=>`<li><span class="sn">${i+1}</span><div class="sb"><b>${esc(t)}</b><span>${esc(d)}</span>
       <div class="code"><code>${esc(c)}</code><button type="button" data-copy="${i}">${esc(UI.copy)}</button></div></div></li>`).join("")}</ol>
-    <p class="alt">${esc(UI.plugin)} <code>/plugin marketplace add sahmett/vibe-receipts</code> <code>/plugin install vibe-receipts@vibe-receipts</code></p>
+    <p class="alt">${esc(UI.plugin)} <code>/plugin marketplace add sercanylmzzz/vibe-receipts</code> <code>/plugin install vibe-receipts@vibe-receipts</code></p>
     <p class="alt ask-more"><a href="#sor">${esc(UI.askMore)}</a></p>
     <footer class="sf"><span>${esc(UI.privacy)}</span><a href="${esc(SITE.github)}" target="_blank" rel="noopener">${esc(UI.github)} ↗</a></footer>`;
   document.querySelector('nav a[data-view="sor"]').hidden=false;
@@ -456,7 +456,7 @@ function receipt(r){
   const rows=r.items.map(([q,l,m])=>`<span>${Number(q).toLocaleString("en-US")}</span><span>${esc(l)}</span><span class="r">${f(m)}</span>`).join("");
   const stats=r.stats.map(s=>s?`<div class="row"><span>${esc(s[0])}</span><span>${esc(s[1])}</span></div>`:`<div class="sp"></div>`).join("");
   return `<div class="rc"><div class="tear t"></div><div class="paper">
-    <div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mu">github.com/sahmett/vibe-receipts</div><div class="mu ls">${esc(L.kind)}</div></div>
+    <div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mu">github.com/sercanylmzzz/vibe-receipts</div><div class="mu ls">${esc(L.kind)}</div></div>
     <div class="hr"></div>
     <div class="row"><span>${esc(L.project)}</span><span class="nm">${esc(r.name)}</span></div>
     ${r.built?`<div class="row"><span>${esc(L.built)}</span><span class="nm">${esc(r.built.toUpperCase())}</span></div>`:""}

@@ -105,7 +105,7 @@ L={
    rc_est='NO SESSION LOGS',rc_est_note='Estimated from your commit sessions.',
    rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_q='Q',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
-   share='{q} {t} later{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
+   share='{q} {t} later{v}. 🧾 github.com/sercanylmzzz/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
    rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")],
    vid_later='{t} later.',vid_cta='Get your own receipt',
    b_none='No receipts archived yet: run receipts.py on a project first, then --board.'),
@@ -147,7 +147,7 @@ L={
      fixed='Senin seçtiğin eşik. Daha uzun aralıklar mola sayılır, çalışma değil.',capped='Ritminden {tk} çıktı, {cap} üst sınır uygulandı. Daha uzun aralıklar mola sayılır.',few='Varsayılan: ritmini okumak için prompt az. Daha uzun aralıklar mola sayılır.'),
    rc_est='OTURUM KAYDI YOK',rc_est_note="Commit oturumlarından tahmin.",
    rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_q='Ç',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
-   share='{q} {t} sonra{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
+   share='{q} {t} sonra{v}. 🧾 github.com/sercanylmzzz/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
    rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')],
    vid_later='{t} sonra.',vid_cta='Kendi fişini çıkar',
    b_none="Arşivde henüz fiş yok: önce receipts.py'yi bir projede çalıştır, sonra --board."),
@@ -596,7 +596,7 @@ def main():
             ok=render_png(os.path.join(tmp,'paper.html'),os.path.join(tmp,'paper.png'),520,PH,scale=3,transparent=True)
             vid=ok and render_video(os.path.join(tmp,'paper.png'),os.path.join(a.out,f'{name}-receipt.mp4'),
                 dict(quote=quote,later=T['vid_later'].format(t=T['share_t'](m//60,m%60)),cta=T['vid_cta'],
-                     url='github.com/sahmett/vibe-receipts',tag='#vibereceipts'))
+                     url='github.com/sercanylmzzz/vibe-receipts',tag='#vibereceipts'))
         finally: shutil.rmtree(tmp,ignore_errors=True)
         if vid: print("MP4 :",vid)
         else:   print("MP4 : skipped, no Chrome/Chromium found or the recording failed (set CHROME=/path/to/chrome)")
@@ -710,7 +710,7 @@ def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,
       '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap">'
       f'<style>{RCSS}{RCSS_BARE if bare else ""}</style></head><body><div class="card" style="height:{H}px">'
       '<div class="rc"><div class="tear t"></div><div class="paper">'
-      f'<div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mute">github.com/sahmett/vibe-receipts</div><div class="mute ls">{T["rc_kind"]}</div></div>'
+      f'<div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mute">github.com/sercanylmzzz/vibe-receipts</div><div class="mute ls">{T["rc_kind"]}</div></div>'
       '<div class="hr"></div>'
       f'<div class="row"><span>{T["rc_project"]}</span><span class="nm">{e(name)}</span></div>'
       +(f'<div class="row"><span>{T["rc_built"]}</span><span class="nm">{e(built.upper())}</span></div>' if built else '')+

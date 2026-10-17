@@ -41,7 +41,7 @@ def main():
     ap.add_argument('out'); ap.add_argument('--url', default='https://slipt-phi.vercel.app')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    site = dict(github='https://github.com/sahmett/vibe-receipts', today=example.TODAY,
+    site = dict(github='https://github.com/sercanylmzzz/vibe-receipts', today=example.TODAY,
                 receipts={'tr': example.receipts('tr'), 'en': example.receipts('en')}, art=art.cards())
     page = receipts.board_page(site['receipts']['tr'], 'tr', site=site, head=head(a.url.rstrip('/')))
     with open(os.path.join(a.out, 'index.html'), 'w', encoding='utf-8') as f: f.write(page)
