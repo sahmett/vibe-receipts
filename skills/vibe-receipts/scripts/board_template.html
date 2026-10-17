@@ -243,10 +243,17 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 .metrics b{font:500 20px/1 var(--mono);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 /* each column is a kanban lane: a framed, slightly sunken tray the cards sit in (lane radius 20 = card 12 + padding 8) */
 .cols{margin-top:26px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
-.col{display:flex;flex-direction:column;min-height:260px;border-radius:20px;padding:8px;
-  background:color-mix(in srgb,var(--raise) 45%,var(--bg));border:1px solid var(--line-2);
+.col{--lane:color-mix(in srgb,var(--raise) 45%,var(--bg));display:flex;flex-direction:column;min-height:260px;border-radius:20px;padding:8px;
+  background:var(--lane);border:1px solid var(--line-2);
   outline:1px dashed transparent;outline-offset:3px;transition:outline-color .15s,border-color .15s,background .15s}
-.col.over{outline-color:var(--accent);border-color:transparent;background:color-mix(in srgb,var(--raise) 75%,var(--bg))}
+.col.over{border-color:var(--accent-soft)}   /* the slot shows where it lands; the lane only warms its edge */
+/* where a dragged receipt will land: a hole the card's own size and shape, framed in red, that the other cards make room for */
+.slot{position:relative;flex:none;border-radius:12px 12px 0 0;background:color-mix(in srgb,var(--accent) 60%,transparent);
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat;
+  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat}
+.slot::before{content:"";position:absolute;inset:1.5px;border-radius:10.5px 10.5px 0 0;background:color-mix(in srgb,var(--accent) 8%,var(--lane));-webkit-mask:inherit;mask:inherit}
+.stack.has-slot .empty{display:none}
+.tk.lifted{display:none}
 .colh{display:flex;align-items:center;gap:8px;padding:8px 6px 14px;margin-bottom:2px;border-bottom:1px solid var(--line);font:500 13px/1 var(--sans);color:var(--fg-2)}
 .col .stack{flex:1;padding-top:8px}
 .col .empty{flex:1;display:grid;place-items:center}
@@ -273,7 +280,6 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
 .tk:hover .face{background:conic-gradient(from var(--beam),#0000 0deg 236deg,#ff9a6b 292deg,var(--accent) 330deg,#0000 360deg),var(--line-2);animation:beam 2.6s linear infinite}
 .tk:hover .face::before{background:var(--raise)}
 @keyframes beam{to{--beam:360deg}}
-.tk.dragging{opacity:.35}
 .tk.away{visibility:hidden}
 .tk .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .tk .nm{font:500 13.5px/1.25 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -630,6 +636,10 @@ let saved={}; try{saved=JSON.parse(localStorage.getItem(SAVE)||"{}")||{};}catch(
 const applyStatuses=()=>R.forEach(r=>{const s=saved[r.key]; r.shown=s&&s.base===r.status?s.s:r.status;});
 applyStatuses();
 function setStatus(r,k){r.shown=k; saved[r.key]={s:k,base:r.status}; try{localStorage.setItem(SAVE,JSON.stringify(saved));}catch(e){}}
+// The order of the cards in each column, as you left them by dragging; cards never placed keep their date order after them.
+const ORDER="vr-board-order";
+let order={}; try{order=JSON.parse(localStorage.getItem(ORDER)||"{}")||{};}catch(e){order={};}
+const ranked=(items,k)=>{const o=order[k]||[], at=r=>{const i=o.indexOf(r.key); return i<0?1e6+items.indexOf(r):i;}; return [...items].sort((a,b)=>at(a)-at(b));};
 let period="q";
 const daysAgo=n=>{const d=new Date(TODAY+"T12:00:00"); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10);};
 const inPeriod=r=>period==="all"?true:period==="month"?r.end>=TODAY.slice(0,7)+"-01":r.end>=daysAgo(90);
@@ -656,7 +666,7 @@ function board(enter){
   document.getElementById("metrics").innerHTML=UI.metrics.map((l,i)=>`<div><span>${esc(l)}</span><b>${vals[i]}</b></div>`).join("");
   let i=0;
   colsEl.innerHTML=COLS.map(c=>{
-    const items=list.filter(r=>r.shown===c.k);
+    const items=ranked(list.filter(r=>r.shown===c.k),c.k);
     return `<section class="col" data-k="${c.k}" aria-label="${esc(UI.cols[c.k])}"><div class="colh"><span class="dot ${c.dot}"></span>${esc(UI.cols[c.k])}<span class="n">${items.length}</span><span class="h">${fmt(items.reduce((s,r)=>s+r.min,0))}</span></div>
       <div class="stack">${items.length?items.map(r=>card(r,i++)).join(""):`<div class="empty">${esc(UI.empty)}</div>`}</div></section>`;
   }).join("");
@@ -664,13 +674,38 @@ function board(enter){
   if(sheet) document.querySelector(`.tk[data-key="${CSS.escape(sheet.key)}"]`)?.classList.add("away");
   wire();
 }
-let dragKey=null;
+let dragKey=null, dragEl=null, slot=null, dropped=false;
 const fine=matchMedia("(hover:hover) and (pointer:fine)");
+// moves cards with a short glide instead of a jump: where they were, the change, then from there to where they are now
+function flip(change){
+  const els=[...colsEl.querySelectorAll(".tk:not(.lifted)")], was=new Map(els.map(e=>[e,e.getBoundingClientRect().top]));
+  change();
+  if(still.matches) return;
+  els.forEach(e=>{const d=was.get(e)-e.getBoundingClientRect().top; if(Math.abs(d)>.5) e.animate([{transform:`translateY(${d}px)`},{transform:"none"}],{duration:220,easing:"cubic-bezier(.2,.8,.2,1)"});});
+}
+const nextCard=n=>{n=n.nextElementSibling; while(n&&!(n.matches(".tk")&&!n.classList.contains("lifted"))) n=n.nextElementSibling; return n;};
+function placeSlot(col,y){   // the slot goes before the first card whose middle is below the pointer
+  const stack=col.querySelector(".stack"), cards=[...stack.querySelectorAll(".tk:not(.lifted)")];
+  const before=cards.find(c=>{const b=c.getBoundingClientRect(); return y<b.top+b.height/2;})||null;
+  if(slot.parentNode===stack&&nextCard(slot)===before) return;
+  const fresh=slot.parentNode!==stack;
+  flip(()=>{colsEl.querySelectorAll(".stack.has-slot").forEach(x=>x.classList.remove("has-slot")); stack.insertBefore(slot,before); stack.classList.add("has-slot");});
+  if(fresh&&!still.matches) slot.animate([{opacity:0,transform:"scale(.97)"},{opacity:1,transform:"none"}],{duration:180,easing:"ease-out"});
+}
 function wire(){
   colsEl.querySelectorAll(".tk").forEach(el=>{
     el.addEventListener("click",()=>openSheet(el));
-    el.addEventListener("dragstart",e=>{closeSheet(true); el.style.transform=""; dragKey=el.dataset.key; el.classList.add("dragging"); e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain",dragKey);});
-    el.addEventListener("dragend",()=>{el.classList.remove("dragging"); dragKey=null;});
+    el.addEventListener("dragstart",e=>{
+      closeSheet(true); el.style.transform=""; dragKey=el.dataset.key; dragEl=el; dropped=false;
+      e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain",dragKey);
+      slot=document.createElement("div"); slot.className="slot"; slot.style.height=el.offsetHeight+"px"; slot.setAttribute("aria-hidden","true");
+      // the browser has taken its picture of the card by the next frame: then the card lifts out and its place stays open
+      requestAnimationFrame(()=>{if(dragEl!==el) return; el.parentNode.insertBefore(slot,el); el.classList.add("lifted"); el.parentNode.classList.add("has-slot");});
+    });
+    el.addEventListener("dragend",()=>{   // let go anywhere but a column: the card goes back where it was
+      if(!dropped&&dragEl===el) flip(()=>{slot?.remove(); el.classList.remove("lifted"); colsEl.querySelectorAll(".stack.has-slot").forEach(x=>x.classList.remove("has-slot"));});
+      colsEl.querySelectorAll(".col.over").forEach(c=>c.classList.remove("over")); slot=null; dragEl=null; dragKey=null;
+    });
     // a slight tilt toward the pointer, like picking up a slip of paper
     el.addEventListener("pointermove",e=>{
       if(!fine.matches||still.matches||dragKey) return;
@@ -680,9 +715,22 @@ function wire(){
     el.addEventListener("pointerleave",()=>{el.style.transform="";});
   });
   colsEl.querySelectorAll(".col").forEach(col=>{
-    col.addEventListener("dragover",e=>{if(dragKey){e.preventDefault(); col.classList.add("over");}});
+    col.addEventListener("dragover",e=>{if(dragKey&&slot){e.preventDefault(); e.dataTransfer.dropEffect="move"; col.classList.add("over"); placeSlot(col,e.clientY);}});
     col.addEventListener("dragleave",e=>{if(!col.contains(e.relatedTarget)) col.classList.remove("over");});
-    col.addEventListener("drop",e=>{e.preventDefault(); col.classList.remove("over"); const r=R.find(x=>x.key===(dragKey||e.dataTransfer.getData("text/plain"))); if(r){setStatus(r,col.dataset.k); board(false);}});
+    col.addEventListener("drop",e=>{
+      e.preventDefault(); col.classList.remove("over");
+      const key=dragKey||e.dataTransfer.getData("text/plain"), r=R.find(x=>x.key===key); if(!r||!slot) return;
+      dropped=true; const k=col.dataset.k, stack=col.querySelector(".stack");
+      if(slot.parentNode!==stack) placeSlot(col,e.clientY);
+      // the column's order is now what is on screen, the receipt in the slot; it leaves every other column's order
+      const keys=[]; [...stack.children].forEach(n=>{if(n===slot) keys.push(key); else if(n.matches(".tk")&&!n.classList.contains("lifted")) keys.push(n.dataset.key);});
+      Object.keys(order).forEach(c=>{if(c!==k) order[c]=order[c].filter(x=>x!==key);});
+      order[k]=[...keys,...(order[k]||[]).filter(x=>!keys.includes(x))]; try{localStorage.setItem(ORDER,JSON.stringify(order));}catch(err){}
+      if(r.shown!==k) setStatus(r,k);
+      board(false);
+      const placed=colsEl.querySelector(`.tk[data-key="${CSS.escape(key)}"]`);   // it settles into the slot
+      if(placed&&!still.matches) placed.animate([{transform:"translateY(-6px) scale(1.025)"},{transform:"none"}],{duration:340,easing:"cubic-bezier(.2,.9,.25,1.12)"});
+    });
   });
 }
 
