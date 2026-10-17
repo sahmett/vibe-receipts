@@ -322,12 +322,31 @@ def main():
     ap.add_argument('--video',action='store_true',help='also make <name>-receipt.mp4: the receipt printing out of a thermal printer, 1080x1920 for Reels/TikTok/Shorts (needs Chrome; ffmpeg optional)')
     ap.add_argument('--board',action='store_true',help='also rebuild board.html: every archived receipt on one page, a printer view and a status board')
     ap.add_argument('--client',help='client this receipt is for, shown on the board (kept for later runs of the same range)')
-    ap.add_argument('--status',choices=['due','paid','personal'],help='board column for this receipt (default: due with a client, else personal)')
+    ap.add_argument('--status',choices=['due','paid','personal'],help='board column for this receipt (default: due with a client, else personal); with --invoice, which receipts to bill (default: due)')
     ap.add_argument('--link',action='store_true',help=f'also print a link that opens this receipt on {SITE_URL}: the receipt rides in the #part, which is never sent to the server (no client, no status)')
     ap.add_argument('--share',action='store_true',help=f'also print a link to this receipt on {SITE_URL} whose preview shows the receipt: the server reads it from the link to draw the preview, and stores nothing (no client, no status)')
+    inv=ap.add_argument_group('invoice','one client\'s archived receipts as an invoice or a timesheet, with no repo: receipts.py --invoice "Northwind" --rate 85')
+    inv.add_argument('--invoice',metavar='CLIENT',help='write <out>/invoices/<client>_<number>.html and .pdf from the receipts archived for this client (--since/--until pick by end date)')
+    inv.add_argument('--rate',type=float,help='hourly rate: with it an invoice (hours x rate), without it a timesheet (hours only)')
+    inv.add_argument('--currency',help='USD, EUR, GBP, TRY or any code (default: TRY in Turkish, else USD)')
+    inv.add_argument('--tax',type=float,default=0,help='tax or VAT percent added to the total, e.g. 20')
+    inv.add_argument('--bill-from',help='your name and address; \\n for a new line')
+    inv.add_argument('--bill-to',help='the client\'s address under its name; \\n for a new line')
+    inv.add_argument('--number',help='invoice number (default: this year\'s next, e.g. 2026-003)')
+    inv.add_argument('--mark-billed',action='store_true',help='move the billed receipts to the board\'s "billed" column')
     a=ap.parse_args()
     a.out=os.path.abspath(os.path.expanduser(a.out))
     T=L[a.lang]; e=html.escape
+    if a.invoice and a.repo is None:   # an invoice from the archive, no new run
+        import sys; sys.path.insert(0,os.path.dirname(os.path.abspath(__file__))); import invoice
+        htmlp,pdf,recs=invoice.build_invoice(a.out,a.invoice,a.lang,find_chrome(),status=a.status or 'due',since=a.since,until=a.until,
+            rate=a.rate,currency=a.currency,tax=a.tax,bill_from=a.bill_from,bill_to=a.bill_to,number=a.number,mark_billed=a.mark_billed)
+        mins=sum(r['min'] for r in recs)
+        print(f"Invoice: {len(recs)} receipts, {mins//60}{T['h']} {mins%60:02d}{T['m']}"+(f", rate {a.rate:g}" if a.rate else " (timesheet, no rate)"))
+        print("HTML:",htmlp); print("PDF :",pdf or "skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome)")
+        if a.mark_billed: print("Billed:",', '.join(r['name'] for r in recs))
+        if a.board: print("Board:",build_board(a.out,a.lang))
+        return
     if a.board and a.repo is None:   # just the board, from the receipts already archived
         print("Board:",build_board(a.out,a.lang)); return
     a.repo=a.repo or '.'

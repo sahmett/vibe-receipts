@@ -50,6 +50,12 @@ python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [-
   timesheet across projects): every run archives its receipt in `~/vibe-receipts/archive/`, and `--board`
   rebuilds `~/vibe-receipts/board.html` from all of them. With no repo (`receipts.py --board`) it only rebuilds.
   For client work pass `--client "<name>"` (the card goes to "to bill"), and `--status paid` once it is invoiced.
+- `--invoice "<client>"` with no repo when the user wants to bill a client or needs a timesheet ("fatura çıkar",
+  "Northwind'e fatura", "timesheet"): it takes that client's archived receipts still "to bill" and writes an
+  HTML and PDF page to `~/vibe-receipts/invoices/`. Add `--rate <hourly>` for an invoice (without it, hours
+  only), `--currency`, `--tax <percent>` for VAT/KDV, `--bill-from "Name\nAddress"` and `--bill-to`, and
+  `--since`/`--until` for a month. Ask for the rate and currency if the user did not give them; never guess a
+  rate. Pass `--mark-billed --board` only when the user says the invoice is sent or final.
 - `--share` when the user wants to post a receipt as a link ("paylaşmak için link", "share a link"): it prints a
   `Share link:` whose preview card shows the receipt. The site reads the receipt from the link to draw the card
   and stores nothing; the client is left out, but the project name is in it, so offer `--name` if it is private.

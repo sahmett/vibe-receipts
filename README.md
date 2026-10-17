@@ -159,6 +159,24 @@ title. It stores nothing: there is no database, the link is the receipt. The sam
 The site is built by `tools/site/build.py`: the page, plus `api/r.js` (the `/r/...` page with the receipt's
 own tags) and `api/og.js` (its card, with `@vercel/og` and the Geist fonts in `tools/site/fonts`, OFL).
 
+## Invoices and timesheets
+
+Receipts archived with `--client` can be billed together. With no repo, `--invoice` collects that client's
+receipts still "to bill" and writes an A4 page, as HTML and (with Chrome) PDF, to `~/vibe-receipts/invoices/`:
+
+```bash
+python3 receipts.py --invoice Northwind --rate 85 --currency EUR --bill-from "Your Name\nYour address"
+python3 receipts.py --invoice Northwind --since 2026-10-01 --until 2026-10-31   # no rate: a timesheet
+python3 receipts.py --invoice Northwind --rate 1500 --tax 20 --mark-billed --board
+```
+
+- **Page 1:** who it is from and to, one line per receipt (project, period, hours, with a rate its amount) and
+  the totals, with `--tax` added on top.
+- **After it:** every receipt's own days or weeks with their time, its break threshold, and a line on how the
+  time was measured, so the client can see where the hours come from.
+- **Numbers:** this year's next one (`2026-001`, `2026-002`, …) unless you pass `--number`.
+- **`--mark-billed`:** moves those receipts to the board's "billed" column; `--status paid` bills those instead.
+
 ## How it works
 
 ### Working time = gaps between *your* prompts
@@ -257,6 +275,8 @@ throwaway server on `127.0.0.1`.
 | `--client` | client of this receipt, shown on the board |
 | `--status` | board column: `due`, `paid` or `personal` (default: `due` with a client, else `personal`) |
 | `--link` | also print a link that opens this receipt on the public site (the receipt rides in the `#` part) |
+| `--invoice CLIENT` | with no `repo`: that client's "to bill" receipts as an invoice (`--rate`, `--currency`, `--tax`) or a timesheet, HTML and PDF |
+| `--mark-billed` | with `--invoice`: move the billed receipts to the board's "billed" column |
 | `--share` | also print a link whose preview shows this receipt (the receipt rides in the path; nothing is stored) |
 
 Constants at the top of `receipts.py`: `IDLE` (fallback threshold), `CAP`, `MIN_GAPS`, `SENS`
@@ -336,6 +356,7 @@ skills/vibe-receipts/
     ├── receipts.py        analysis, HTML report, receipt card, video
     ├── printer.json       the printer in the video and on the board (built by tools/printer)
     ├── board_template.html  the board page --board fills in
+    ├── invoice.py           --invoice: a client's receipts as an invoice or a timesheet
     └── to_jpg.sh          report → JPEG
 receipts.py, to_jpg.sh     shortcuts (symlinks)
 demo/make_demo.py          rebuilds the synthetic demo above (--video for the clip)
