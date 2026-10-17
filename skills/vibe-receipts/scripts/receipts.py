@@ -596,7 +596,7 @@ def main():
             ok=render_png(os.path.join(tmp,'paper.html'),os.path.join(tmp,'paper.png'),520,PH,scale=3,transparent=True)
             vid=ok and render_video(os.path.join(tmp,'paper.png'),os.path.join(a.out,f'{name}-receipt.mp4'),
                 dict(quote=quote,later=T['vid_later'].format(t=T['share_t'](m//60,m%60)),cta=T['vid_cta'],
-                     url='github.com/sercanylmzzz/vibe-receipts',tag='#vibereceipts'))
+                     url=SITE_URL.split('//')[1],tag='#vibereceipts'))
         finally: shutil.rmtree(tmp,ignore_errors=True)
         if vid: print("MP4 :",vid)
         else:   print("MP4 : skipped, no Chrome/Chromium found or the recording failed (set CHROME=/path/to/chrome)")
@@ -838,10 +838,10 @@ tr.sel td{color:#fff;font-weight:700;background:#1c2030}
 .share{margin:8px auto 0;max-width:640px;background:#13161f;border:1px solid #242938;border-radius:10px;padding:10px 14px;font-size:13.5px;color:#c8ccd8;user-select:all}
 @media (max-width:600px){.scn .nm{width:150px}.kpis{grid-template-columns:1fr 1fr}.kpi.hero{grid-row:auto;grid-column:span 2}}"""
 
-PAPER,INK='#F3F0E8','#1d1c1a'
+PAPER,INK='#F6F6F4','#0B0B0C'   # the site's --paper and --ink
 CARD_W,CARD_PAD=600,40   # the share card: just the receipt, straight, on a dark background
 RCSS=f"""*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#0e0f14;color:#ECEAF2;font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}}
+body{{background:#09090b;color:#f4f4f5;font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}}
 .card{{width:{CARD_W}px;padding:{CARD_PAD}px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}}
 .rc{{width:520px;filter:drop-shadow(0 30px 40px rgba(0,0,0,.55)) drop-shadow(0 4px 8px rgba(0,0,0,.4));color:{INK}}}
 .tear{{height:10px;background-size:20px 20px;background-repeat:repeat-x}}
@@ -874,10 +874,12 @@ RCSS_BARE=f"body{{background:transparent}}.card{{width:520px;padding:0;height:au
 # it loops as a live preview (click for sound).
 VIDEO_HTML=r"""<!doctype html><html><head><meta charset="utf-8"><title>vibe receipt video</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&display=swap">
-<style>html,body{margin:0;height:100%;background:#0b0c10;overflow:hidden}canvas{display:block;width:100%;height:100%;object-fit:contain}</style>
+<style>html,body{margin:0;height:100%;background:#09090b;overflow:hidden}canvas{display:block;width:100%;height:100%;object-fit:contain}</style>
 </head><body><canvas id="c" width="1080" height="1920"></canvas><script>
 const D=__DATA__, W=1080, H=1920, FPS=60, REC=new URLSearchParams(location.search).has('rec');
 const FONT='"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace';
+const SANS='system-ui,-apple-system,"SF Pro Display","Segoe UI",Roboto,sans-serif';   // the site's headings
+const C={bg:'#09090b',fg:'#f4f4f5',fg2:'#a1a1a7',accent:'#FF4A3D'};                   // Slipt: the site's tokens
 const cv=document.getElementById('c'); let g=cv.getContext('2d');
 const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)), lerp=(a,b,t)=>a+(b-a)*t;
 const easeOut=t=>1-(1-t)*(1-t), easeIn=t=>t*t, easeInOut=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
@@ -920,9 +922,12 @@ let BG;                               // the backdrop never changes: painted onc
 function bg(){
   if(BG){g.drawImage(BG,0,0); return;}
   BG=document.createElement('canvas'); BG.width=W; BG.height=H; const keep=g; g=BG.getContext('2d');
-  g.fillStyle='#0b0c10'; g.fillRect(0,0,W,H);
-  let r=g.createRadialGradient(540,820,0,540,820,1050);
-  r.addColorStop(0,'rgba(124,92,255,.20)'); r.addColorStop(.55,'rgba(124,92,255,.05)'); r.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=C.bg; g.fillRect(0,0,W,H);
+  let r=g.createRadialGradient(540,820,0,540,820,1050);               // a soft neutral light on the printer, as on the site
+  r.addColorStop(0,'rgba(255,255,255,.07)'); r.addColorStop(.6,'rgba(255,255,255,.015)'); r.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=r; g.fillRect(0,0,W,H);
+  r=g.createRadialGradient(540,H+120,0,540,H+120,900);                // and the logo's red, faint, rising from the foot
+  r.addColorStop(0,'rgba(255,74,61,.14)'); r.addColorStop(1,'rgba(255,74,61,0)');
   g.fillStyle=r; g.fillRect(0,0,W,H);
   r=g.createRadialGradient(540,960,700,540,960,1250); r.addColorStop(0,'rgba(0,0,0,0)'); r.addColorStop(1,'rgba(0,0,0,.6)');
   g.fillStyle=r; g.fillRect(0,0,W,H);
@@ -931,11 +936,11 @@ function bg(){
 
 function layer(img,dy,a){if(a>0){g.save(); g.globalAlpha=a; g.drawImage(img,0,dy,W,H); g.restore();}}
 
-function lamps(dy,a,power,feed){     // the power lamp, and the feed lamp that flickers while it prints
+function lamps(dy,a,power,feed){     // the power lamp (white, as on the site), and the feed lamp that flickers red while it prints
   [power,feed].forEach((on,i)=>{
     if(on<=0||a<=0) return;
-    const [x,y]=GEO.leds[i], R=GEO.ledR*10, r=g.createRadialGradient(x,y+dy,0,x,y+dy,R);
-    r.addColorStop(0,'rgba(190,255,225,'+(a*on)+')'); r.addColorStop(.12,'rgba(52,211,153,'+(.75*a*on)+')'); r.addColorStop(1,'rgba(52,211,153,0)');
+    const [x,y]=GEO.leds[i], R=GEO.ledR*10, r=g.createRadialGradient(x,y+dy,0,x,y+dy,R), c=i?'255,74,61':'255,255,255';
+    r.addColorStop(0,'rgba(255,255,255,'+(a*on)+')'); r.addColorStop(.12,'rgba('+c+','+(.75*a*on)+')'); r.addColorStop(1,'rgba('+c+',0)');
     g.fillStyle=r; g.beginPath(); g.arc(x,y+dy,R,0,7); g.fill();
   });
 }
@@ -948,9 +953,9 @@ function onPrinter(o,sway){
   const u=GEO.u, v=GEO.v, O=GEO.origin, M=[q*u[0],q*u[1],-q*v[0],-q*v[1],O[0]+o*v[0],O[1]+o*v[1]];
   return mul(turn(sway,O[0]+u[0]*GEO.paperW/2,O[1]+u[1]*GEO.paperW/2),M);   // a slight sway about the slot
 }
-function laidFlat(){
-  const s=Math.min(1220/P.height,880/P.width);
-  return mul(turn(-.02,540,1020),[s,0,0,s,540-s*P.width/2,1020-s*P.height/2]);
+function laidFlat(){                 // a little higher and smaller than before: the foot stays clear of the apps' captions
+  const s=Math.min(1000/P.height,800/P.width);
+  return mul(turn(-.02,540,900),[s,0,0,s,540-s*P.width/2,900-s*P.height/2]);
 }
 function paper(M,clip,shade,shadow){
   g.save(); g.setTransform(...M);
@@ -965,12 +970,23 @@ function paper(M,clip,shade,shadow){
   g.restore();
 }
 
-function text(t,y,weight,size,color,a,maxW=980){
+function text(t,y,weight,size,color,a,maxW=980,face=FONT,track=0){
   if(a<=0||!t) return;
   g.save(); g.globalAlpha=a; g.textAlign='center'; g.textBaseline='alphabetic'; g.fillStyle=color;
-  let s=size; g.font=weight+' '+s+'px '+FONT;
-  while(g.measureText(t).width>maxW&&s>18){s-=2; g.font=weight+' '+s+'px '+FONT;}
+  let s=size; const set=()=>{g.font=weight+' '+s+'px '+face; g.letterSpacing=(track*s).toFixed(1)+'px';}; set();
+  while(g.measureText(t).width>maxW&&s>18){s-=2; set();}
   g.fillText(t,540,y); g.restore();
+}
+const ZIG=new Path2D('M0 19.6 3.2 16.6 6.4 19.6 9.6 16.6 12.8 19.6 16 16.6 19.2 19.6 22.4 16.6 25.6 19.6 28.8 16.6 32 19.6V32H0Z');
+function brand(y,a){                  // the Slipt mark and name, centred, as in the site's nav
+  if(a<=0) return;
+  const S=64, gap=18; g.save(); g.globalAlpha=a; g.font='650 52px '+SANS; g.letterSpacing='-1.6px';
+  const w=g.measureText('Slipt').width, x0=540-(S+gap+w)/2, top=y-S/2-8;
+  g.save(); g.translate(x0,top); g.scale(S/32,S/32);
+  g.beginPath(); g.roundRect(0,0,32,32,11.4); g.clip();
+  const lg=g.createLinearGradient(0,0,32,32); lg.addColorStop(0,'#FF6A4D'); lg.addColorStop(1,'#E0262C');
+  g.fillStyle=lg; g.fillRect(0,0,32,32); g.fillStyle='#F4F0E8'; g.fill(ZIG); g.restore();
+  g.fillStyle=C.fg; g.textAlign='left'; g.textBaseline='alphabetic'; g.fillText('Slipt',x0+S+gap,y+10); g.restore();
 }
 
 function draw(t){
@@ -991,13 +1007,14 @@ function draw(t){
     M=M0.map((x,i)=>lerp(x,M1[i],fe)); paper(M,null,0,fe);
   }
   const cover=clamp((M[5]-280)/220);                                     // the hook fades as the paper rises past it
-  text(D.quote,210,'800',58,'#ECEAF2',clamp(.4+t/.25)*Math.max(cover,fe));   // the hook is there from frame one
+  text(D.quote,210,'650',64,C.fg,clamp(.4+t/.25)*Math.max(cover,fe),980,SANS,-.025);   // the hook is there from frame one
   const la=clamp((t-T.tf1+.35)/.45);
-  text(D.later,320+24*(1-easeOut(la)),'800',80,'#c4b5fd',la);
-  const ca=clamp((t-T.tf1)/.5);
-  text(D.cta,1736,'500',32,'#8b90a0',ca);
-  text(D.url,1796,'700',40,'#ECEAF2',ca);
-  text(D.tag,1852,'700',34,'#a78bfa',ca);
+  text(D.later,322+24*(1-easeOut(la)),'750',86,C.accent,la,980,SANS,-.035);           // the answer, in the logo's red
+  const ca=clamp((t-T.tf1)/.5), cb=clamp((t-T.tf1-.15)/.5);                        // the foot: the mark, then the way in
+  brand(1508+16*(1-easeOut(ca)),ca);
+  text(D.cta,1606,'500',34,C.fg2,cb,980,SANS,-.01);
+  text(D.url,1660,'600',38,C.fg,cb);
+  text(D.tag,1712,'600',30,C.accent,cb);
 }
 
 // --- sound: a stepper whine + paper hiss on every feed step, a rip at the tear. Only recorded, never played
