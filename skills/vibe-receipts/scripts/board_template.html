@@ -65,7 +65,7 @@ nav a svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;
 @keyframes arrive{from{opacity:0}}
 .cap{grid-row:3;align-self:start;padding-top:28px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;animation:arrive .8s .12s var(--out) both}
 .cap h1{margin:0;font:600 17px/1.25 var(--sans);letter-spacing:-.01em}
-.cap p{margin:0;max-width:38ch;color:var(--fg-2);font-size:14px;line-height:1.55;text-wrap:balance}
+.cap p{margin:0;max-width:34ch;color:var(--fg-2);font-size:14px;line-height:1.55;text-wrap:balance}
 .cap .readout{width:24ch;justify-content:flex-start;margin-top:6px;font:500 12px/1 var(--mono);color:var(--fg-3);display:flex;align-items:center;gap:8px}
 .cap .readout i{width:6px;height:6px;border-radius:50%;background:var(--fg-3);transition:background .2s}
 .cap .readout.live i{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -129,9 +129,13 @@ nav a svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;
   backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-2);transition:color .2s,opacity .5s var(--out)}
 .lang:hover{color:var(--fg)}
 html.boot .lang{opacity:0}
-.more{margin-top:12px;border:0;background:none;color:var(--fg-2);font:500 13px/1 var(--sans);cursor:pointer;padding:8px 12px;border-radius:9px}
-.more:hover{color:var(--fg);background:var(--raise)}
-.more::after{content:" ↓"}
+.more{position:relative;margin-top:18px;border:0;padding:12px 18px;border-radius:12px;cursor:pointer;color:var(--fg);font:500 14px/1 var(--sans);
+  background:conic-gradient(from var(--beam),#0000 0deg 210deg,#ff9a6b 285deg,var(--accent) 330deg,#0000 360deg),var(--line-2);animation:beam 3.2s linear infinite}
+.more::before{content:"";position:absolute;inset:1px;border-radius:11px;background:var(--panel);transition:background .2s}
+.more:hover::before{background:var(--raise)}
+.more>span{position:relative;display:inline-flex;align-items:center;gap:8px}
+.more svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+@media (prefers-reduced-motion:reduce){.more{animation:none}}
 .start{max-width:760px;margin:0 auto;padding:8px 16px 96px}
 .sh{margin:0;font:600 24px/1.2 var(--sans);letter-spacing:-.02em}
 .sl{margin:8px 0 0;color:var(--fg-2);font-size:15px}
@@ -272,7 +276,7 @@ let theme="dark"; try{if(localStorage.getItem("vr-theme")==="light") theme="ligh
 function setTheme(t){theme=t; root.setAttribute("data-theme",t); themeBtn.setAttribute("aria-label",t==="dark"?UI.toLight:UI.toDark); themeBtn.setAttribute("aria-pressed",String(t==="dark"));}
 const UI={
  tr:{navPrinter:"Yazıcı",navBoard:"Pano",title:"Çalıştığın saatin fişi",
-   lede:"Claude Code'daki kendi prompt aralıklarından ölçülür. Hepsi kendi makinende kalır.",
+   lede:"Kendi Claude Code prompt'larından ölçülür. Hepsi kendi makinende kalır.",
    ready:"hazır",printing:"yazdırılıyor",prompts:"prompt",commits:"commit",
    board:"Pano",periods:[["month","Bu ay"],["q","90 gün"],["all","Tümü"]],period:"Dönem",
    metrics:["Toplam süre","Faturalanacak","Token değeri","Fiş"],cols:{due:"Faturalanacak",paid:"Faturalandı",personal:"Kişisel"},
@@ -284,8 +288,8 @@ const UI={
           ["Panonu aç","Bütün fişlerin tek sayfada: yazıcı ve pano, bu sitedeki gibi, ama senin verinle.","open ~/vibe-receipts/board.html"]],
    ask:"Ya da Claude'a sadece şunu söyle:",askText:"“Bu projede kaç saat çalıştım? Panoma ekle.”",plugin:"Plugin olarak kurmayı tercih edersen:",
    privacy:"Prompt'ların, kodun ve fişlerin bilgisayarından çıkmaz. Bu sayfa yalnızca örnek veri gösterir.",github:"Kaynak kod GitHub'da",copy:"Kopyala",copied:"Kopyalandı",other:"EN",otherLabel:"Switch to English"},
- en:{navPrinter:"Printer",navBoard:"Board",title:"A receipt for the hours you worked",
-   lede:"Measured from the gaps between your own prompts in Claude Code. It all stays on your machine.",
+ en:{navPrinter:"Printer",navBoard:"Board",title:"Your hours, on a receipt",
+   lede:"Measured from your own Claude Code prompts. It all stays on your machine.",
    ready:"ready",printing:"printing",prompts:"prompts",commits:"commits",
    board:"Board",periods:[["month","This month"],["q","90 days"],["all","All"]],period:"Period",
    metrics:["Total time","To bill","Token value","Receipts"],cols:{due:"To bill",paid:"Billed",personal:"Personal"},
@@ -311,7 +315,7 @@ document.querySelectorAll("[data-ui]").forEach(el=>{const v=UI[el.dataset.ui]; i
 if(SITE){
   const st=document.getElementById("start"), more=document.getElementById("more"), lang=document.getElementById("lang"), badge=document.getElementById("badge");
   st.hidden=false; more.hidden=false; lang.hidden=false; badge.hidden=false;
-  more.textContent=UI.more; badge.textContent=UI.example; lang.textContent=UI.other; lang.setAttribute("aria-label",UI.otherLabel);
+  more.innerHTML=`<span>${esc(UI.more)}<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M4 9l4 4 4-4"/></svg></span>`; badge.textContent=UI.example; lang.textContent=UI.other; lang.setAttribute("aria-label",UI.otherLabel);
   st.innerHTML=`<h2 class="sh">${esc(UI.start)}</h2><p class="sl">${esc(UI.startLede)}</p>
     <ol class="steps">${UI.steps.map(([t,d,c],i)=>`<li><span class="sn">${i+1}</span><div class="sb"><b>${esc(t)}</b><span>${esc(d)}</span>
       <div class="code"><code>${esc(c)}</code><button type="button" data-copy="${i}">${esc(UI.copy)}</button></div></div></li>`).join("")}</ol>
@@ -359,7 +363,7 @@ const G=PR.geo, VS=2.4, RW=34.67*15, WD=G.world;    // video px per viewBox unit
 const q=G.paperW/RW;                                 // world units per receipt px (every receipt is 80 mm wide)
 const LATEST=R[0];                                   // receipts.py sorts newest first
 const fig=document.getElementById("fig"), readout=document.getElementById("readout"), rtext=readout.querySelector("span");
-fig.setAttribute("aria-label",UI.figLabel(LATEST.name,fmt(LATEST.min))); fig.title=UI.reprint;
+fig.setAttribute("aria-label",UI.figLabel(LATEST.name,fmt(LATEST.min)));   // no title tooltip: it would sit over the caption
 const cap=document.querySelector(".cap");
 let VB, S=1, lamps=[], LY={}, built=false;
 
@@ -482,7 +486,7 @@ function run(now){
   const t=(now-t0)/1000, idle=.5, end=idle+DP, sh=current;
   feed=0;
   if(t<idle){sh.pose=printPose(sh,0); say(UI.ready);}
-  else if(t<end){const x=feedAt((t-idle)/DP); sh.pose=printPose(sh,sh.L*x); feed=.75+.25*Math.sin(t*44); say(`${UI.printing} · %${String(Math.round(x*100)).padStart(3,"\u2007")}`,true);}
+  else if(t<end){const x=feedAt((t-idle)/DP); sh.pose=printPose(sh,sh.L*x); feed=.75+.25*Math.sin(t*44); say(`${UI.printing} · %${Math.round(x*100)}`,true);   // the readout has a fixed width and grows to the right only}
   else {sh.pose=printPose(sh,sh.L); paintAll(); say(done(sh)); printing=false; return;}
   paintAll(); raf=requestAnimationFrame(run);
 }
