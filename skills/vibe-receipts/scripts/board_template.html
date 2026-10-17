@@ -175,9 +175,9 @@ html.boot .lang{opacity:0}
 .ask code{align-self:flex-start;margin-top:4px;font:500 11px/1 var(--mono);color:var(--fg-2);background:var(--raise);padding:4px 6px;border-radius:5px}
 /* each card's drawing (tools/site/art, prepared by art.py): its own dark tile; on hover it rises to the hover
    drawing's position and its light comes up, and each drawing does one small thing of its own */
-.pv{position:relative;aspect-ratio:470/418;border-radius:7.66%/8.61%;overflow:hidden;--art-shade:1}
+.pv{position:relative;width:100%;height:auto;min-width:0;align-self:start;aspect-ratio:470/418;border-radius:7.66%/8.61%;overflow:hidden;--art-shade:1}
 :root[data-theme="light"] .pv{--art-shade:.42;--art-paper:#fff}   /* on a light tile the paper needs to be whiter than the tile */
-.pv svg{display:block;width:100%;height:100%}
+.pv svg{position:absolute;inset:0;display:block;width:100%;height:100%}   /* out of the flow: an inline SVG's own 300×150 must not size the card */
 .pv .lift{transform-origin:0 0;transition:transform .55s var(--spring)}
 .ask:hover .pv .lift{transform:translate(-7px,-13px) scale(1.03)}
 .pv .hv{opacity:0;transition:opacity .45s var(--out)}
@@ -195,11 +195,11 @@ html.boot .lang{opacity:0}
 @keyframes breathe{50%{transform:scaleY(.8)}}
 @media (prefers-reduced-motion:reduce){.pv .lift,.pv .feed,.pv .title,.pv .pop{transition:none}.ask:hover .pv .spark,.ask:hover .pv .bar{animation:none}}
 /* the Ask Claude page: three columns of upright cards, the drawing on top and larger */
-#v-sor{max-width:900px}
+#v-sor{max-width:800px}
 .asks.page{margin-top:24px;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.asks.page .ask{grid-template-columns:minmax(0,1fr);align-items:stretch;gap:12px;padding:10px 10px 16px;border-radius:30px}   /* 30 = drawing corner ~20 + padding 10 */
+.asks.page .ask{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;align-content:start;align-items:stretch;gap:12px;padding:10px 10px 16px;border-radius:26px}   /* 26 = drawing corner ~16 + padding 10 */
 .asks.page .tx{padding:0 4px}
-.asks.page q{font-size:14px}
+.asks.page q{font-size:13.5px}
 .ask-more{margin-top:26px}
 .ask-more a,.sl a{color:var(--fg);text-decoration:none;border-bottom:1px solid var(--line-3);transition:border-color .2s}
 .ask-more a:hover,.sl a:hover{border-color:var(--accent)}
