@@ -629,7 +629,7 @@ def board_page(recs,lang,site=None,head=''):
     # the first paint is already the right colour: the theme and the page background are set in the head
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
             '<meta name="color-scheme" content="dark light">'+head+
-            '<script>(function(){var r=document.documentElement,t="dark";try{if(localStorage.getItem("vr-theme")==="light")t="light"}catch(e){}r.setAttribute("data-theme",t);r.classList.add("boot")})();</script>'
+            '<script>(function(){var r=document.documentElement,t="dark";try{if(localStorage.getItem("vr-theme")==="light")t="light"}catch(e){}r.setAttribute("data-theme",t);r.classList.add("boot");setTimeout(function(){r.classList.remove("boot")},2500)})();</script>'
             '<style>html{background:#09090b;color-scheme:dark}html[data-theme="light"]{background:#fafafa;color-scheme:light}body{margin:0}[hidden]{display:none!important}</style>'
             '</head><body>'+body+'</body></html>')
 

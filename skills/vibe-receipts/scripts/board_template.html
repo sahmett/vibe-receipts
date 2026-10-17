@@ -486,7 +486,7 @@ function run(now){
   const t=(now-t0)/1000, idle=.5, end=idle+DP, sh=current;
   feed=0;
   if(t<idle){sh.pose=printPose(sh,0); say(UI.ready);}
-  else if(t<end){const x=feedAt((t-idle)/DP); sh.pose=printPose(sh,sh.L*x); feed=.75+.25*Math.sin(t*44); say(`${UI.printing} · %${Math.round(x*100)}`,true);   // the readout has a fixed width and grows to the right only}
+  else if(t<end){const x=feedAt((t-idle)/DP); sh.pose=printPose(sh,sh.L*x); feed=.75+.25*Math.sin(t*44); say(`${UI.printing} · %${Math.round(x*100)}`,true);}   // the readout has a fixed width and grows to the right only
   else {sh.pose=printPose(sh,sh.L); paintAll(); say(done(sh)); printing=false; return;}
   paintAll(); raf=requestAnimationFrame(run);
 }
@@ -673,11 +673,11 @@ function fontsReady(){   // system faces are there at once; this only waits for 
   return document.fonts?Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,300))]):Promise.resolve();
 }
 fontsReady().then(()=>{
-  route();                                              // builds and measures the visible view, still hidden
-  requestAnimationFrame(()=>{
+  try{route();}                                         // builds and measures the visible view, still hidden
+  finally{requestAnimationFrame(()=>{
     root.classList.remove("boot");
     requestAnimationFrame(()=>document.querySelector("nav").classList.add("ready"));   // the pill only slides from now on
-  });
+  });}
   // a face that arrives after the reveal: measure again, so the receipt's strips and the pill match the text
   if(document.fonts) document.fonts.addEventListener("loadingdone",()=>{
     const a=document.querySelector('nav a[aria-current="page"]'); if(a) movePill(a);
