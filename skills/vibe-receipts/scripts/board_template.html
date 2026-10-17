@@ -191,7 +191,18 @@ html.boot .lang{opacity:0}
 .pv-s>i{background:var(--fg-3)}
 .pv-s .m{margin-top:6px;height:26px;border-radius:3px;background:var(--paper);padding:4px 6px;box-shadow:0 0 0 .5px var(--line-3)}
 .pv-s .m i{margin-top:3px}
-@media (max-width:640px){.asks{grid-template-columns:minmax(0,1fr)}}
+/* the Ask Claude page: three columns of upright cards, the drawing on top and larger */
+.asks.page{margin-top:28px;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.asks.page .ask{grid-template-columns:minmax(0,1fr);align-items:stretch;gap:14px;padding:12px 12px 16px}
+.asks.page .pv{width:auto;height:150px}
+.asks.page .pv>*{scale:1.55}
+.asks.page .tx{padding:0 4px}
+.asks.page q{font-size:15px}
+.ask-more{margin-top:26px}
+.ask-more a,.sl a{color:var(--fg);text-decoration:none;border-bottom:1px solid var(--line-3);transition:border-color .2s}
+.ask-more a:hover,.sl a:hover{border-color:var(--accent)}
+@media (max-width:860px){.asks.page{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.asks,.asks.page{grid-template-columns:minmax(0,1fr)}.asks.page .pv{height:128px}}
 @media (prefers-reduced-motion:reduce){.ask:hover .pv-v::after{animation:none}.pv>*{transition:none}}
 .alt{margin:16px 0 0;color:var(--fg-2);font-size:13.5px;line-height:1.9}
 .alt em{color:var(--fg);font-style:normal}
@@ -293,6 +304,7 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
   <span class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="slipt-red" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#E0262C"/></linearGradient><clipPath id="slipt-clip"><rect width="32" height="32" rx="11.4"/></clipPath></defs><g clip-path="url(#slipt-clip)"><rect width="32" height="32" fill="url(#slipt-red)"/><path d="M0 19.6 3.2 16.6 6.4 19.6 9.6 16.6 12.8 19.6 16 16.6 19.2 19.6 22.4 16.6 25.6 19.6 28.8 16.6 32 19.6V32H0Z" fill="#F4F0E8"/></g></svg>Slipt</span><span class="sep" aria-hidden="true"></span>
   <a href="#yazici" data-view="yazici"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6V2.5h7V6"/><rect x="1.8" y="6" width="12.4" height="5.6" rx="1.4"/><path d="M4.5 9.5h7v4h-7z"/></svg><span data-ui="navPrinter"></span></a>
   <a href="#pano" data-view="pano"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.2" width="3.4" height="11.6" rx="1"/><rect x="6.3" y="2.2" width="3.4" height="7.6" rx="1"/><rect x="10.8" y="2.2" width="3.4" height="9.6" rx="1"/></svg><span data-ui="navBoard"></span></a>
+  <a href="#sor" data-view="sor" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7.2h-6.2L4.3 13v-2.3H2.5z"/><path d="M5.3 6.4h5.4M5.3 8.4h3.4"/></svg><span data-ui="navAsk"></span></a>
 </nav>
 
 <button class="theme" type="button" id="theme"><svg class="moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.6A5.6 5.6 0 0 1 6.4 2.5a5.6 5.6 0 1 0 7.1 7.1z"/></svg><svg class="sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg></button>
@@ -312,6 +324,13 @@ h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
     </div>
   </div>
   <div class="start" id="start" hidden></div>
+</section>
+
+<section class="view" id="v-sor" aria-labelledby="t3" hidden>
+  <div class="bhead"><div class="ttl"><h2 id="t3" data-ui="askT"></h2></div></div>
+  <p class="sl" data-ui="askL"></p>
+  <ul class="asks page" id="asks"></ul>
+  <p class="alt ask-more"><a href="#yazici" id="toStart"></a></p>
 </section>
 
 <section class="view" id="v-pano" aria-labelledby="t2" hidden>
@@ -346,6 +365,7 @@ const UI={
    steps:[["Kur","Aracı Claude Code'a skill olarak ekle: bir klasör kopyalanır, başka hiçbir şey kurulmaz.","git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
           ["Çalıştır","Bir projenin klasöründe Claude'a sor ya da komutu kendin çalıştır. Fişin, raporun ve panon hazırlanır.","python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --board"],
           ["Panonu aç","Bütün fişlerin tek sayfada. Ya da archive klasörünü bu sitedeki panoya sürükle.","open ~/vibe-receipts/board.html"]],
+   navAsk:"Claude'a sor",askMore:"Claude'a neler sorabileceğini gör →",toStart:"← Kurulum adımları",
    askT:"Claude'a şunları sorabilirsin",askL:"Kurduktan sonra Claude Code'a kendi cümlenle söylemen yeter.",
    asks:[["r","Bu projede kaç saat çalıştım?","Fiş, rapor ve her günün süresi.","receipts.py ."],
          ["v","Bunun videosunu yap.","Fişin yazıcıdan çıktığı dikey video.","--video"],
@@ -372,6 +392,7 @@ const UI={
    steps:[["Install","Add it to Claude Code as a skill: one folder is copied, nothing else is installed.","git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
           ["Run it","In a project's folder, ask Claude or run the command yourself. Your receipt, report and board are made.","python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --board"],
           ["Open your board","All your receipts on one page. Or drag the archive folder onto this site's board.","open ~/vibe-receipts/board.html"]],
+   navAsk:"Ask Claude",askMore:"See what you can ask Claude →",toStart:"← The install steps",
    askT:"What you can ask Claude",askL:"Once it is installed, just say it to Claude Code in your own words.",
    asks:[["r","How long did this project take?","A receipt, a report and every day's hours.","receipts.py ."],
          ["v","Make a video of it.","The receipt printing out, as a vertical clip.","--video"],
@@ -412,9 +433,12 @@ if(SITE){
     <ol class="steps">${UI.steps.map(([t,d,c],i)=>`<li><span class="sn">${i+1}</span><div class="sb"><b>${esc(t)}</b><span>${esc(d)}</span>
       <div class="code"><code>${esc(c)}</code><button type="button" data-copy="${i}">${esc(UI.copy)}</button></div></div></li>`).join("")}</ol>
     <p class="alt">${esc(UI.plugin)} <code>/plugin marketplace add sahmett/vibe-receipts</code> <code>/plugin install vibe-receipts@vibe-receipts</code></p>
-    <h3 class="ah">${esc(UI.askT)}</h3><p class="al">${esc(UI.askL)}</p>
-    <ul class="asks">${UI.asks.map(([k,q,d,c])=>`<li class="ask"><div class="pv" aria-hidden="true">${PV[k]}</div><div class="tx"><q>${esc(q)}</q><span class="d">${esc(d)}</span><code>${esc(c)}</code></div></li>`).join("")}</ul>
+    <p class="alt ask-more"><a href="#sor">${esc(UI.askMore)}</a></p>
     <footer class="sf"><span>${esc(UI.privacy)}</span><a href="${esc(SITE.github)}" target="_blank" rel="noopener">${esc(UI.github)} ↗</a></footer>`;
+  document.querySelector('nav a[data-view="sor"]').hidden=false;
+  document.getElementById("asks").innerHTML=UI.asks.map(([k,q,d,c])=>`<li class="ask"><div class="pv" aria-hidden="true">${PV[k]}</div><div class="tx"><q>${esc(q)}</q><span class="d">${esc(d)}</span><code>${esc(c)}</code></div></li>`).join("");
+  const toStart=document.getElementById("toStart"); toStart.textContent=UI.toStart;
+  toStart.addEventListener("click",e=>{e.preventDefault(); goStart=true; location.hash="#yazici";});   // the printer page, at its install steps
   st.querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",async()=>{
     const code=b.previousElementSibling;
     try{await navigator.clipboard.writeText(UI.steps[+b.dataset.copy][2]); b.textContent=UI.copied; setTimeout(()=>b.textContent=UI.copy,1600);}
@@ -862,15 +886,17 @@ if(SITE){
 // ---- the two views; the pill slides to the current one ----
 const pill=document.querySelector("nav .pill");
 function movePill(a){pill.style.left=a.offsetLeft+"px"; pill.style.width=a.offsetWidth+"px";}
-let boardShown=false;
+let boardShown=false, goStart=false;   // goStart: land on the install steps, not the top
 function route(){
-  const v=location.hash==="#pano"?"pano":"yazici";
+  const v=location.hash==="#pano"?"pano":location.hash==="#sor"&&SITE?"sor":"yazici";
   closeSheet(true);
-  document.getElementById("v-yazici").hidden=v!=="yazici"; document.getElementById("v-pano").hidden=v!=="pano";
+  ["yazici","pano","sor"].forEach(k=>document.getElementById("v-"+k).hidden=v!==k);
   document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.view===v){a.setAttribute("aria-current","page"); movePill(a);} else a.removeAttribute("aria-current");});
   if(v==="yazici"){if(!built){buildFigure(); startPrint();} else size();}
-  else {cancelAnimationFrame(raf); board(!boardShown); boardShown=true;}
+  else if(v==="pano"){cancelAnimationFrame(raf); board(!boardShown); boardShown=true;}
+  else cancelAnimationFrame(raf);
   scrollTo(0,0);
+  if(goStart&&v==="yazici"){goStart=false; document.getElementById("start").scrollIntoView({block:"start"});}
 }
 addEventListener("hashchange",route);
 function fontsReady(){   // system faces are there at once; this only waits for the document to settle
