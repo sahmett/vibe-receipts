@@ -382,7 +382,8 @@ const UI={
          ["s","Fişimi paylaş.","Her mecraya hazır gönderi, önizlemesi fiş olan link.","--share"]],
    plugin:"Plugin olarak kurmayı tercih edersen:",
    privacy:"Prompt'ların ve kodun bilgisayarından çıkmaz. Buraya açtığın fişler yalnızca tarayıcında okunur.",
-   srcExample:"Bunlar örnek fişler. Kendi fişlerin için {code} klasörünü bu sayfaya sürükle. Hiçbir şey yüklenmez.",pick:"Dosya seç",
+   srcExample:"İlk fiş bu sitenin kendi fişi, diğerleri örnek. Kendi fişlerin için {code} klasörünü bu sayfaya sürükle. Hiçbir şey yüklenmez.",
+   selfChip:"Bu sitenin kendi fişi",pick:"Dosya seç",
    srcMine:n=>`Senin fişlerin: ${n} fiş. Yalnızca bu tarayıcıda tutulur.`,add:"Fiş ekle",back:"Örneğe dön",
    srcShared:n=>`Paylaşılan fiş: ${n}. Linkin içinde taşınır, hiçbir sunucuda tutulmaz.`,
    none:"Bu dosyalarda fiş bulunamadı.",badLink:"Bu link açılamadı, örnek fişler gösteriliyor.",
@@ -409,7 +410,8 @@ const UI={
          ["s","Share my receipt.","A post per platform and a link that previews it.","--share"]],
    plugin:"Prefer a plugin?",
    privacy:"Your prompts and code never leave your machine. Receipts you open here are read in your browser only.",
-   srcExample:"These are example receipts. For yours, drag your {code} folder onto this page. Nothing is uploaded.",pick:"Choose files",
+   srcExample:"The first receipt is this site's own, the rest are examples. For yours, drag your {code} folder onto this page. Nothing is uploaded.",
+   selfChip:"This site's own receipt",pick:"Choose files",
    srcMine:n=>`Your receipts: ${n}. Kept in this browser only.`,add:"Add receipts",back:"Back to examples",
    srcShared:n=>`A shared receipt: ${n}. It travels inside the link, no server keeps it.`,
    none:"No receipts found in those files.",badLink:"This link could not be opened, showing example receipts.",
@@ -805,7 +807,8 @@ function use(list,source){
   setPeriod(source==="shared"||!R.some(inPeriod)?"all":"q");   // never open on an empty board
   const badge=document.getElementById("badge"), chip=document.getElementById("shared"), more=document.getElementById("more");
   badge.textContent=source==="mine"?UI.mine:source==="shared"?UI.sharedBadge:UI.example;
-  chip.hidden=source!=="shared"; if(source==="shared") chip.textContent=UI.sharedChip(R[0].name);
+  const own=source==="example"&&R[0]&&R[0].self;   // the site's own receipt, measured with Slipt itself
+  chip.hidden=!(source==="shared"||own); chip.textContent=source==="shared"?UI.sharedChip(R[0].name):own?UI.selfChip:"";
   more.querySelector("span").firstChild.textContent=source==="shared"?UI.own:UI.more;
   srcBar();
 }
