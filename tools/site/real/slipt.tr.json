@@ -1,0 +1,78 @@
+{
+ "key": "slipt_2026-10-16_2026-10-17",
+ "name": "slipt",
+ "built": "fiş aracı",
+ "period": "2026-10-16 → 10-17 · 2 GÜN",
+ "active": null,
+ "start": "2026-10-16",
+ "end": "2026-10-17",
+ "items": [
+  [
+   18,
+   "prompt · Cum 10-16",
+   92
+  ],
+  [
+   47,
+   "prompt · Cmt 10-17",
+   311
+  ]
+ ],
+ "min": 403,
+ "prompts": 65,
+ "commits": 30,
+ "estimate": false,
+ "stats": [
+  [
+   "PROMPT",
+   "65"
+  ],
+  [
+   "AGENT",
+   "1 OTURUM · 0 SUBAGENT"
+  ],
+  [
+   "TOKEN",
+   "315M OKUNAN · 841K YAZILAN"
+  ],
+  [
+   "MODEL",
+   "OPUS 100%"
+  ],
+  null,
+  [
+   "COMMIT",
+   "30"
+  ],
+  [
+   "KOD SATIRI",
+   "+3,538"
+  ]
+ ],
+ "value": 117.82,
+ "value_text": "$117.82",
+ "thr": [
+  "MOLA SINIRI",
+  "30,0 dk",
+  "Ritminden 39,1 dk çıktı, 30,0 dk üst sınır uygulandı. Daha uzun aralıklar mola sayılır."
+ ],
+ "client": null,
+ "status": "personal",
+ "lang": "tr",
+ "made": "2026-10-17T17:49:49",
+ "L": {
+  "kind": "ÇALIŞMA SÜRESİ FİŞİ",
+  "project": "PROJE",
+  "built": "YAPILAN",
+  "period": "DÖNEM",
+  "active": "AKTİF GÜN",
+  "qty": "ADET",
+  "item": "KALEM",
+  "time": "SÜRE",
+  "value": "TOKEN VALUE",
+  "total": "TOPLAM",
+  "h": "s",
+  "m": "d"
+ },
+ "self": true
+}

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8">
+<style>
+  /* 1200 x 630 Open Graph card: the Slipt mark and name, one line, the address; the mark's torn edge runs along the foot */
+  :root{--bg:#0a0a0c;--fg:#f4f4f5;--fg2:#a1a1a7;--fg3:#5f5f66;--line:#ffffff14;--paper:#f4f0e8;--red:#ff4a3d;
+    --sans:system-ui,-apple-system,"SF Pro Display","Segoe UI",Roboto,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+  *{box-sizing:border-box;margin:0}
+  html,body{width:1200px;height:630px;background:var(--bg);overflow:hidden;-webkit-font-smoothing:antialiased}
+  .card{position:relative;width:1200px;height:630px;padding:72px 84px 0;color:var(--fg);font-family:var(--sans);
+    background:radial-gradient(70% 90% at 82% 0%,#ffffff0b,transparent 60%),var(--bg)}
+  .brand{display:flex;align-items:center;gap:22px}
+  .brand svg{width:76px;height:76px;filter:drop-shadow(0 10px 24px #ff3a2a33)}
+  .brand span{font:600 46px/1 var(--sans);letter-spacing:-.03em}
+  h1{margin-top:118px;font:600 76px/1.02 var(--sans);letter-spacing:-.045em}
+  p{margin-top:24px;font:400 28px/1.4 var(--sans);color:var(--fg2);letter-spacing:-.01em}
+  .meta{position:absolute;left:84px;right:84px;bottom:104px;display:flex;justify-content:space-between;align-items:center;font:500 20px/1 var(--mono);color:var(--fg3);letter-spacing:.02em}
+  .meta b{font-weight:500;color:var(--fg2)}
+  .meta i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-right:12px;vertical-align:1px;box-shadow:0 0 0 4px #ff4a3d26}
+  .edge{position:absolute;left:0;right:0;bottom:0;height:56px}
+</style></head>
+<body><div class="card">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#E0262C"/></linearGradient><clipPath id="c"><rect width="32" height="32" rx="9"/></clipPath></defs><g clip-path="url(#c)"><rect width="32" height="32" fill="url(#r)"/><path d="M0 19.6 3.2 16.6 6.4 19.6 9.6 16.6 12.8 19.6 16 16.6 19.2 19.6 22.4 16.6 25.6 19.6 28.8 16.6 32 19.6V32H0Z" fill="#F4F0E8"/></g></svg>
+    <span>Slipt</span>
+  </div>
+  <h1>Çalıştığın saatin fişi.</h1>
+  <p>Claude Code'daki kendi prompt aralıklarından ölçülür. Yerelde kalır.</p>
+  <div class="meta"><span><i></i><b>slipt-phi.vercel.app</b></span><span>fiş · rapor · pano</span></div>
+  <svg class="edge" viewBox="0 0 1200 56" preserveAspectRatio="none" aria-hidden="true"><path id="z" fill="#f4f0e8"/></svg>
+</div>
+<script>
+  // the mark's torn edge, as many teeth as fit 1200 px at the mark's own proportions
+  const n=30, w=1200/n, peak=22, dip=10; let d=`M0 ${peak+dip}`;   // not "top": that name is the window's
+  for(let i=0;i<n;i++) d+=` L${(i+.5)*w} ${peak} L${(i+1)*w} ${peak+dip}`;
+  document.getElementById("z").setAttribute("d",d+" V56 H0Z");
+</script>
+</body></html>

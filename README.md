@@ -74,7 +74,7 @@ git clone https://github.com/sahmett/vibe-receipts
 python3 vibe-receipts/receipts.py ~/code/my-project
 ```
 
-Outputs go to `~/vibe-receipts/` (`<repo>-receipt.png`, `<repo>-report.html`, `<repo>-daily.csv`),
+Outputs go to `~/vibe-receipts/` (`<repo>-receipt.png`, `<repo>-report.html`, `<repo>-daily.csv`, and the receipt as data in `archive/`),
 never into the analysed repo. The PNG is rendered with your local Chrome/Chromium in headless mode
 (`CHROME=/path/to/browser` to pick one, `--no-png` to skip it). `--built "mobile app"` says what you
 built on the receipt (the skill fills it in from your README), and `--name` shows another project
@@ -85,7 +85,7 @@ name, handy for client work.
 - **Python 3.9 or newer**, standard library only
 - **Claude Code session logs** in `~/.claude/projects` (the CLI and the desktop app both write them)
 - Optional: **git** for commits and lines of code, and **Chrome, Chromium, Edge or Brave** for the
-  receipt PNG
+  receipt PNG and video; **ffmpeg** makes the video's MP4 play everywhere
 
 ## Share your receipt
 
@@ -96,6 +96,114 @@ Every run prints a `Share:` line, a ready-made caption for the PNG:
 ```
 
 Post it with **#vibereceipts**. We'd love to see yours.
+
+### The share kit
+
+Every run also writes `~/vibe-receipts/<repo>-share.md`: a ready post per platform, filled in with that
+receipt's numbers. Three short posts for X, Threads and Bluesky (the joke, the numbers, what Claude read and
+wrote), one for LinkedIn with two `[ ]` lines left for your own takeaways, and a caption for the video on Reels,
+TikTok and Shorts, with a few tips on posting. With `--share` every post carries the link that previews as
+your receipt. In Claude Code, just say "share my receipt".
+
+### Or as a video
+
+`--video` (or ask Claude for *"a video of my receipt"*) also writes `<repo>-receipt.mp4`: a vertical
+1080×1920 clip for Reels, TikTok and Shorts. Your receipt prints out of a thermal printer line by line,
+with the printer's sound, gets torn off, and ends on your total and the share line. The printer is
+drawn with the [anatomy](https://github.com/wheresryan22/anatomy) isometric kit
+(`tools/printer/build.mjs`, only needed to change it). It takes about 15
+seconds, because Chrome records the animation in real time.
+
+It needs nothing beyond the Chrome that renders the PNG. If **ffmpeg** is installed, the clip is
+re-encoded to constant-frame-rate H.264/AAC, which every platform accepts; without it you get what
+Chrome recorded (MP4, or WebM on older browsers).
+
+## All your receipts on one board
+
+Every run also keeps its receipt as data in `~/vibe-receipts/archive/` (one JSON file per project and
+date range; a rerun of the same range replaces it). `--board` turns the archive into
+`~/vibe-receipts/board.html`, a black-and-white page with two views:
+
+- **Printer:** your newest receipt printing out of the isometric thermal printer.
+- **Board:** every receipt as a card in three columns (to bill, billed, personal), with the totals on
+  top, a 90-day / this-month filter and a drawer with the full receipt.
+
+```bash
+python3 receipts.py ~/code/client-app --client Northwind --board   # lands in "to bill"
+python3 receipts.py --board                                          # rebuild the board from the archive only
+```
+
+`--client` names the client and `--status due|paid|personal` picks the column; both are kept for later runs
+of the same range. Dragging a card to another column on the page is remembered in that browser.
+
+The public site, [slipt-phi.vercel.app](https://slipt-phi.vercel.app), shows the same page with example
+receipts. Drag your `~/vibe-receipts/archive` folder (or its JSON files) onto it to see your own: the files
+are read in the browser and kept there until you go back to the examples; nothing is uploaded.
+
+### Share one receipt as a link
+
+`--link` prints a link that opens the receipt on the site, printing out of the printer:
+
+```bash
+python3 receipts.py . --link
+# Link: https://slipt-phi.vercel.app/#r=bVLBjtow...
+```
+
+The receipt (its numbers and labels, without the client or the board column) is compressed into the part
+after `#`, which browsers never send to the server, so no server keeps it. The project name is in it: use
+`--name` to show another one. A preview of the link in a chat app shows the site's card, not the receipt.
+
+For a post, `--share` makes a link whose preview *is* the receipt: the project, its total time and the receipt
+itself, drawn on a 1200×630 card:
+
+```bash
+python3 receipts.py . --share
+# Share link: https://slipt-phi.vercel.app/r/bVLBjtow...
+```
+
+Here the receipt is in the path (`/r/...`), so the site's server reads it to draw that card and the page's
+title. It stores nothing: there is no database, the link is the receipt. The same fields as `--link` go in.
+
+The site is built by `tools/site/build.py`: the page, plus `api/r.js` (the `/r/...` page with the receipt's
+own tags) and `api/og.js` (its card, with `@vercel/og` and the Geist fonts in `tools/site/fonts`, OFL).
+
+## Invoices and timesheets
+
+Receipts archived with `--client` can be billed together. With no repo, `--invoice` collects that client's
+receipts still "to bill" and writes an A4 page, as HTML and (with Chrome) PDF, to `~/vibe-receipts/invoices/`:
+
+```bash
+python3 receipts.py --invoice Northwind --rate 85 --currency EUR --bill-from "Your Name\nYour address"
+python3 receipts.py --invoice Northwind --since 2026-10-01 --until 2026-10-31   # no rate: a timesheet
+python3 receipts.py --invoice Northwind --rate 1500 --tax 20 --mark-billed --board
+```
+
+- **Page 1:** who it is from and to, one line per receipt (project, period, hours, with a rate its amount) and
+  the totals, with `--tax` added on top.
+- **After it:** every receipt's own days or weeks with their time, its break threshold, and a line on how the
+  time was measured, so the client can see where the hours come from.
+- **Numbers:** this year's next one (`2026-001`, `2026-002`, …) unless you pass `--number`.
+- **`--mark-billed`:** moves those receipts to the board's "billed" column; `--status paid` bills those instead.
+
+## Your year, wrapped
+
+`--wrapped` turns a year of the archive into a story you tap through, like a year-in-review, and a
+1080×1920 picture of its last card to post:
+
+```bash
+python3 receipts.py --wrapped          # this year: ~/vibe-receipts/wrapped-2026.html and wrapped-2026.png
+python3 receipts.py --wrapped 2025
+```
+
+The cards: your total time, month by month, where the hours went (every project on one receipt), the hour
+of the day you prompt most, your busiest day and longest streak, the project that was "a 2-hour project",
+what Claude read and wrote, your vibe type, and the year on one receipt with a caption to copy. A card is
+left out when the archive has nothing for it.
+
+Receipts made by this version also archive their minutes and prompts per day, a weekday × hour count of
+your prompts, the token counts and the model mix, which the clock, busiest-day and streak cards need.
+Older receipts only have their lines (a day, week, month or quarter each); their time is spread over
+those dates, so the months stay right. None of this goes into `--link` or `--share` links.
 
 ## How it works
 
@@ -172,8 +280,9 @@ which models wrote them, a daily table and a daily commit log.
 
 Everything runs locally. vibe-receipts reads your Claude Code transcripts and git history on your
 machine and writes its outputs to `~/vibe-receipts/`. It never uploads your prompts, code, logs or
-reports. The only network request is the receipt card loading its font from Google Fonts while
-it is rendered.
+reports. The only network request is the receipt card (and the video) loading its font from
+Google Fonts while it is rendered. The video is recorded by a local headless Chrome talking to a
+throwaway server on `127.0.0.1`.
 
 ## Options
 
@@ -189,6 +298,15 @@ it is rendered.
 | `--transcripts DIR` | Claude log folder, overrides auto-detection (repeatable, e.g. for a repo cloned in two places) |
 | `--out DIR` | output folder (default `~/vibe-receipts`) |
 | `--no-png` | skip the receipt PNG |
+| `--video` | also make `<repo>-receipt.mp4`, the receipt printing out of a thermal printer (1080×1920) |
+| `--board` | also rebuild `board.html` from every archived receipt; with no `repo`, only rebuild it |
+| `--client` | client of this receipt, shown on the board |
+| `--status` | board column: `due`, `paid` or `personal` (default: `due` with a client, else `personal`) |
+| `--link` | also print a link that opens this receipt on the public site (the receipt rides in the `#` part) |
+| `--invoice CLIENT` | with no `repo`: that client's "to bill" receipts as an invoice (`--rate`, `--currency`, `--tax`) or a timesheet, HTML and PDF |
+| `--wrapped [YEAR]` | with no `repo`: the year from the archive as a story, `wrapped-<year>.html` and `.png` (default: this year) |
+| `--mark-billed` | with `--invoice`: move the billed receipts to the board's "billed" column |
+| `--share` | also print a link whose preview shows this receipt (the receipt rides in the path; nothing is stored) |
 
 Constants at the top of `receipts.py`: `IDLE` (fallback threshold), `CAP`, `MIN_GAPS`, `SENS`
 (thresholds in the sensitivity table), `PRICES`, `CODE_W`, `VENDOR_RE` / `GEN_RE` (excluded file
@@ -264,10 +382,17 @@ Yes, but then the hours are an estimate from commit sessions, not a measurement.
 skills/vibe-receipts/
 ├── SKILL.md               when and how Claude runs it
 └── scripts/
-    ├── receipts.py        analysis, HTML report, receipt card
+    ├── receipts.py        analysis, HTML report, receipt card, video
+    ├── printer.json       the printer in the video and on the board (built by tools/printer)
+    ├── board_template.html  the board page --board fills in
+    ├── invoice.py           --invoice: a client's receipts as an invoice or a timesheet
+    ├── share.py             the share kit: a ready post per platform for each receipt
+    ├── wrapped.py           --wrapped: the year's numbers from the archive
+    ├── wrapped_template.html  the story page --wrapped fills in
     └── to_jpg.sh          report → JPEG
 receipts.py, to_jpg.sh     shortcuts (symlinks)
-demo/make_demo.py          rebuilds the synthetic demo above
+demo/make_demo.py          rebuilds the synthetic demo above (--video for the clip)
+tools/printer/build.mjs    draws the printer with the anatomy isometric kit
 ```
 
 ## License

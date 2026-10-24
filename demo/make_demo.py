@@ -7,6 +7,7 @@ usage), then renders the report and the receipt card with receipts.py.
 No real repo or transcript is read.
 
   python3 demo/make_demo.py            # -> demo/out/pixel-pantry-report.html + -receipt.png
+  python3 demo/make_demo.py --video    # + demo/out/pixel-pantry-receipt.mp4
   bash to_jpg.sh demo/out/pixel-pantry-report.html
 """
 import datetime, json, os, random, shutil, subprocess, sys, tempfile
@@ -103,7 +104,7 @@ def main():
             f.write(json.dumps(rec)+'\n')
 
     subprocess.run([sys.executable,os.path.join(ROOT,'skills','vibe-receipts','scripts','receipts.py'),repo,
-                    '--transcripts',logs,'--lang','en','--out',OUT,'--built','recipe app'],check=True)
+                    '--transcripts',logs,'--lang','en','--out',OUT,'--built','recipe app']+sys.argv[1:],check=True)   # e.g. --video
     shutil.rmtree(tmp)
 
 if __name__=='__main__':

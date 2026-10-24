@@ -16,10 +16,11 @@ Usage:
 Besides the HTML report and CSV it writes <repo>-receipt.png, a shareable receipt card
 (rendered with a local Chrome/Chromium in headless mode; skipped if none is found).
 """
-import argparse, base64, datetime, glob, html, json, os, pathlib, re, shutil, subprocess
+import argparse, base64, datetime, glob, html, http.server, json, os, pathlib, re, shutil, subprocess, tempfile, threading, zlib
 
 IDLE       = 15            # minutes: fallback threshold when there are too few gaps for Tukey
 MIN_GAPS   = 20            # fewer gaps than this = Tukey threshold is not reliable
+SITE_URL   = 'https://slipt-phi.vercel.app'   # --link: the public site opens a receipt carried in the link
 CAP        = 30            # minutes: the automatic threshold never goes above this (a 30+ min gap is a break)
 SENS       = [5,10,15,20,30,45,60]   # thresholds shown in the sensitivity table
 BANDS      = [(0,2),(2,5),(5,15),(15,30),(30,60),(60,None)]
@@ -105,7 +106,9 @@ L={
    rc_unit_p='prompts',rc_unit_c='commits',rc_wk='wk of',rc_q='Q',rc_dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
    # the joke: what you said before you started; picked so the receipt's TOTAL is always more
    share='{q} {t} later{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} of tokens',share_t=lambda h,m:f'{h}h {m}m',
-   rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")]),
+   rc_quote=[(0.5,'\u201cTwo-minute change.\u201d'),(3,'\u201cJust a quick fix.\u201d'),(None,"\u201cIt's a 2-hour project.\u201d")],
+   vid_later='{t} later.',vid_cta='Get your own receipt',
+   b_none='No receipts archived yet: run receipts.py on a project first, then --board.'),
  'tr':dict(
    h='s',m='d',dow=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'],
    title='Çalışma Süresi Fişi',commits='commit',prompts='prompt',
@@ -145,7 +148,9 @@ L={
    rc_est='OTURUM KAYDI YOK',rc_est_note="Commit oturumlarından tahmin.",
    rc_unit_p='prompt',rc_unit_c='commit',rc_wk='hafta',rc_q='Ç',rc_dow=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'],
    share='{q} {t} sonra{v}. 🧾 github.com/sahmett/vibe-receipts #vibereceipts',share_v=', {v} değerinde token',share_t=lambda h,m:f'{h} saat {m} dakika',
-   rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')]),
+   rc_quote=[(0.5,'\u201cİki dakikalık iş.\u201d'),(3,'\u201cUfak bir düzeltme.\u201d'),(None,'\u201c2 saatlik iş.\u201d')],
+   vid_later='{t} sonra.',vid_cta='Kendi fişini çıkar',
+   b_none="Arşivde henüz fiş yok: önce receipts.py'yi bir projede çalıştır, sonra --board."),
 }
 
 def default_lang():
@@ -303,7 +308,7 @@ def short(n):
 
 def main():
     ap=argparse.ArgumentParser(description='Working time from your Claude Code prompts (+ git commits for context)')
-    ap.add_argument('repo',nargs='?',default='.',help='folder to analyse, git repo or not (default: .)')
+    ap.add_argument('repo',nargs='?',help='folder to analyse, git repo or not (default: .; leave it out with --board to only rebuild the board)')
     ap.add_argument('--since',default='0000-00-00',help='first day YYYY-MM-DD')
     ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
     ap.add_argument('--author',help='only commits by this author (git --author pattern)')
@@ -314,9 +319,46 @@ def main():
     ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='output folder (default ~/vibe-receipts)')
     ap.add_argument('--built',help='what the project is, 1-3 words (e.g. "e-commerce site"), shown on the receipt')
     ap.add_argument('--no-png',action='store_true',help='skip the receipt PNG (needs Chrome/Chromium; set CHROME=path to choose one)')
+    ap.add_argument('--video',action='store_true',help='also make <name>-receipt.mp4: the receipt printing out of a thermal printer, 1080x1920 for Reels/TikTok/Shorts (needs Chrome; ffmpeg optional)')
+    ap.add_argument('--board',action='store_true',help='also rebuild board.html: every archived receipt on one page, a printer view and a status board')
+    ap.add_argument('--client',help='client this receipt is for, shown on the board (kept for later runs of the same range)')
+    ap.add_argument('--status',choices=['due','paid','personal'],help='board column for this receipt (default: due with a client, else personal); with --invoice, which receipts to bill (default: due)')
+    ap.add_argument('--link',action='store_true',help=f'also print a link that opens this receipt on {SITE_URL}: the receipt rides in the #part, which is never sent to the server (no client, no status)')
+    ap.add_argument('--share',action='store_true',help=f'also print a link to this receipt on {SITE_URL} whose preview shows the receipt: the server reads it from the link to draw the preview, and stores nothing (no client, no status)')
+    inv=ap.add_argument_group('invoice','one client\'s archived receipts as an invoice or a timesheet, with no repo: receipts.py --invoice "Northwind" --rate 85')
+    inv.add_argument('--invoice',metavar='CLIENT',help='write <out>/invoices/<client>_<number>.html and .pdf from the receipts archived for this client (--since/--until pick by end date)')
+    inv.add_argument('--rate',type=float,help='hourly rate: with it an invoice (hours x rate), without it a timesheet (hours only)')
+    inv.add_argument('--currency',help='USD, EUR, GBP, TRY or any code (default: TRY in Turkish, else USD)')
+    inv.add_argument('--tax',type=float,default=0,help='tax or VAT percent added to the total, e.g. 20')
+    inv.add_argument('--bill-from',help='your name and address; \\n for a new line')
+    inv.add_argument('--bill-to',help='the client\'s address under its name; \\n for a new line')
+    inv.add_argument('--number',help='invoice number (default: this year\'s next, e.g. 2026-003)')
+    inv.add_argument('--mark-billed',action='store_true',help='move the billed receipts to the board\'s "billed" column')
+    ap.add_argument('--wrapped',metavar='YEAR',nargs='?',const=str(datetime.date.today().year),help='with no repo: your year from the archive as a story, <out>/wrapped-<year>.html and a 1080x1920 wrapped-<year>.png (default: this year)')
     a=ap.parse_args()
     a.out=os.path.abspath(os.path.expanduser(a.out))
     T=L[a.lang]; e=html.escape
+    if a.wrapped and a.repo is None:   # the year in review, from the archive
+        import sys; sys.path.insert(0,os.path.dirname(os.path.abspath(__file__))); import wrapped
+        if not re.fullmatch(r'\d{4}',a.wrapped): raise SystemExit('--wrapped takes a year, e.g. --wrapped 2026')
+        htmlp,png,W=wrapped.build_wrapped(a.out,int(a.wrapped),a.lang,None if a.no_png else render_png)
+        print(f"Wrapped {a.wrapped}: {W['total']//60}{T['h']} {W['total']%60:02d}{T['m']}, {len(W['projects'])} projects, {W['receipts']} receipts"
+              +(" (older receipts spread over their lines)" if W['approx'] else ""))
+        print("HTML:",htmlp); print("PNG :",png or ("skipped" if a.no_png else "skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome)"))
+        return
+    if a.invoice and a.repo is None:   # an invoice from the archive, no new run
+        import sys; sys.path.insert(0,os.path.dirname(os.path.abspath(__file__))); import invoice
+        htmlp,pdf,recs=invoice.build_invoice(a.out,a.invoice,a.lang,find_chrome(),status=a.status or 'due',since=a.since,until=a.until,
+            rate=a.rate,currency=a.currency,tax=a.tax,bill_from=a.bill_from,bill_to=a.bill_to,number=a.number,mark_billed=a.mark_billed)
+        mins=sum(r['min'] for r in recs)
+        print(f"Invoice: {len(recs)} receipts, {mins//60}{T['h']} {mins%60:02d}{T['m']}"+(f", rate {a.rate:g}" if a.rate else " (timesheet, no rate)"))
+        print("HTML:",htmlp); print("PDF :",pdf or "skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome)")
+        if a.mark_billed: print("Billed:",', '.join(r['name'] for r in recs))
+        if a.board: print("Board:",build_board(a.out,a.lang))
+        return
+    if a.board and a.repo is None:   # just the board, from the receipts already archived
+        print("Board:",build_board(a.out,a.lang)); return
+    a.repo=a.repo or '.'
 
     def hm(s):
         mm=int(round(s/60)); return f"{mm//60}{T['h']} {mm%60:02d}{T['m']}"
@@ -535,7 +577,8 @@ def main():
     period=(d0 if d0==d1 else f"{d0} → {d1[5:] if d0[:4]==d1[:4] else d1}")+f" · {T['rc_days'](span)}"
     quote=next(q for lim,q in T['rc_quote'] if lim is None or hours<lim)
     value=(T['rc_value'],vtxt) if val['total'] else None
-    card,H=receipt_html(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),value,thr)
+    rargs=(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),value,thr)
+    card,H=receipt_html(*rargs)
     cardp=os.path.join(a.out,f'{name}-receipt.html')
     open(cardp,'w',encoding='utf-8').write(card)
     pngp=os.path.join(a.out,f'{name}-receipt.png')
@@ -544,6 +587,39 @@ def main():
     else: print(f"PNG : skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome). Card HTML: {cardp}")
     m=int(round(total/60))   # ready-to-post text to go with the PNG
     share=T['share'].format(q=quote,t=T['share_t'](m//60,m%60),v=T['share_v'].format(v=vtxt) if val['total'] else '')
+    vid=None
+    if a.video:   # the receipt alone, transparent, at 3x, then the printer clip around it
+        tmp=tempfile.mkdtemp(prefix='vibe-receipts-')
+        try:
+            paperh,PH=receipt_html(*rargs,bare=True)
+            open(os.path.join(tmp,'paper.html'),'w',encoding='utf-8').write(paperh)
+            ok=render_png(os.path.join(tmp,'paper.html'),os.path.join(tmp,'paper.png'),520,PH,scale=3,transparent=True)
+            vid=ok and render_video(os.path.join(tmp,'paper.png'),os.path.join(a.out,f'{name}-receipt.mp4'),
+                dict(quote=quote,later=T['vid_later'].format(t=T['share_t'](m//60,m%60)),cta=T['vid_cta'],
+                     url=SITE_URL.split('//')[1],tag='#vibereceipts'))
+        finally: shutil.rmtree(tmp,ignore_errors=True)
+        if vid: print("MP4 :",vid)
+        else:   print("MP4 : skipped, no Chrome/Chromium found or the recording failed (set CHROME=/path/to/chrome)")
+
+    # every run keeps its receipt as data, one file per project and range: archive/<name>_<from>_<to>.json.
+    # A rerun of the same range replaces it, keeping the client and status unless they are given again.
+    arch=os.path.join(a.out,'archive'); os.makedirs(arch,exist_ok=True)
+    rkey=re.sub(r'[^A-Za-z0-9._-]','-',name)+f'_{d0}_{d1}'
+    archp=os.path.join(arch,rkey+'.json')
+    try: old=json.load(open(archp,encoding='utf-8'))
+    except (OSError,ValueError): old={}
+    client=(a.client if a.client is not None else old.get('client')) or None
+    rec=dict(key=rkey,name=name,built=a.built,period=period,active=active_days if active_days!=span else None,start=d0,end=d1,
+             items=[[q,l,mm] for (q,l,_),mm in zip(items,mins_split)],min=m,prompts=len(prompts),commits=len(commits),estimate=not has_p,
+             stats=stats,value=round(val['total'],2) if val['total'] else None,value_text=vtxt if val['total'] else None,thr=list(thr),
+             client=client,status=a.status or old.get('status') or ('due' if client else 'personal'),
+             # for --wrapped: minutes and prompts per day, prompts per weekday x hour (local time), tokens and the model mix
+             days={d:round(dtotal.get(d,0)/60) for d in days if dtotal.get(d,0)},dprompts=dict(sorted(dprompt.items())),
+             clock=clock_of(prompts),tokens=[tread,twrote],models=[[f,pc] for f,pc in mix],
+             lang=a.lang,made=datetime.datetime.now().isoformat(timespec='seconds'),
+             L=dict(kind=T['rc_kind'],project=T['rc_project'],built=T['rc_built'],period=T['rc_period'],active=T['rc_active'],qty=T['rc_qty'],
+                    item=T['rc_item'],time=T['rc_time'],value=T['rc_value'],total=T['rc_total'],h=T['h'],m=T['m']))
+    with open(archp,'w',encoding='utf-8') as f: json.dump(rec,f,ensure_ascii=False,indent=1)
 
     # the card goes at the end of the report, embedded so the HTML still works on its own
     if not a.no_png and os.path.exists(pngp):
@@ -558,8 +634,64 @@ def main():
         f.write('date,prompts,work_min,commits,effective_lines,added,deleted,commit_estimate_min\n')
         for d in days:
             f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
-    print("HTML:",out); print("CSV :",csvp)
+    # the share kit: a ready post per platform with this receipt's numbers, next to the PNG (and the MP4)
+    import sys; sys.path.insert(0,os.path.dirname(os.path.abspath(__file__))); import share as sharekit
+    plink=share_link(rec,preview=True) if a.share else SITE_URL
+    kitp=os.path.join(a.out,f'{name}-share.md')
+    with open(kitp,'w',encoding='utf-8') as f:
+        f.write(sharekit.kit(rec,a.lang,quote,plink,SITE_URL,png=pngp if os.path.exists(pngp) and not a.no_png else None,mp4=vid or None))
+    print("HTML:",out); print("CSV :",csvp); print("JSON:",archp); print("Kit :",kitp)
+    if a.board: print("Board:",build_board(a.out,a.lang))
+    if a.link: print("Link:",share_link(rec))
+    if a.share: print("Share link:",plink)
     print("Share:",share)
+
+def clock_of(ts):
+    """Prompts per weekday (Monday first) and hour of day, local time: 7 rows of 24."""
+    c=[[0]*24 for _ in range(7)]
+    for t in ts: x=datetime.datetime.fromtimestamp(t); c[x.weekday()][x.hour]+=1
+    return c
+
+def share_link(rec,preview=False):
+    """A link to this receipt on the public site: the receipt (its numbers and labels, never the client or the
+    board status), compressed. By default it goes after #, which browsers keep to themselves: no server sees it.
+    preview=True puts it in the path, /r/<receipt>, so the site can draw the link's preview card from it; the
+    site stores nothing, the link is the receipt."""
+    keep={k:v for k,v in rec.items() if k not in ('client','status','key','days','dprompts','clock','tokens','models')}   # no hours of the day, no day-by-day
+    c=zlib.compressobj(9,zlib.DEFLATED,-15)   # raw deflate: the page reads it with DecompressionStream("deflate-raw")
+    z=c.compress(json.dumps(keep,ensure_ascii=False,separators=(',',':')).encode())+c.flush()
+    d=base64.urlsafe_b64encode(z).decode().rstrip('=')
+    return f"{SITE_URL}/r/{d}" if preview else f"{SITE_URL}/#r={d}"
+
+def build_board(out,lang):
+    """Every archived receipt on one page, <out>/board.html: the printer view (the newest receipt printing out
+    of the isometric printer) and the board (columns by status, the full receipt opening from its card). Statuses
+    changed on the page are kept in that browser. Newest receipts first."""
+    recs=[]
+    for p in glob.glob(os.path.join(out,'archive','*.json')):
+        try: recs.append(json.load(open(p,encoding='utf-8')))
+        except (OSError,ValueError): continue
+    if not recs: raise SystemExit(L[lang]['b_none'])
+    recs.sort(key=lambda r:(r.get('end',''),r.get('start',''),r.get('made','')),reverse=True)
+    dst=os.path.join(out,'board.html')
+    with open(dst,'w',encoding='utf-8') as f: f.write(board_page(recs,lang))
+    return dst
+
+def board_page(recs,lang,site=None,head=''):
+    """The board as one HTML document. site (the public site, tools/site) adds the install steps, a language
+    switch and its own example receipts; head is extra markup for <head>, such as Open Graph tags."""
+    here=os.path.dirname(os.path.abspath(__file__))
+    js=lambda v:json.dumps(v,ensure_ascii=False).replace('</','<\\/')
+    fill={'__PRINTER__':open(os.path.join(here,'printer.json'),encoding='utf-8').read(),
+          '__RECEIPTS__':js(recs),'__SITE__':js(site) if site else 'null',
+          '__LANG__':lang,'__TODAY__':datetime.date.today().isoformat()}
+    body=re.sub('|'.join(fill),lambda mt:fill[mt.group(0)],open(os.path.join(here,'board_template.html'),encoding='utf-8').read())
+    # the first paint is already the right colour: the theme and the page background are set in the head
+    return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
+            '<meta name="color-scheme" content="dark light">'+head+
+            '<script>(function(){var r=document.documentElement,t="dark";try{if(localStorage.getItem("vr-theme")==="light")t="light"}catch(e){}r.setAttribute("data-theme",t);r.classList.add("boot");setTimeout(function(){r.classList.remove("boot")},2500)})();</script>'
+            '<style>html{background:#09090b;color-scheme:dark}html[data-theme="light"]{background:#fafafa;color-scheme:light}body{margin:0}[hidden]{display:none!important}</style>'
+            '</head><body>'+body+'</body></html>')
 
 def split_minutes(secs,total):
     """Round each item to whole minutes so the items add up to the rounded total (largest remainder)."""
@@ -567,15 +699,16 @@ def split_minutes(secs,total):
     for i in sorted(range(len(raw)),key=lambda i:fl[i]-raw[i])[:int(round(total/60))-sum(fl)]: fl[i]+=1
     return fl
 
-def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,value,thr):
-    """The share card: a thermal-paper receipt, straight, on a dark card. Returns (html, height)."""
+def receipt_html(T,lang,name,built,period,span,active_days,d1,items,stats,total,value,thr,bare=False):
+    """The share card: a thermal-paper receipt, straight, on a dark card. Returns (html, height).
+    bare=True: just the paper on a transparent background (for the video)."""
     e=html.escape
     rows=''.join(f'<span>{q:,}</span><span>{e(l)}</span><span class="r">{t}</span>' for q,l,t in items)
     srows=''.join('<div class="sp"></div>' if r is None else f'<div class="row"><span>{e(r[0])}</span><span>{r[1]}</span></div>' for r in stats)
     H=2*CARD_PAD+804+24*(len(stats)-4)+26*len(items)+24*bool(built)+46*bool(value)+8   # card padding + receipt body + item/BUILT/value rows + slack
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(name)} · vibe receipt</title>'
       '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap">'
-      f'<style>{RCSS}</style></head><body><div class="card" style="height:{H}px">'
+      f'<style>{RCSS}{RCSS_BARE if bare else ""}</style></head><body><div class="card" style="height:{H}px">'
       '<div class="rc"><div class="tear t"></div><div class="paper">'
       f'<div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mute">github.com/sahmett/vibe-receipts</div><div class="mute ls">{T["rc_kind"]}</div></div>'
       '<div class="hr"></div>'
@@ -603,17 +736,74 @@ def find_chrome():
     for n in ['google-chrome','google-chrome-stable','chromium','chromium-browser','microsoft-edge','brave-browser']:
         if shutil.which(n): return shutil.which(n)
 
-def render_png(src,dst,w,h):
-    """Screenshot the card with headless Chrome at 2x. Returns True if the PNG was written."""
+def render_png(src,dst,w,h,scale=2,transparent=False):
+    """Screenshot the card with headless Chrome (2x by default). Returns True if the PNG was written."""
     chrome=find_chrome()
     if not chrome: return False
     if os.path.exists(dst): os.remove(dst)
     try:
-        subprocess.run([chrome,'--headless','--disable-gpu','--hide-scrollbars','--no-sandbox','--force-device-scale-factor=2',
-                        f'--window-size={w},{h}','--virtual-time-budget=5000',f'--screenshot={dst}',pathlib.Path(src).as_uri()],
+        subprocess.run([chrome,'--headless','--disable-gpu','--hide-scrollbars','--no-sandbox',f'--force-device-scale-factor={scale}',
+                        f'--window-size={w},{h}','--virtual-time-budget=5000',f'--screenshot={dst}']+
+                       (['--default-background-color=00000000'] if transparent else [])+[pathlib.Path(src).as_uri()],
                        capture_output=True,timeout=120)
     except (OSError,subprocess.SubprocessError): return False
     return os.path.exists(dst)
+
+def render_video(paper_png,dst,data,timeout=120):
+    """The receipt printing out of a thermal printer: a 1080x1920 clip for Reels, TikTok and Shorts.
+    Headless Chrome plays VIDEO_HTML (a canvas animation with a synthesized printer sound) and records it
+    in real time with MediaRecorder, so nothing beyond Chrome is needed. The page is served from 127.0.0.1
+    so it can post the finished clip back. With ffmpeg installed the clip is re-encoded to constant-frame-rate
+    H.264/AAC, which every platform accepts. Returns the path written (.mp4, or .webm if Chrome can only
+    record WebM and there is no ffmpeg), or None."""
+    chrome=find_chrome()
+    if not chrome: return None
+    printer=os.path.join(os.path.dirname(os.path.abspath(__file__)),'printer.json')   # built by tools/printer/build.mjs
+    if not os.path.exists(printer): return None
+    page=VIDEO_HTML.replace('__DATA__',json.dumps(data)).replace('__PRINTER__',open(printer,encoding='utf-8').read()).encode()
+    paper=open(paper_png,'rb').read()
+    got={}; done=threading.Event()
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self,*_): pass
+        def do_GET(self):
+            path=self.path.split('?')[0]
+            if path not in ('/','/paper.png'): self.send_error(404); return
+            body,ct=(page,'text/html; charset=utf-8') if path=='/' else (paper,'image/png')
+            self.send_response(200); self.send_header('Content-Type',ct); self.send_header('Content-Length',str(len(body)))
+            self.end_headers(); self.wfile.write(body)
+        def do_POST(self):
+            body=self.rfile.read(int(self.headers.get('Content-Length') or 0))
+            if self.path.startswith('/video'): got['video']=body; got['type']=self.headers.get('Content-Type','')
+            else: got['error']=body.decode(errors='ignore')
+            self.send_response(204); self.end_headers(); done.set()
+    srv=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler)
+    threading.Thread(target=srv.serve_forever,daemon=True).start()
+    prof=tempfile.mkdtemp(prefix='vibe-receipts-chrome-')
+    try:
+        proc=subprocess.Popen([chrome,'--headless','--no-sandbox','--hide-scrollbars','--autoplay-policy=no-user-gesture-required',
+                               '--window-size=1080,1920','--force-device-scale-factor=1',f'--user-data-dir={prof}','--no-first-run',
+                               '--disable-background-timer-throttling','--disable-renderer-backgrounding',
+                               f'http://127.0.0.1:{srv.server_address[1]}/?rec=1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    except OSError:
+        srv.shutdown(); shutil.rmtree(prof,ignore_errors=True); return None
+    try: done.wait(timeout)
+    finally:
+        proc.terminate()
+        try: proc.wait(10)
+        except subprocess.TimeoutExpired: proc.kill()
+        srv.shutdown(); shutil.rmtree(prof,ignore_errors=True)
+    if 'error' in got: print('Video: the page failed:',got['error'][:300])
+    if not got.get('video'): return None
+    ext='webm' if 'webm' in got['type'] else 'mp4'
+    raw=os.path.splitext(dst)[0]+'.raw.'+ext
+    open(raw,'wb').write(got['video'])
+    ff=shutil.which('ffmpeg')
+    if ff and subprocess.run([ff,'-y','-loglevel','error','-i',raw,'-r','60','-c:v','libx264','-preset','medium','-crf','18',
+                              '-pix_fmt','yuv420p','-c:a','aac','-b:a','160k','-movflags','+faststart',dst],capture_output=True).returncode==0:
+        os.remove(raw); return dst
+    if os.path.exists(dst): os.remove(dst)   # a failed ffmpeg run may leave half a file
+    out=os.path.splitext(dst)[0]+'.'+ext
+    os.replace(raw,out); return out
 
 CSS="""*{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#0f1117;color:#e6e8ee;line-height:1.55;padding:40px 16px}
@@ -648,10 +838,10 @@ tr.sel td{color:#fff;font-weight:700;background:#1c2030}
 .share{margin:8px auto 0;max-width:640px;background:#13161f;border:1px solid #242938;border-radius:10px;padding:10px 14px;font-size:13.5px;color:#c8ccd8;user-select:all}
 @media (max-width:600px){.scn .nm{width:150px}.kpis{grid-template-columns:1fr 1fr}.kpi.hero{grid-row:auto;grid-column:span 2}}"""
 
-PAPER,INK='#F3F0E8','#1d1c1a'
+PAPER,INK='#F6F6F4','#0B0B0C'   # the site's --paper and --ink
 CARD_W,CARD_PAD=600,40   # the share card: just the receipt, straight, on a dark background
 RCSS=f"""*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#0e0f14;color:#ECEAF2;font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}}
+body{{background:#09090b;color:#f4f4f5;font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}}
 .card{{width:{CARD_W}px;padding:{CARD_PAD}px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}}
 .rc{{width:520px;filter:drop-shadow(0 30px 40px rgba(0,0,0,.55)) drop-shadow(0 4px 8px rgba(0,0,0,.4));color:{INK}}}
 .tear{{height:10px;background-size:20px 20px;background-repeat:repeat-x}}
@@ -676,6 +866,215 @@ body{{background:#0e0f14;color:#ECEAF2;font-family:'JetBrains Mono',ui-monospace
 .bc{{width:300px;height:56px;background:repeating-linear-gradient(90deg,{INK} 0 3px,transparent 3px 5px,{INK} 5px 6px,transparent 6px 9px,{INK} 9px 13px,transparent 13px 15px,{INK} 15px 16px,transparent 16px 20px,{INK} 20px 22px,transparent 22px 23px)}}
 .ft .bn{{font-size:11px;line-height:14px;letter-spacing:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .ft .ty{{font-size:12px;line-height:18px;letter-spacing:2px}}"""
+# the receipt alone on a transparent background, for the video (the paper is cut out and printed line by line)
+RCSS_BARE=f"body{{background:transparent}}.card{{width:520px;padding:0;height:auto!important}}.rc{{filter:none}}"
+
+# The video: a thermal printer prints the receipt (paper.png), the receipt is torn off and lands in the middle,
+# then the share line. Opened with ?rec=1 it records itself and posts the clip to /video; opened without it,
+# it loops as a live preview (click for sound).
+VIDEO_HTML=r"""<!doctype html><html><head><meta charset="utf-8"><title>vibe receipt video</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&display=swap">
+<style>html,body{margin:0;height:100%;background:#09090b;overflow:hidden}canvas{display:block;width:100%;height:100%;object-fit:contain}</style>
+</head><body><canvas id="c" width="1080" height="1920"></canvas><script>
+const D=__DATA__, W=1080, H=1920, FPS=60, REC=new URLSearchParams(location.search).has('rec');
+const FONT='"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace';
+const SANS='system-ui,-apple-system,"SF Pro Display","Segoe UI",Roboto,sans-serif';   // the site's headings
+const C={bg:'#09090b',fg:'#f4f4f5',fg2:'#a1a1a7',accent:'#FF4A3D'};                   // Slipt: the site's tokens
+const cv=document.getElementById('c'); let g=cv.getContext('2d');
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)), lerp=(a,b,t)=>a+(b-a)*t;
+const easeOut=t=>1-(1-t)*(1-t), easeIn=t=>t*t, easeInOut=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const fail=m=>fetch('/error',{method:'POST',body:String(m)});
+window.onerror=(m,s,l)=>{fail(m+' @'+l)};
+
+const PR=__PRINTER__, GEO=PR.geo;    // the printer from tools/printer/build.mjs: back and front SVG, where the paper leaves the slot
+let P, PHw, q, step, n, DP, T, BACK, FRONT, SHADOW;  // paper canvas, its length and px size in world units, line step, steps, step time, print time, timeline, printer layers
+
+function trim(img){                  // cut the transparent margin around the receipt screenshot
+  const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
+  const x=c.getContext('2d'); x.drawImage(img,0,0);
+  const d=x.getImageData(0,0,c.width,c.height).data; let t=c.height, b=0, l=c.width, r=0;
+  for(let y=0;y<c.height;y++) for(let i=0;i<c.width;i++) if(d[(y*c.width+i)*4+3]>8){if(y<t)t=y; if(y>b)b=y; if(i<l)l=i; if(i>r)r=i;}
+  const o=document.createElement('canvas'); o.width=r-l+1; o.height=b-t+1;
+  o.getContext('2d').drawImage(c,l,t,o.width,o.height,0,0,o.width,o.height); return o;
+}
+
+function setup(img){
+  P=trim(img); q=GEO.paperW/P.width; PHw=P.height*q;
+  step=24*GEO.paperW/520;            // one receipt line (24 css px) per printer step
+  n=Math.ceil(PHw/step); DP=clamp(PHw*Math.hypot(...GEO.v)/260,4.5,7);
+  const tp0=0.5, tp1=tp0+DP, tt=tp1+0.8, tf0=tt+0.18, tf1=tf0+1.0;
+  T={tp0,tp1,tt,tf0,tf1,end:tf1+2.8};
+}
+
+const ACC=.12;                       // share of the print spent speeding up, and again slowing down
+function printed(t){                 // a steady feed with a soft start and stop: speed is a trapezoid, so no frame jumps
+  const x=clamp(t/DP), a=ACC, top=1/(1-a);
+  const f=x<a?top*x*x/(2*a):x>1-a?1-top*(1-x)*(1-x)/(2*a):top*(x-a/2);
+  return PHw*f;
+}
+function stepTimes(){                // when the feed passes each line, for the stepper sound
+  const out=[];
+  for(let i=0;i<n;i++){let lo=0, hi=DP; const want=i*step; for(let k=0;k<30;k++){const m=(lo+hi)/2; if(printed(m)<want) lo=m; else hi=m;} out.push(lo);}
+  return out;
+}
+
+let BG;                               // the backdrop never changes: painted once, blitted every frame
+function bg(){
+  if(BG){g.drawImage(BG,0,0); return;}
+  BG=document.createElement('canvas'); BG.width=W; BG.height=H; const keep=g; g=BG.getContext('2d');
+  g.fillStyle=C.bg; g.fillRect(0,0,W,H);
+  let r=g.createRadialGradient(540,820,0,540,820,1050);               // a soft neutral light on the printer, as on the site
+  r.addColorStop(0,'rgba(255,255,255,.07)'); r.addColorStop(.6,'rgba(255,255,255,.015)'); r.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=r; g.fillRect(0,0,W,H);
+  r=g.createRadialGradient(540,H+120,0,540,H+120,900);                // and the logo's red, faint, rising from the foot
+  r.addColorStop(0,'rgba(255,74,61,.14)'); r.addColorStop(1,'rgba(255,74,61,0)');
+  g.fillStyle=r; g.fillRect(0,0,W,H);
+  r=g.createRadialGradient(540,960,700,540,960,1250); r.addColorStop(0,'rgba(0,0,0,0)'); r.addColorStop(1,'rgba(0,0,0,.6)');
+  g.fillStyle=r; g.fillRect(0,0,W,H);
+  g=keep; g.drawImage(BG,0,0);
+}
+
+function layer(img,dy,a){if(a>0){g.save(); g.globalAlpha=a; g.drawImage(img,0,dy,W,H); g.restore();}}
+
+function lamps(dy,a,power,feed){     // the power lamp (white, as on the site), and the feed lamp that flickers red while it prints
+  [power,feed].forEach((on,i)=>{
+    if(on<=0||a<=0) return;
+    const [x,y]=GEO.leds[i], R=GEO.ledR*10, r=g.createRadialGradient(x,y+dy,0,x,y+dy,R), c=i?'255,74,61':'255,255,255';
+    r.addColorStop(0,'rgba(255,255,255,'+(a*on)+')'); r.addColorStop(.12,'rgba('+c+','+(.75*a*on)+')'); r.addColorStop(1,'rgba('+c+',0)');
+    g.fillStyle=r; g.beginPath(); g.arc(x,y+dy,R,0,7); g.fill();
+  });
+}
+
+// Affine maps from paper px to screen. On the printer the sheet lies in its leaning plane: s across (GEO.u),
+// t up the sheet (GEO.v), the top `o` world units out of the slot. Torn off, it lies flat in the middle.
+const mul=(A,B)=>[A[0]*B[0]+A[2]*B[1],A[1]*B[0]+A[3]*B[1],A[0]*B[2]+A[2]*B[3],A[1]*B[2]+A[3]*B[3],A[0]*B[4]+A[2]*B[5]+A[4],A[1]*B[4]+A[3]*B[5]+A[5]];
+const turn=(r,cx,cy)=>{const c=Math.cos(r), s=Math.sin(r); return [c,s,-s,c,cx-c*cx+s*cy,cy-s*cx-c*cy];};
+function onPrinter(o,sway){
+  const u=GEO.u, v=GEO.v, O=GEO.origin, M=[q*u[0],q*u[1],-q*v[0],-q*v[1],O[0]+o*v[0],O[1]+o*v[1]];
+  return mul(turn(sway,O[0]+u[0]*GEO.paperW/2,O[1]+u[1]*GEO.paperW/2),M);   // a slight sway about the slot
+}
+function laidFlat(){                 // a little higher and smaller than before: the foot stays clear of the apps' captions
+  const s=Math.min(1000/P.height,800/P.width);
+  return mul(turn(-.02,540,900),[s,0,0,s,540-s*P.width/2,900-s*P.height/2]);
+}
+function paper(M,clip,shade,shadow){
+  g.save(); g.setTransform(...M);
+  if(clip!==null){g.beginPath(); g.rect(0,0,P.width,clip/q); g.clip();}
+  if(shadow>0){g.save(); g.globalAlpha=shadow; g.drawImage(SHADOW,-SHADOW.pad,-SHADOW.pad+26/M[3]); g.restore();}   // a blurred sprite, not shadowBlur
+  g.imageSmoothingQuality='high'; g.drawImage(P,0,0);
+  if(shade>0&&clip!==null){            // the paper darkens where it leaves the slot
+    const y1=clip/q, y0=y1-7/q, s=g.createLinearGradient(0,y0,0,y1);
+    s.addColorStop(0,'rgba(0,0,0,0)'); s.addColorStop(1,'rgba(0,0,0,'+(.38*shade)+')');
+    g.fillStyle=s; g.fillRect(0,y0,P.width,y1-y0);
+  }
+  g.restore();
+}
+
+function text(t,y,weight,size,color,a,maxW=980,face=FONT,track=0){
+  if(a<=0||!t) return;
+  g.save(); g.globalAlpha=a; g.textAlign='center'; g.textBaseline='alphabetic'; g.fillStyle=color;
+  let s=size; const set=()=>{g.font=weight+' '+s+'px '+face; g.letterSpacing=(track*s).toFixed(1)+'px';}; set();
+  while(g.measureText(t).width>maxW&&s>18){s-=2; set();}
+  g.fillText(t,540,y); g.restore();
+}
+const ZIG=new Path2D('M0 19.6 3.2 16.6 6.4 19.6 9.6 16.6 12.8 19.6 16 16.6 19.2 19.6 22.4 16.6 25.6 19.6 28.8 16.6 32 19.6V32H0Z');
+function brand(y,a){                  // the Slipt mark and name, centred, as in the site's nav
+  if(a<=0) return;
+  const S=64, gap=18; g.save(); g.globalAlpha=a; g.font='650 52px '+SANS; g.letterSpacing='-1.6px';
+  const w=g.measureText('Slipt').width, x0=540-(S+gap+w)/2, top=y-S/2-8;
+  g.save(); g.translate(x0,top); g.scale(S/32,S/32);
+  g.beginPath(); g.roundRect(0,0,32,32,11.4); g.clip();
+  const lg=g.createLinearGradient(0,0,32,32); lg.addColorStop(0,'#FF6A4D'); lg.addColorStop(1,'#E0262C');
+  g.fillStyle=lg; g.fillRect(0,0,32,32); g.fillStyle='#F4F0E8'; g.fill(ZIG); g.restore();
+  g.fillStyle=C.fg; g.textAlign='left'; g.textBaseline='alphabetic'; g.fillText('Slipt',x0+S+gap,y+10); g.restore();
+}
+
+function draw(t){
+  bg();
+  const fp=clamp((t-T.tf0)/(T.tf1-T.tf0)), fe=easeInOut(fp);
+  const o=t<T.tp0?0:t>=T.tp1?PHw:printed(t-T.tp0);
+  const sway=tt=>.004*Math.sin(tt*2.3)*Math.min(1,printed(Math.max(0,Math.min(tt,T.tp1)-T.tp0))/120);
+  const dy=600*easeIn(fp), a=1-fp;
+  layer(BACK,dy,a);
+  lamps(dy,a,t<.35?(Math.sin(t*30)>0?1:.25):1,t>=T.tp0&&t<T.tp1?.7+.3*Math.sin(t*47):0);
+  let M;
+  if(t<T.tt){                                                            // printing: out of the slot, under the tear bar
+    M=onPrinter(o,sway(t)); paper(M,o,1,0); layer(FRONT,0,1);
+  } else {                                                               // torn off: a short pull up, then into the middle
+    const lift=3.5*easeOut(clamp((t-T.tt)/.15));
+    layer(FRONT,dy,a);
+    const M0=onPrinter(PHw+lift,sway(T.tt)), M1=laidFlat();
+    M=M0.map((x,i)=>lerp(x,M1[i],fe)); paper(M,null,0,fe);
+  }
+  const cover=clamp((M[5]-280)/220);                                     // the hook fades as the paper rises past it
+  text(D.quote,210,'650',64,C.fg,clamp(.4+t/.25)*Math.max(cover,fe),980,SANS,-.025);   // the hook is there from frame one
+  const la=clamp((t-T.tf1+.35)/.45);
+  text(D.later,322+24*(1-easeOut(la)),'750',86,C.accent,la,980,SANS,-.035);           // the answer, in the logo's red
+  const ca=clamp((t-T.tf1)/.5), cb=clamp((t-T.tf1-.15)/.5);                        // the foot: the mark, then the way in
+  brand(1508+16*(1-easeOut(ca)),ca);
+  text(D.cta,1606,'500',34,C.fg2,cb,980,SANS,-.01);
+  text(D.url,1660,'600',38,C.fg,cb);
+  text(D.tag,1712,'600',30,C.accent,cb);
+}
+
+// --- sound: a stepper whine + paper hiss on every feed step, a rip at the tear. Only recorded, never played
+// while recording (headless Chrome would play it out loud).
+let ac, dest, out;
+function sound(at){                  // schedules the whole soundtrack, `at` = AudioContext time of t=0
+  if(!out){out=ac.createGain(); out.gain.value=.9; dest=ac.createMediaStreamDestination(); out.connect(dest); if(!REC) out.connect(ac.destination);}
+  const nb=ac.createBuffer(1,ac.sampleRate,ac.sampleRate), ch=nb.getChannelData(0);
+  for(let i=0;i<ch.length;i++) ch[i]=Math.random()*2-1;
+  const burst=(t0,dur,f,q,vol,type='bandpass',f2)=>{
+    const s=ac.createBufferSource(); s.buffer=nb; s.loop=true;
+    const fl=ac.createBiquadFilter(); fl.type=type; fl.frequency.setValueAtTime(f,t0); fl.Q.value=q;
+    if(f2) fl.frequency.exponentialRampToValueAtTime(f2,t0+dur);
+    const e=ac.createGain(); e.gain.setValueAtTime(0,t0); e.gain.linearRampToValueAtTime(vol,t0+.006);
+    e.gain.setValueAtTime(vol,t0+dur*.8); e.gain.linearRampToValueAtTime(0,t0+dur);
+    s.connect(fl).connect(e).connect(out); s.start(t0); s.stop(t0+dur+.02);
+  };
+  const whine=(t0,dur)=>{
+    const o=ac.createOscillator(); o.type='square'; o.frequency.setValueAtTime(190,t0); o.frequency.linearRampToValueAtTime(240,t0+dur);
+    const fl=ac.createBiquadFilter(); fl.type='lowpass'; fl.frequency.value=1100;
+    const e=ac.createGain(); e.gain.setValueAtTime(0,t0); e.gain.linearRampToValueAtTime(.05,t0+.008); e.gain.linearRampToValueAtTime(0,t0+dur);
+    o.connect(fl).connect(e).connect(out); o.start(t0); o.stop(t0+dur+.02);
+  };
+  const times=stepTimes(), gap=DP/n;
+  for(const t of times){const t0=at+T.tp0+t; burst(t0,gap*.8,3200,.7,.16); whine(t0,gap*.8);}
+  burst(at+T.tt,.2,1400,.6,.45,'bandpass',6000);
+}
+
+async function main(){
+  const svg=x=>{const i=new Image(); i.src=URL.createObjectURL(new Blob([x],{type:'image/svg+xml'})); return i.decode().then(()=>i);};
+  const flat=i=>{const c=document.createElement('canvas'); c.width=W; c.height=H; c.getContext('2d').drawImage(i,0,0,W,H); return c;};
+  [BACK,FRONT]=(await Promise.all([svg(PR.back),svg(PR.front)])).map(flat);   // rasterised once
+  const img=new Image(); img.src='paper.png'; await img.decode(); setup(img);
+  const pad=Math.round(30/Math.min(1220/P.height,880/P.width));             // the torn-off sheet's shadow, blurred once
+  SHADOW=document.createElement('canvas'); SHADOW.width=P.width+2*pad; SHADOW.height=P.height+2*pad; SHADOW.pad=pad;
+  const sx=SHADOW.getContext('2d'); sx.filter='blur('+(pad/2.2)+'px)'; sx.fillStyle='rgba(0,0,0,.6)'; sx.fillRect(pad,pad,P.width,P.height);
+  const wait=ms=>new Promise(r=>setTimeout(r,ms));
+  await Promise.race([Promise.all(['500','700','800'].map(w=>document.fonts.load(w+' 40px "JetBrains Mono"'))),wait(5000)]);
+  draw(0);
+  if(!REC){                          // live preview: loops; a click restarts it with sound
+    let t0=performance.now();
+    addEventListener('click',async()=>{ac=ac||new AudioContext(); await ac.resume(); sound(ac.currentTime+.1); t0=performance.now()+100;});
+    const loop=now=>{draw(Math.max(0,(now-t0)/1000)%T.end); requestAnimationFrame(loop);};
+    requestAnimationFrame(loop); return;
+  }
+  ac=new AudioContext(); await ac.resume();
+  const a0=ac.currentTime+.1; sound(a0);   // picture and sound run on the audio clock
+  const stream=cv.captureStream(FPS); dest.stream.getAudioTracks().forEach(tr=>stream.addTrack(tr));
+  const mime=['video/mp4;codecs=avc1.640028,mp4a.40.2','video/mp4;codecs=avc1.42E01F,mp4a.40.2','video/mp4;codecs=avc1,opus',
+              'video/mp4','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m));
+  const mr=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:14e6,audioBitsPerSecond:160e3}), chunks=[];
+  mr.ondataavailable=e=>{if(e.data.size) chunks.push(e.data)};
+  mr.onstop=()=>fetch('/video',{method:'POST',headers:{'Content-Type':mime},body:new Blob(chunks,{type:mime})});
+  mr.start(500);
+  const p0=performance.now()+(a0-ac.currentTime)*1000;   // the frame clock, lined up with the sound once
+  const loop=now=>{const t=(now-p0)/1000; draw(clamp(t,0,T.end)); if(t<T.end+.15) requestAnimationFrame(loop); else mr.stop();};
+  requestAnimationFrame(loop);
+}
+main().catch(e=>fail(e&&e.stack||e));
+</script></body></html>"""
 
 if __name__=='__main__':
     main()

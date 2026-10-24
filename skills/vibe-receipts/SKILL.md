@@ -43,10 +43,49 @@ python3 <this-skill-dir>/scripts/receipts.py <repo-path> [--since YYYY-MM-DD] [-
 - `--built "<what it is>"`: 1–3 words saying what the project is, for the `BUILT` line on the receipt
   (e.g. "e-commerce site", "mobile app", "CLI tool", "admin panel"). Infer it from the repo's README and
   manifest (`package.json`, `pyproject.toml`, …), in the report language. If you can't tell, leave it out.
+- `--video` when the user wants a video, a reel/TikTok/Short or "something to post" ("video yap", "paylaşmak
+  için video"): it also writes `<repo>-receipt.mp4`, the receipt printing out of a thermal printer (1080×1920,
+  with sound). It records in real time, so the run takes ~15 s longer; leave it out otherwise.
+- `--board` when the user wants to see their receipts together ("all my receipts", "fişlerim", "pano", a
+  timesheet across projects): every run archives its receipt in `~/vibe-receipts/archive/`, and `--board`
+  rebuilds `~/vibe-receipts/board.html` from all of them. With no repo (`receipts.py --board`) it only rebuilds.
+  For client work pass `--client "<name>"` (the card goes to "to bill"), and `--status paid` once it is invoiced.
+- `--invoice "<client>"` with no repo when the user wants to bill a client or needs a timesheet ("fatura çıkar",
+  "Northwind'e fatura", "timesheet"): it takes that client's archived receipts still "to bill" and writes an
+  HTML and PDF page to `~/vibe-receipts/invoices/`. Add `--rate <hourly>` for an invoice (without it, hours
+  only), `--currency`, `--tax <percent>` for VAT/KDV, `--bill-from "Name\nAddress"` and `--bill-to`, and
+  `--since`/`--until` for a month. Ask for the rate and currency if the user did not give them; never guess a
+  rate. Pass `--mark-billed --board` only when the user says the invoice is sent or final.
+- `--wrapped [YEAR]` with no repo for a year in review ("yılım nasıl geçti", "Wrapped", "year in review"): it writes
+  `~/vibe-receipts/wrapped-<year>.html` (a story to tap through) and `wrapped-<year>.png` (1080×1920, to post).
+  Open both. Its numbers come only from archived receipts, so if the user has projects they never ran
+  receipts.py on, offer to run it on them first (each run archives its receipt).
+- `--share` when the user wants to post a receipt as a link ("paylaşmak için link", "share a link"): it prints a
+  `Share link:` whose preview card shows the receipt. The site reads the receipt from the link to draw the card
+  and stores nothing; the client is left out, but the project name is in it, so offer `--name` if it is private.
+  `--link` instead keeps the receipt in the `#` part, which no server sees, but its preview is the site's card:
+  use it when the user does not want the numbers to reach any server.
 - Leave `--break` out by default (automatic threshold). Pass `--break MIN` only when the user asks for
   a specific threshold ("recalculate with 20 minutes", "15 dk ile hesapla"); re-run and compare.
 - If the same repo lives in two folders (two clones, or a moved folder), pass every matching
   `~/.claude/projects/...` folder with repeated `--transcripts`.
+
+## When the user wants to share the receipt
+
+"Fişi paylaş", "paylaşmak istiyorum", "share my receipt", "post this", "make it go viral": they want something
+ready to post, not a report.
+
+1. Run with `--share` (the link previews as the receipt) and `--video` (the clip for Reels, TikTok and Shorts).
+   If the receipt was already made for this range, still re-run: it is quick and gives the kit the link.
+2. Read `<out>/<name>-share.md`, the share kit the run printed as `Kit :`. Show the receipt PNG (open it), then
+   every post from the kit in its own code block, under its platform name: X / Threads / Bluesky (three), LinkedIn,
+   Reels / TikTok / Shorts. Then the kit's "before you post" tips, in a short list.
+3. Ask which one they will use, and offer to tune it: shorter, funnier, more technical, in the other language,
+   or with their own takeaways in the two `[ ]` lines of the LinkedIn post. Keep every number exactly as the kit
+   has it; never round or inflate the hours, prompts or token value.
+4. If the project name is private, offer `--name` to re-run under another name before they post.
+
+Never post, send or schedule anything yourself, and never open the user's social accounts.
 
 ## Report back
 
@@ -72,9 +111,13 @@ After running, read the printed summary and the CSV, then answer in the user's l
   missing from `PRICES` in `scripts/receipts.py`.
 - The busiest days (from the CSV), and a short summary of what was done per day based on the
   commit subjects (`git -C <repo> log --since ... --until ... --pretty='%ad %s' --date=short`).
-- The path to the HTML report and the receipt PNG, and open them if the environment can show files.
-- The `Share:` line, as-is in a code block, as a ready-to-post caption for the receipt PNG. Never post it
-  anywhere yourself. If the project name is private, offer to re-run with `--name` to hide it.
+- The path to the HTML report and the receipt PNG (and the MP4 with `--video`, the board with `--board`), and
+  open them if the environment can show files. Without `--video`, offer it once: a clip of the receipt printing out is made
+  for posting.
+- With `--share` or `--link`, the `Share link:` or `Link:` line as-is. Never post it anywhere yourself.
+- The `Share:` line, as-is in a code block, as a ready-to-post caption for the receipt PNG or video. Never post it
+  anywhere yourself. If the project name is private, offer to re-run with `--name` to hide it. Mention that
+  `<name>-share.md` (the `Kit :` line) has a post per platform, and offer to show it.
 
 ## Name things twice: plain words + the math term
 

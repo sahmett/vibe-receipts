@@ -1,0 +1,78 @@
+{
+ "key": "slipt_2026-10-16_2026-10-17",
+ "name": "slipt",
+ "built": "receipt tool",
+ "period": "2026-10-16 → 10-17 · 2 DAYS",
+ "active": null,
+ "start": "2026-10-16",
+ "end": "2026-10-17",
+ "items": [
+  [
+   18,
+   "prompts · Fri 10-16",
+   92
+  ],
+  [
+   47,
+   "prompts · Sat 10-17",
+   311
+  ]
+ ],
+ "min": 403,
+ "prompts": 65,
+ "commits": 30,
+ "estimate": false,
+ "stats": [
+  [
+   "PROMPTS",
+   "65"
+  ],
+  [
+   "AGENTS",
+   "1 RUNS · 0 SUBAGENTS"
+  ],
+  [
+   "TOKENS",
+   "315M READ · 841K WRITTEN"
+  ],
+  [
+   "MODEL",
+   "OPUS 100%"
+  ],
+  null,
+  [
+   "COMMITS",
+   "30"
+  ],
+  [
+   "CODE LINES",
+   "+3,538"
+  ]
+ ],
+ "value": 117.82,
+ "value_text": "$117.82",
+ "thr": [
+  "BREAK THRESHOLD",
+  "30.0 min",
+  "Your rhythm gave 39.1 min, capped at 30.0 min. Longer gaps are breaks."
+ ],
+ "client": null,
+ "status": "personal",
+ "lang": "en",
+ "made": "2026-10-17T17:49:49",
+ "L": {
+  "kind": "WORK TIME RECEIPT",
+  "project": "PROJECT",
+  "built": "BUILT",
+  "period": "PERIOD",
+  "active": "ACTIVE DAYS",
+  "qty": "QTY",
+  "item": "ITEM",
+  "time": "TIME",
+  "value": "TOKEN VALUE",
+  "total": "TOTAL",
+  "h": "h",
+  "m": "m"
+ },
+ "self": true
+}

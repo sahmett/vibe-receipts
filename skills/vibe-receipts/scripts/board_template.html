@@ -1,0 +1,1011 @@
+<title>Slipt</title>
+<script>/* before the first paint: the saved theme (dark by default), and hide the page until its fonts and figure are ready */
+(function(){var r=document.documentElement,t="dark";try{if(localStorage.getItem("vr-theme")==="light")t="light"}catch(e){}r.setAttribute("data-theme",t);r.classList.add("boot")})();</script>
+<style>
+/* Layout: two views behind a two-button pill. "Printer": the device dead centre, a short title under it, the
+   newest receipt rising out of it. "Board": three quiet columns of receipt cards; a card flips over into the
+   full receipt, which floats beside it (no modal). Black and white; dark first, light mirrors it. */
+:root{
+  --bg:#09090b; --panel:#111113; --raise:#17171a; --hover:#1c1c20; --line:#ffffff10; --line-2:#ffffff1f; --line-3:#ffffff38;
+  --fg:#f4f4f5; --fg-2:#a1a1a7; --fg-3:#67676d; --invert:#f4f4f5; --on-invert:#09090b; --shadow:#000000b3;
+  --paper:#f6f6f4; --ink:#0b0b0c; --ink-2:#6d6d70;
+  /* system faces only: nothing to download, so no text ever swaps font and moves after the page shows */
+  --sans:system-ui,-apple-system,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --spring:cubic-bezier(.2,.9,.25,1.12); --out:cubic-bezier(.2,.8,.2,1);
+  --spot:#ffffff0e; --floorsh:#000000e6;
+  --accent:#FF4A3D; --accent-soft:#ff4a3d33;   /* the logo's red: a dot, a ring, an edge, never a surface */
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --bg:#fafafa; --panel:#ffffff; --raise:#f4f4f5; --hover:#efeff1; --line:#0000000d; --line-2:#00000019; --line-3:#00000030;
+  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8d8d92; --invert:#0b0b0c; --on-invert:#fafafa; --shadow:#0000003d; --spot:#ffffff; --floorsh:#0000004d; --accent:#E5322C; --accent-soft:#e5322c2e; color-scheme:light}}
+:root[data-theme="light"]{
+  --bg:#fafafa; --panel:#ffffff; --raise:#f4f4f5; --hover:#efeff1; --line:#0000000d; --line-2:#00000019; --line-3:#00000030;
+  --fg:#0b0b0c; --fg-2:#56565b; --fg-3:#8d8d92; --invert:#0b0b0c; --on-invert:#fafafa; --shadow:#0000003d; --spot:#ffffff; --floorsh:#0000004d; --accent:#E5322C; --accent-soft:#e5322c2e; color-scheme:light}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+/* one calm reveal: nothing is shown until the fonts are in and the figure is measured, then it all fades in at once */
+nav,.theme,main{transition:opacity .5s var(--out)}
+html.boot nav,html.boot .theme,html.boot main{opacity:0}
+html.boot #fig,html.boot .cap{animation:none}
+body{background:var(--bg);color:var(--fg);font:400 14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::selection{background:var(--accent-soft)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);left:50%;transform:translateX(-50%);z-index:80;display:flex;gap:2px;padding:6px;
+  background:color-mix(in srgb,var(--panel) 78%,transparent);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);
+  border:1px solid var(--line-2);border-radius:16px}
+nav a{position:relative;display:flex;align-items:center;gap:8px;padding:9px 15px 9px 13px;border-radius:10px;color:var(--fg-2);text-decoration:none;font:500 13px/1 var(--sans);transition:color .2s}
+nav a:hover{color:var(--fg)}
+nav a[aria-current="page"]{color:var(--on-invert)}
+nav .pill{position:absolute;top:6px;bottom:6px;border-radius:10px;background:var(--invert)}
+nav.ready .pill{transition:left .35s var(--spring),width .35s var(--spring)}
+nav a,nav svg{z-index:1}
+/* light / dark: dark unless the viewer picks light; the choice is remembered */
+.theme{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);right:16px;z-index:80;width:48px;height:48px;border-radius:16px;display:grid;place-items:center;cursor:pointer;
+  color:var(--fg-2);background:color-mix(in srgb,var(--panel) 78%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-2);transition:color .2s,opacity .5s var(--out)}
+.theme:hover{color:var(--fg)}
+.theme svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.theme .sun{display:none}
+:root[data-theme="light"] .theme .sun{display:block}:root[data-theme="light"] .theme .moon{display:none}
+nav .brand{display:flex;align-items:center;gap:9px;padding:0 12px 0 3px;font:600 14px/1 var(--sans);letter-spacing:-.015em;color:var(--fg);text-decoration:none}
+nav .brand .mark{width:28px;height:28px;flex:none;stroke:none;filter:drop-shadow(0 1px 2px #0000004d)}
+nav .sep{width:1px;margin:7px 6px 7px 2px;background:var(--line-2)}
+nav a svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+/* printer view: the printer and its finished receipt, centred together under a soft studio light, the caption below.
+   overflow:clip, because the receipt's strips reach far past the figure and would otherwise bring up a scrollbar mid-print */
+.stage{min-height:100svh;overflow:clip;display:grid;grid-template-rows:1fr auto auto 1fr;justify-items:center;padding-inline:16px;padding-block:80px 24px;
+  background:radial-gradient(56% 50% at 50% 44%,var(--spot),transparent 72%)}
+#fig{grid-row:2;position:relative;cursor:pointer;animation:arrive .8s var(--out) both}
+#fig svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
+@keyframes arrive{from{opacity:0}}
+.cap{grid-row:3;align-self:start;padding-top:28px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;animation:arrive .8s .12s var(--out) both}
+.cap h1{margin:0;font:600 17px/1.25 var(--sans);letter-spacing:-.01em}
+.cap p{margin:0;max-width:34ch;color:var(--fg-2);font-size:14px;line-height:1.55;text-wrap:balance}
+.cap .readout{width:24ch;justify-content:flex-start;margin-top:6px;font:500 12px/1 var(--mono);color:var(--fg-3);display:flex;align-items:center;gap:8px}
+.cap .readout i{width:6px;height:6px;border-radius:50%;background:var(--fg-3);transition:background .2s}
+.cap .readout.live i{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+/* sheets: each receipt is horizontal strips laid along its bend in the printer's world; layers keep the floor
+   behind the printer, the printed sheet on it, and the floor in front */
+#fig .layer{position:absolute;left:0;top:0;width:0;height:0}
+#fig .sheet3{position:absolute;left:0;top:0}
+#fig .sheet3.floor{filter:drop-shadow(0 1px .5px var(--floorsh))}
+#fig .sheet3.far{opacity:.78}
+#fig .strip{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+#fig .strip>i{position:absolute;inset:0;pointer-events:none;background:var(--sheet-shade,#000);opacity:0}
+/* light mode: the receipt reads as clean white paper; its shading is a soft grey and the texture and edge shade fade back */
+:root[data-theme="light"] #fig{--sheet-shade:#8a8a90}
+:root[data-theme="light"] #fig .paper{background-image:linear-gradient(90deg,#00000008,#0000 6%,#0000 94%,#0000000a)}
+:root[data-theme="light"] #fig .sheet3.far{opacity:.9}
+#fig .strip.back .paper>*{visibility:hidden}
+#fig .paper{background-image:linear-gradient(90deg,#0000001c,#0000 6%,#0000 94%,#0000001f),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0 0 0 -.07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.lamp{position:absolute;width:0;height:0;pointer-events:none}
+.lamp::after{content:"";position:absolute;left:-14px;top:-14px;width:28px;height:28px;border-radius:50%;
+  background:radial-gradient(circle,#fff 0 12%,#ffffffa0 22%,#ffffff00 70%);opacity:var(--on,0);transition:opacity .15s}
+
+/* the figure's printer: the kit's neutral tokens, one set per theme; its flat floor shadow */
+#fig .pr-shadow{fill:#000;opacity:.5}
+:root[data-theme="light"] #fig .pr-shadow{fill:#525252;opacity:.12}
+#fig .iso{--anatomy-paper:#0e0e10;--anatomy-face:#171719;--anatomy-top:#1a1a1c;--anatomy-shade-0:#0b0b0c;--anatomy-shade-1:#0d0d0e;--anatomy-shade-2:#101011;--anatomy-shade-3:#131314;
+  --anatomy-lit-top:#262628;--anatomy-lit-shade:#1d1d1f;--anatomy-hi:#e8e8ea;--anatomy-mid:#7a7a80;--anatomy-lo:#46464b;--anatomy-faint:#2a2a2e;--anatomy-lit:#fff;--anatomy-halo:#000;--anatomy-halo-opacity:.85;--anatomy-dot:#e8e8ea}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) #fig .iso{--anatomy-paper:#fff;--anatomy-face:#fff;--anatomy-top:#fff;--anatomy-shade-0:#dcdcdc;--anatomy-shade-1:#e5e5e5;--anatomy-shade-2:#ededed;--anatomy-shade-3:#f4f4f4;
+  --anatomy-lit-top:#fff;--anatomy-lit-shade:#eee;--anatomy-hi:#1a1a1c;--anatomy-mid:#8a8a8f;--anatomy-lo:#b4b4b8;--anatomy-faint:#d6d6d8;--anatomy-lit:#000;--anatomy-halo:#8a8a8a;--anatomy-halo-opacity:.3;--anatomy-dot:#3a3a3e}}
+:root[data-theme="light"] #fig .iso{--anatomy-paper:#fff;--anatomy-face:#fff;--anatomy-top:#fff;--anatomy-shade-0:#dcdcdc;--anatomy-shade-1:#e5e5e5;--anatomy-shade-2:#ededed;--anatomy-shade-3:#f4f4f4;
+  --anatomy-lit-top:#fff;--anatomy-lit-shade:#eee;--anatomy-hi:#1a1a1c;--anatomy-mid:#8a8a8f;--anatomy-lo:#b4b4b8;--anatomy-faint:#d6d6d8;--anatomy-lit:#000;--anatomy-halo:#8a8a8a;--anatomy-halo-opacity:.3;--anatomy-dot:#3a3a3e}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .lamp::after{background:radial-gradient(circle,#000 0 9%,#0004 16%,#0000 42%)}}
+:root[data-theme="light"] .lamp::after{background:radial-gradient(circle,#000 0 9%,#0004 16%,#0000 42%)}
+
+/* the receipt itself: the layout receipts.py prints, in black on white, sized in em */
+.rc{--fs:15px;font-size:var(--fs);width:34.67em;color:var(--ink);font-family:var(--mono);font-variant-numeric:tabular-nums;line-height:1.6em}
+.rc .tear{height:.67em;background-size:1.33em 1.33em;background-repeat:repeat-x}
+.rc .tear.t{background-image:linear-gradient(45deg,var(--paper) 50%,transparent 50%),linear-gradient(-45deg,var(--paper) 50%,transparent 50%)}
+.rc .tear.b{background-image:linear-gradient(135deg,var(--paper) 50%,transparent 50%),linear-gradient(-135deg,var(--paper) 50%,transparent 50%);background-position:0 100%}
+.rc .paper{background:var(--paper);padding:1.87em 2.4em 2.13em}
+.rc .hd{text-align:center}.rc .hd .t{font-size:1.73em;line-height:1.25em;font-weight:800;letter-spacing:.2em}
+.rc .mu{font-size:.8em;line-height:1.5em;color:var(--ink-2)}.rc .ls{letter-spacing:.13em}
+.rc .hr{border-top:.13em dashed #9a9a9a;margin:1.07em 0}.rc .hr2{border-top:.27em double var(--ink);margin:1.07em 0}
+.rc .row{display:flex;justify-content:space-between;gap:1em;white-space:nowrap}
+.rc .row .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rc .items{display:grid;grid-template-columns:3.73em minmax(0,1fr) auto;row-gap:.13em;white-space:nowrap}
+.rc .items span{overflow:hidden;text-overflow:ellipsis}.rc .items .h{font-size:.73em;color:var(--ink-2);letter-spacing:.1em}.rc .items .r{text-align:right}
+.rc .val{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.4em}
+.rc .val span:first-child{font-size:1.07em;font-weight:800;letter-spacing:.13em}.rc .val span:last-child{font-size:1.87em;line-height:1.2em;font-weight:800}
+.rc .tot{display:flex;justify-content:space-between;align-items:baseline}
+.rc .tot span:first-child{font-size:1.47em;font-weight:800;letter-spacing:.2em}.rc .tot span:last-child{font-size:3.07em;line-height:1.15em;font-weight:800;letter-spacing:-.04em}
+.rc .thr{font-size:.87em;line-height:1.35em}.rc .sp{height:.8em}
+.rc .ft{padding-top:1.6em;display:flex;flex-direction:column;align-items:center;gap:.67em;text-align:center}
+.rc .ft .s{font-size:1.07em;font-weight:800;letter-spacing:.2em}
+.rc .bc{width:20em;max-width:100%;height:3.73em;background:repeating-linear-gradient(90deg,var(--ink) 0 .2em,transparent .2em .33em,var(--ink) .33em .4em,transparent .4em .6em,var(--ink) .6em .87em,transparent .87em 1em,var(--ink) 1em 1.07em,transparent 1.07em 1.33em,var(--ink) 1.33em 1.47em,transparent 1.47em 1.53em)}
+.rc .ft .bn{font-size:.73em;letter-spacing:.2em}.rc .ft .ty{font-size:.8em;letter-spacing:.13em}
+
+
+/* the public site: the start section under the printer, the badge, the language switch */
+.lang{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);right:72px;z-index:80;height:48px;min-width:48px;padding:0 12px;border-radius:16px;cursor:pointer;
+  font:600 12.5px/1 var(--mono);letter-spacing:.04em;color:var(--fg-2);background:color-mix(in srgb,var(--panel) 78%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line-2);transition:color .2s,opacity .5s var(--out)}
+.lang:hover{color:var(--fg)}
+html.boot .lang{opacity:0}
+.more{position:relative;margin-top:18px;border:0;padding:12px 18px;border-radius:12px;cursor:pointer;color:var(--fg);font:500 14px/1 var(--sans);
+  background:conic-gradient(from var(--beam),#0000 0deg 210deg,#ff9a6b 285deg,var(--accent) 330deg,#0000 360deg),var(--line-2);animation:beam 3.2s linear infinite}
+.more::before{content:"";position:absolute;inset:1px;border-radius:11px;background:var(--panel);transition:background .2s}
+.more:hover::before{background:var(--raise)}
+.more>span{position:relative;display:inline-flex;align-items:center;gap:8px}
+.more svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+@media (prefers-reduced-motion:reduce){.more{animation:none}}
+/* the start section: centred under the printer; a vertical hairline joins it to the printer above and to the foot
+   below, with a faint red beam falling down each */
+.start{position:relative;max-width:760px;margin:0 auto;padding:136px 16px 128px}
+.start>.sh,.start>.sl,.start>.alt{text-align:center}
+.start>.sf{flex-direction:column;align-items:center;text-align:center;gap:8px}   /* the closing lines sit centred too, over the line down to the foot */
+.start::before,.start::after{content:"";position:absolute;left:50%;width:1px;height:96px;transform:translateX(-50%);pointer-events:none;
+  background:linear-gradient(180deg,#0000,color-mix(in srgb,var(--accent) 80%,transparent),#0000) no-repeat 0 -70%/100% 38%,
+             linear-gradient(180deg,#0000,var(--line-3) 22% 78%,#0000);animation:fall 3.4s linear infinite}
+.start::before{top:16px}
+.start::after{bottom:16px;animation-delay:-1.7s}
+@keyframes fall{to{background-position:0 170%,0 0}}
+/* the foot of the site: the mark and the name, centred, under the start section's lower line */
+.foot{display:flex;flex-direction:column;align-items:center;gap:12px;padding:0 16px 72px;color:var(--fg)}
+.foot svg{width:40px;height:40px;filter:drop-shadow(0 2px 6px #0000004d)}
+.foot b{font:600 17px/1 var(--sans);letter-spacing:-.015em}
+@media (prefers-reduced-motion:reduce){.start::before,.start::after{animation:none;background-position:0 50%,0 0}}
+.sh{margin:0;font:600 24px/1.2 var(--sans);letter-spacing:-.02em}
+.sl{margin:8px 0 0;color:var(--fg-2);font-size:15px}
+.steps{list-style:none;padding:0;margin:26px 0 0;display:flex;flex-direction:column;gap:12px}
+.steps li{display:grid;grid-template-columns:30px minmax(0,1fr);gap:14px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
+.sn{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;font:600 13px/1 var(--mono);background:var(--raise);color:var(--fg-2)}
+.sb{display:flex;flex-direction:column;gap:4px;min-width:0}
+.sb b{font:600 15px/1.35 var(--sans)}.sb>span{color:var(--fg-2);font-size:13.5px;line-height:1.5}
+.code{margin-top:10px;display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 12px;min-width:0}
+.code code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font:500 12.5px/1.6 var(--mono);color:var(--fg);scrollbar-width:none}
+.code button{flex:none;height:30px;padding:0 11px;border-radius:7px;border:1px solid var(--line-2);background:var(--raise);cursor:pointer;font:500 12px/1 var(--sans);color:var(--fg)}
+.code button:hover{border-color:var(--accent)}
+/* what you can ask Claude: one card per command, a small drawing of what it makes, drawn in CSS so it follows the theme */
+.ah{margin:34px 0 0;font:600 17px/1.3 var(--sans);letter-spacing:-.01em}
+.al{margin:6px 0 0;color:var(--fg-2);font-size:14px}
+.asks{list-style:none;padding:0;margin:16px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ask{display:grid;grid-template-columns:88px minmax(0,1fr);gap:14px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--panel);transition:border-color .2s}
+.ask:hover{border-color:var(--line-3)}
+.ask .tx{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ask q{font:500 14px/1.35 var(--sans);color:var(--fg);quotes:"\201C" "\201D"}
+.ask .d{font-size:12.5px;line-height:1.45;color:var(--fg-2)}
+.ask code{align-self:flex-start;margin-top:4px;font:500 11px/1 var(--mono);color:var(--fg-2);background:var(--raise);padding:4px 6px;border-radius:5px}
+/* each card's drawing (tools/site/art, prepared by art.py): its own dark tile; on hover it rises to the hover
+   drawing's position and its light comes up, and each drawing does one small thing of its own */
+.pv{position:relative;width:100%;height:auto;min-width:0;aspect-ratio:470/418;border-radius:7.66%/8.61%;overflow:hidden;--art-shade:1}
+:root[data-theme="light"] .pv{--art-shade:.42;--art-paper:#fff}   /* on a light tile the paper needs to be whiter than the tile */
+.pv svg{position:absolute;inset:0;display:block;width:100%;height:100%}   /* out of the flow: an inline SVG's own 300×150 must not size the card */
+.pv .lift{transform-origin:0 0;transition:transform .55s var(--spring)}
+.ask:hover .pv .lift{transform:translate(-7px,-13px) scale(1.03)}
+.pv .hv{opacity:0;transition:opacity .45s var(--out)}
+.ask:hover .pv .hv{opacity:1}
+.pv .feed,.pv .title,.pv .pop{transform-box:fill-box;transition:transform .6s var(--spring) .06s}
+.ask:hover .pv .feed{transform:translateY(-16px)}
+.ask:hover .pv .feed.down{transform:translateY(14px)}
+.pv .title{transform-origin:0 50%}.ask:hover .pv .title{transform:scaleX(1.28)}
+.pv .pop{transform-origin:50% 50%}.ask:hover .pv .pop{transform:scale(1.18)}
+.pv .spark{transform-box:fill-box;transform-origin:0 100%}
+.ask:hover .pv .spark{animation:spark 1.3s var(--out) .15s infinite}
+@keyframes spark{0%,100%{transform:none;opacity:1}35%{transform:translate(4px,-4px) scale(1.18);opacity:.7}}
+.pv .bar{transform-box:fill-box;transform-origin:50% 50%}
+.ask:hover .pv .bar{animation:breathe 1.8s ease-in-out .2s infinite}
+@keyframes breathe{50%{transform:scaleY(.8)}}
+@media (prefers-reduced-motion:reduce){.pv .lift,.pv .feed,.pv .title,.pv .pop{transition:none}.ask:hover .pv .spark,.ask:hover .pv .bar{animation:none}}
+/* the Ask Claude page: three columns of upright cards, the drawing on top and larger */
+#v-sor{max-width:800px}
+.asks.page{margin-top:24px;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.asks.page .ask{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;align-content:start;align-items:stretch;gap:12px;padding:10px 10px 16px;border-radius:26px}   /* 26 = drawing corner ~16 + padding 10 */
+.asks.page .tx{padding:0 4px}
+/* hover a card (or reach it by keyboard): its command rises over the foot of the drawing, ready to copy.
+   Corners nest: drawing ~17, bar 11 at 6 from its edge, button 7 at 4 inside the bar */
+.art{position:relative;min-width:0;align-self:start;border-radius:7.66%/8.61%;overflow:hidden}
+.cmd{position:absolute;left:6px;right:6px;bottom:6px;display:flex;align-items:center;gap:8px;padding:4px 4px 4px 10px;border-radius:11px;
+  background:color-mix(in srgb,var(--panel) 80%,transparent);backdrop-filter:blur(12px) saturate(1.2);-webkit-backdrop-filter:blur(12px) saturate(1.2);
+  border:1px solid var(--line-2);box-shadow:0 8px 20px -10px var(--shadow);
+  opacity:0;transform:translateY(16px) scale(.97);pointer-events:none;transition:opacity .22s var(--out),transform .5s var(--spring),border-color .25s}
+.ask:hover .cmd,.ask:focus-within .cmd{opacity:1;transform:none;pointer-events:auto;transition-delay:.05s,.05s,0s}
+.cmd code{flex:1;min-width:0;align-self:center;margin:0;padding:2px 0;background:none;border-radius:0;font:500 11px/1.45 var(--mono);color:var(--fg);
+  white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}   /* a long command takes two lines, never an ellipsis */
+.cmd code b{color:var(--accent);font-weight:600;margin-right:5px}
+.cmd code i{font-style:normal;white-space:nowrap}   /* each word of the command whole: lines break between them, never inside --video */
+.cmd button{flex:none;align-self:center;width:30px;height:30px;padding:0;justify-content:center;border-radius:7px;border:1px solid var(--line-2);background:var(--raise);color:var(--fg);cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;font:500 11.5px/1 var(--sans);transition:background .2s,border-color .2s,color .2s}
+.cmd button:hover{border-color:var(--accent)}
+.cmd button span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}   /* the label stays for screen readers */
+.cmd button svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.cmd.done{border-color:var(--accent-soft)}
+.cmd.done button{background:var(--accent);border-color:var(--accent);color:#fff}
+.cmd.done button{animation:copied .35s var(--spring)}
+@keyframes copied{40%{transform:scale(1.08)}}
+@media (hover:none){.cmd{opacity:1;transform:none;pointer-events:auto}}   /* no hover on a touch screen: the bar is always there */
+@media (prefers-reduced-motion:reduce){.cmd{transition:opacity .15s}.cmd.done button{animation:none}}
+.asks.page q{font-size:13.5px}
+.ask-more{margin-top:26px}
+.ask-more a,.sl a{color:var(--fg);text-decoration:none;border-bottom:1px solid var(--line-3);transition:border-color .2s}
+.ask-more a:hover,.sl a:hover{border-color:var(--accent)}
+@media (max-width:860px){.asks.page{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.asks,.asks.page{grid-template-columns:minmax(0,1fr)}}
+.alt{margin:16px 0 0;color:var(--fg-2);font-size:13.5px;line-height:1.9}
+.alt em{color:var(--fg);font-style:normal}
+.alt code{font:500 12px/1 var(--mono);background:var(--raise);padding:4px 7px;border-radius:6px;color:var(--fg);white-space:nowrap}
+.sf{margin-top:34px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--fg-3);font-size:13px}
+.sf a{color:var(--fg-2);text-decoration:none}.sf a:hover{color:var(--accent)}
+.ttl{display:flex;align-items:center;gap:10px}
+.badge{font:500 11px/1 var(--mono);color:var(--accent);border:1px solid var(--accent-soft);border-radius:6px;padding:5px 7px;letter-spacing:.02em}
+/* where the board's receipts come from: the examples, your own archive (read in this browser) or a shared link */
+.src{margin-top:18px;display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:11px 12px 11px 14px;border:1px dashed var(--line-2);border-radius:12px;color:var(--fg-2);font-size:13px;line-height:1.5}
+.src code{font:500 12px/1 var(--mono);background:var(--raise);padding:4px 6px;border-radius:6px;color:var(--fg);white-space:nowrap}
+.src .err{color:var(--accent)}
+.src .acts{margin-left:auto;display:flex;gap:8px}
+.src button{height:30px;padding:0 11px;border-radius:8px;border:1px solid var(--line-2);background:var(--raise);cursor:pointer;font:500 12px/1 var(--sans);color:var(--fg);white-space:nowrap}
+.src button:hover{border-color:var(--accent)}
+.drop{position:fixed;inset:12px;z-index:95;display:grid;place-items:center;pointer-events:none;opacity:0;transition:opacity .2s var(--out);
+  border:1.5px dashed var(--accent);border-radius:22px;background:color-mix(in srgb,var(--bg) 72%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.drop.on{opacity:1}
+.drop span{font:500 15px/1.4 var(--sans);color:var(--fg);padding:0 24px;text-align:center}
+.cap .badge{margin-bottom:4px}
+@media (max-width:600px){
+  nav{left:16px;transform:none}
+  nav a>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}   /* icons only; the names stay for screen readers */
+  nav a{padding:9px 12px}
+}
+
+/* board view */
+.view{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:104px 64px}
+.bhead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+h2{margin:0;font:600 22px/1.1 var(--sans);letter-spacing:-.02em}
+.seg{display:inline-flex;padding:2px;border-radius:9px;background:var(--raise);border:1px solid var(--line)}
+.seg button{border:0;background:transparent;padding:5px 11px;border-radius:7px;cursor:pointer;color:var(--fg-2);font:500 12.5px/1.2 var(--sans);transition:background .2s,color .2s}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--fg);box-shadow:0 1px 2px #0003,inset 0 0 0 1px var(--line-2)}
+.metrics{margin-top:28px;display:flex;gap:12px 44px;flex-wrap:wrap;padding-bottom:26px;border-bottom:1px solid var(--line)}
+.metrics div{display:flex;flex-direction:column;gap:6px;min-width:0}
+.metrics span{font-size:12px;color:var(--fg-3)}
+.metrics b{font:500 20px/1 var(--mono);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+/* each column is a kanban lane: a framed, slightly sunken tray the cards sit in (lane radius 20 = card 12 + padding 8) */
+.cols{margin-top:26px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
+.col{--lane:color-mix(in srgb,var(--raise) 45%,var(--bg));display:flex;flex-direction:column;min-height:260px;border-radius:20px;padding:8px;
+  background:var(--lane);border:1px solid var(--line-2);
+  outline:1px dashed transparent;outline-offset:3px;transition:outline-color .15s,border-color .15s,background .15s}
+.col.over{border-color:var(--accent-soft)}   /* the slot shows where it lands; the lane only warms its edge */
+/* where a dragged receipt will land: a hole the card's own size and shape, framed in red, that the other cards make room for */
+.slot{position:relative;flex:none;border-radius:12px 12px 0 0;background:color-mix(in srgb,var(--accent) 60%,transparent);
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat;
+  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat}
+.slot::before{content:"";position:absolute;inset:1.5px;border-radius:10.5px 10.5px 0 0;background:color-mix(in srgb,var(--accent) 8%,var(--lane));-webkit-mask:inherit;mask:inherit}
+.stack.has-slot .empty{display:none}
+.tk.lifted{display:none}
+.colh{display:flex;align-items:center;gap:8px;padding:8px 6px 14px;margin-bottom:2px;border-bottom:1px solid var(--line);font:500 13px/1 var(--sans);color:var(--fg-2)}
+.col .stack{flex:1;padding-top:8px}
+.col .empty{flex:1;display:grid;place-items:center}
+.colh .dot{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--fg-2)}
+.colh .dot.half{border-color:var(--accent);background:linear-gradient(90deg,var(--accent) 50%,transparent 50%)}
+.colh .dot.full{background:var(--fg-2)}
+.colh .dot.dash{border-style:dashed}
+.colh .n{color:var(--fg-3);font-family:var(--mono);font-size:12px}
+.colh .h{margin-left:auto;color:var(--fg-3);font-family:var(--mono);font-size:12px}
+.stack{display:flex;flex-direction:column;gap:10px;perspective:900px}
+.empty{border:1px dashed var(--line-2);border-radius:12px;padding:22px;text-align:center;color:var(--fg-3);font-size:12.5px}
+
+.tk{position:relative;display:block;width:100%;text-align:left;cursor:pointer;border:0;padding:0;background:none;transform-style:preserve-3d;
+  transition:transform .35s var(--out),opacity .2s}
+/* the card is its frame (the background, cut to the receipt's zigzag) with the face laid 1 px inside it, cut the same
+   way, so the frame line follows the zigzag too; on hover a red beam runs round the frame */
+@property --beam{syntax:"<angle>";inherits:false;initial-value:0deg}
+.tk .face{position:relative;border-radius:12px 12px 0 0;padding:14px 14px 18px;background:var(--line-2);
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat;
+  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - 5px) no-repeat}
+.tk .face::before{content:"";position:absolute;inset:1px;border-radius:11px 11px 0 0;background:var(--panel);transition:background .2s;
+  -webkit-mask:inherit;mask:inherit}
+.tk .face>*{position:relative}
+.tk:hover .face{background:conic-gradient(from var(--beam),#0000 0deg 236deg,#ff9a6b 292deg,var(--accent) 330deg,#0000 360deg),var(--line-2);animation:beam 2.6s linear infinite}
+.tk:hover .face::before{background:var(--raise)}
+@keyframes beam{to{--beam:360deg}}
+.tk.away{visibility:hidden}
+.tk .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tk .nm{font:500 13.5px/1.25 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk .cl{font:500 11px/1 var(--mono);color:var(--fg-2);background:var(--raise);border-radius:5px;padding:4px 6px;white-space:nowrap}
+.tk .pd{margin-top:4px;font:400 12px/1.3 var(--mono);color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk .mid{margin-top:16px;display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+.tk .hrs{font:500 22px/1 var(--mono);letter-spacing:-.03em}
+.tk .bars{display:flex;align-items:flex-end;gap:2px;height:22px}
+.tk .bars i{width:4px;background:var(--fg-3);border-radius:1px}
+.tk .meta{margin-top:14px;display:flex;justify-content:space-between;font:400 11.5px/1 var(--mono);color:var(--fg-3)}
+.enter .tk{animation:rise .55s var(--out) both;animation-delay:calc(var(--i)*45ms)}
+@keyframes rise{from{opacity:0}}
+
+/* the receipt that flips out of a card: a floating sheet, no backdrop, the page stays usable */
+/* the open receipt: in the middle of the window, over the page blurred behind it */
+.veil{position:fixed;inset:0;z-index:85;opacity:0;pointer-events:none;transition:opacity .4s var(--out);
+  background:color-mix(in srgb,var(--bg) 42%,transparent);backdrop-filter:blur(14px) saturate(.85);-webkit-backdrop-filter:blur(14px) saturate(.85)}
+.veil.on{opacity:1;pointer-events:auto}
+.float{position:fixed;left:0;top:0;z-index:86;transform-origin:0 0;will-change:transform;outline:none}
+.float .sheet{--sx:0px;--sy:28px;filter:drop-shadow(var(--sx) var(--sy) 40px var(--shadow)) drop-shadow(0 4px 8px var(--shadow))}
+/* the open receipt tips toward the pointer: the far side shades, a gloss slides across the paper */
+.float .tilt{transform-origin:50% 50%;will-change:transform}
+.float .paper{position:relative}
+.float .shade,.float .gloss{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s}
+.float .gloss{mix-blend-mode:soft-light}
+.float.tilting .shade,.float.tilting .gloss{opacity:1}
+
+@media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}.col{min-height:0}}
+@media (prefers-reduced-motion:reduce){#fig,.cap,.enter .tk{animation:none}.tk,nav .pill{transition:none}}
+</style>
+
+<nav aria-label="Views">
+  <span class="pill" aria-hidden="true"></span>
+  <span class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="slipt-red" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#E0262C"/></linearGradient><clipPath id="slipt-clip"><rect width="32" height="32" rx="11.4"/></clipPath></defs><g clip-path="url(#slipt-clip)"><rect width="32" height="32" fill="url(#slipt-red)"/><path d="M0 19.6 3.2 16.6 6.4 19.6 9.6 16.6 12.8 19.6 16 16.6 19.2 19.6 22.4 16.6 25.6 19.6 28.8 16.6 32 19.6V32H0Z" fill="#F4F0E8"/></g></svg>Slipt</span><span class="sep" aria-hidden="true"></span>
+  <a href="#yazici" data-view="yazici"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6V2.5h7V6"/><rect x="1.8" y="6" width="12.4" height="5.6" rx="1.4"/><path d="M4.5 9.5h7v4h-7z"/></svg><span data-ui="navPrinter"></span></a>
+  <a href="#pano" data-view="pano"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.2" width="3.4" height="11.6" rx="1"/><rect x="6.3" y="2.2" width="3.4" height="7.6" rx="1"/><rect x="10.8" y="2.2" width="3.4" height="9.6" rx="1"/></svg><span data-ui="navBoard"></span></a>
+  <a href="#sor" data-view="sor" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7.2h-6.2L4.3 13v-2.3H2.5z"/><path d="M5.3 6.4h5.4M5.3 8.4h3.4"/></svg><span data-ui="navAsk"></span></a>
+</nav>
+
+<button class="theme" type="button" id="theme"><svg class="moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.6A5.6 5.6 0 0 1 6.4 2.5a5.6 5.6 0 1 0 7.1 7.1z"/></svg><svg class="sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg></button>
+
+<button class="lang" type="button" id="lang" hidden></button>
+
+<main>
+<section id="v-yazici" aria-labelledby="t1">
+  <div class="stage">
+    <div id="fig" role="img"></div>
+    <div class="cap">
+      <span class="badge" id="shared" hidden></span>
+      <h1 id="t1" data-ui="title"></h1>
+      <p data-ui="lede"></p>
+      <div class="readout" id="readout"><i></i><span></span></div>
+      <button class="more" type="button" id="more" hidden></button>
+    </div>
+  </div>
+  <div class="start" id="start" hidden></div>
+  <footer class="foot" id="foot" hidden><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="foot-red" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#E0262C"/></linearGradient><clipPath id="foot-clip"><rect width="32" height="32" rx="11.4"/></clipPath></defs><g clip-path="url(#foot-clip)"><rect width="32" height="32" fill="url(#foot-red)"/><path d="M0 19.6 3.2 16.6 6.4 19.6 9.6 16.6 12.8 19.6 16 16.6 19.2 19.6 22.4 16.6 25.6 19.6 28.8 16.6 32 19.6V32H0Z" fill="#F4F0E8"/></g></svg><b>Slipt</b></footer>
+</section>
+
+<section class="view" id="v-sor" aria-labelledby="t3" hidden>
+  <div class="bhead"><div class="ttl"><h2 id="t3" data-ui="askT"></h2></div></div>
+  <p class="sl" data-ui="askL"></p>
+  <ul class="asks page" id="asks"></ul>
+  <p class="alt ask-more"><a href="#yazici" id="toStart"></a></p>
+</section>
+
+<section class="view" id="v-pano" aria-labelledby="t2" hidden>
+  <div class="bhead"><div class="ttl"><h2 id="t2" data-ui="board"></h2><span class="badge" id="badge" hidden></span></div><div class="seg" role="group" id="periods"></div></div>
+  <div class="src" id="src" hidden></div>
+  <div class="metrics" id="metrics"></div>
+  <div class="cols" id="cols"></div>
+</section>
+</main>
+
+<script>
+// Filled in by receipts.py --board: the printer (tools/printer), every archived receipt, the language and today.
+// SITE is set only on the public site (tools/site): install steps, a language switch, example receipts in both
+// languages and the day they are dated from. On your own board it is null.
+const SITE=__SITE__;
+const LANG=SITE?(new URLSearchParams(location.search).get("lang")||((navigator.language||"").toLowerCase().startsWith("tr")?"tr":"en")):"__LANG__";
+const PR=__PRINTER__, EXAMPLES=SITE?SITE.receipts[LANG==="tr"?"tr":"en"]:null;
+let R=EXAMPLES||__RECEIPTS__, TODAY=SITE?SITE.today:"__TODAY__", SOURCE=SITE?"example":"own";   // example | mine | shared | own (your local board)
+// dark by default, light only when the viewer asks for it
+const root=document.documentElement, themeBtn=document.getElementById("theme");
+let theme="dark"; try{if(localStorage.getItem("vr-theme")==="light") theme="light";}catch(e){}
+function setTheme(t){theme=t; root.setAttribute("data-theme",t); themeBtn.setAttribute("aria-label",t==="dark"?UI.toLight:UI.toDark); themeBtn.setAttribute("aria-pressed",String(t==="dark"));}
+const UI={
+ tr:{navPrinter:"Yazıcı",navBoard:"Pano",title:"Çalıştığın saatin fişi",
+   lede:"Kendi Claude Code prompt'larından ölçülür. Hepsi kendi makinende kalır.",
+   ready:"hazır",printing:"yazdırılıyor",prompts:"prompt",commits:"commit",
+   board:"Pano",periods:[["month","Bu ay"],["q","90 gün"],["all","Tümü"]],period:"Dönem",
+   metrics:["Toplam süre","Faturalanacak","Token değeri","Fiş"],cols:{due:"Faturalanacak",paid:"Faturalandı",personal:"Kişisel"},
+   empty:"Fişi buraya sürükle",status:"Durum",est:"commit tahmini",close:"Kapat",open:"aç",h:"s",m:"d",reprint:"Yeniden bas",
+   figLabel:(n,t)=>`Bir termal fiş yazıcısı, ${n} projesinin ${t} çalışma fişini basıyor.`,toLight:"Açık temaya geç",toDark:"Koyu temaya geç",
+   example:"Örnek veri",more:"Nasıl başlarım?",start:"Başla",startLede:"Üç adım. Hepsi kendi bilgisayarında, Claude Code'un içinde.",
+   steps:[["Kur","Aracı Claude Code'a skill olarak ekle: bir klasör kopyalanır, başka hiçbir şey kurulmaz.","git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
+          ["Çalıştır","Bir projenin klasöründe Claude'a sor ya da komutu kendin çalıştır. Fişin, raporun ve panon hazırlanır.","python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --board"],
+          ["Panonu aç","Bütün fişlerin tek sayfada. Ya da archive klasörünü bu sitedeki panoya sürükle.","open ~/vibe-receipts/board.html"]],
+   navAsk:"Claude'a sor",askMore:"Claude'a neler sorabileceğini gör →",toStart:"← Kurulum adımları",
+   askT:"Claude'a şunları sorabilirsin",askL:"Kurduktan sonra Claude Code'a kendi cümlenle söylemen yeter.",
+   asks:[["r","Bu projede kaç saat çalıştım?","Fiş, rapor ve her günün süresi.","receipts.py ."],
+         ["v","Bunun videosunu yap.","Fişin yazıcıdan çıktığı dikey video.","--video"],
+         ["b","Bütün fişlerimi göster.","Faturalanacak, faturalandı, kişisel: tek pano.","--board"],
+         ["i","Northwind'e bu ayın faturasını çıkar.","Saat × ücret, KDV ve gün gün döküm, PDF.","--invoice"],
+         ["w","Yılım nasıl geçti?","Dokunarak izlenen bir hikâye ve bir poster.","--wrapped"],
+         ["s","Fişimi paylaş.","Her mecraya hazır gönderi, önizlemesi fiş olan link.","--share"]],
+   plugin:"Plugin olarak kurmayı tercih edersen:",
+   privacy:"Prompt'ların ve kodun bilgisayarından çıkmaz. Buraya açtığın fişler yalnızca tarayıcında okunur.",
+   srcExample:"İlk fiş bu sitenin kendi fişi, diğerleri örnek. Kendi fişlerin için {code} klasörünü bu sayfaya sürükle. Hiçbir şey yüklenmez.",
+   selfChip:"Bu sitenin kendi fişi",pick:"Dosya seç",
+   srcMine:n=>`Senin fişlerin: ${n} fiş. Yalnızca bu tarayıcıda tutulur.`,add:"Fiş ekle",back:"Örneğe dön",
+   srcShared:n=>`Paylaşılan fiş: ${n}. Linkin içinde taşınır, hiçbir sunucuda tutulmaz.`,
+   none:"Bu dosyalarda fiş bulunamadı.",badLink:"Bu link açılamadı, örnek fişler gösteriliyor.",
+   dropHere:"Fişlerini bırak: archive klasörü ya da içindeki JSON dosyaları",mine:"Senin verin",sharedBadge:"Paylaşılan",
+   sharedChip:n=>`Paylaşılan fiş · ${n}`,own:"Kendi fişini çıkar",github:"Kaynak kod GitHub'da",copy:"Kopyala",copied:"Kopyalandı",other:"EN",otherLabel:"Switch to English"},
+ en:{navPrinter:"Printer",navBoard:"Board",title:"Your hours, on a receipt",
+   lede:"Measured from your own Claude Code prompts. It all stays on your machine.",
+   ready:"ready",printing:"printing",prompts:"prompts",commits:"commits",
+   board:"Board",periods:[["month","This month"],["q","90 days"],["all","All"]],period:"Period",
+   metrics:["Total time","To bill","Token value","Receipts"],cols:{due:"To bill",paid:"Billed",personal:"Personal"},
+   empty:"Drag a receipt here",status:"Status",est:"commit estimate",close:"Close",open:"open",h:"h",m:"m",reprint:"Print again",
+   figLabel:(n,t)=>`A thermal receipt printer printing the ${t} work receipt for ${n}.`,toLight:"Switch to light",toDark:"Switch to dark",
+   example:"Example data",more:"How do I start?",start:"Get started",startLede:"Three steps, all on your own machine, inside Claude Code.",
+   steps:[["Install","Add it to Claude Code as a skill: one folder is copied, nothing else is installed.","git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts && mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/"],
+          ["Run it","In a project's folder, ask Claude or run the command yourself. Your receipt, report and board are made.","python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py . --board"],
+          ["Open your board","All your receipts on one page. Or drag the archive folder onto this site's board.","open ~/vibe-receipts/board.html"]],
+   navAsk:"Ask Claude",askMore:"See what you can ask Claude →",toStart:"← The install steps",
+   askT:"What you can ask Claude",askL:"Once it is installed, just say it to Claude Code in your own words.",
+   asks:[["r","How long did this project take?","A receipt, a report and every day's hours.","receipts.py ."],
+         ["v","Make a video of it.","The receipt printing out, as a vertical clip.","--video"],
+         ["b","Show me all my receipts.","To bill, billed and personal, on one board.","--board"],
+         ["i","Invoice Northwind for this month.","Hours × rate, tax and a daily breakdown, PDF.","--invoice"],
+         ["w","How did my year go?","A story to tap through, and a poster.","--wrapped"],
+         ["s","Share my receipt.","A post per platform and a link that previews it.","--share"]],
+   plugin:"Prefer a plugin?",
+   privacy:"Your prompts and code never leave your machine. Receipts you open here are read in your browser only.",
+   srcExample:"The first receipt is this site's own, the rest are examples. For yours, drag your {code} folder onto this page. Nothing is uploaded.",
+   selfChip:"This site's own receipt",pick:"Choose files",
+   srcMine:n=>`Your receipts: ${n}. Kept in this browser only.`,add:"Add receipts",back:"Back to examples",
+   srcShared:n=>`A shared receipt: ${n}. It travels inside the link, no server keeps it.`,
+   none:"No receipts found in those files.",badLink:"This link could not be opened, showing example receipts.",
+   dropHere:"Drop your receipts: the archive folder or the JSON files in it",mine:"Your data",sharedBadge:"Shared",
+   sharedChip:n=>`Shared receipt · ${n}`,own:"Get your own receipt",github:"Source on GitHub",copy:"Copy",copied:"Copied",other:"TR",otherLabel:"Türkçeye geç"},
+}[LANG==="tr"?"tr":"en"];
+const fmt=m=>`${Math.floor(m/60)}${UI.h} ${String(m%60).padStart(2,"0")}${UI.m}`;
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const usd=v=>"$"+v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const still=matchMedia("(prefers-reduced-motion: reduce)");
+document.documentElement.lang=LANG==="tr"?"tr":"en";
+setTheme(theme);
+themeBtn.addEventListener("click",()=>{setTheme(theme==="dark"?"light":"dark"); try{localStorage.setItem("vr-theme",theme);}catch(e){}});
+document.querySelectorAll("[data-ui]").forEach(el=>{const v=UI[el.dataset.ui]; if(typeof v==="string") el.textContent=v;});
+
+// ---- the public site only: how to start, an example-data badge, a language switch ----
+if(SITE){
+  const st=document.getElementById("start"), more=document.getElementById("more"), lang=document.getElementById("lang"), badge=document.getElementById("badge");
+  st.hidden=false; document.getElementById("foot").hidden=false; more.hidden=false; lang.hidden=false; badge.hidden=false;
+  more.innerHTML=`<span>${esc(UI.more)}<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M4 9l4 4 4-4"/></svg></span>`; badge.textContent=UI.example; lang.textContent=UI.other; lang.setAttribute("aria-label",UI.otherLabel);
+  st.innerHTML=`<h2 class="sh">${esc(UI.start)}</h2><p class="sl">${esc(UI.startLede)}</p>
+    <ol class="steps">${UI.steps.map(([t,d,c],i)=>`<li><span class="sn">${i+1}</span><div class="sb"><b>${esc(t)}</b><span>${esc(d)}</span>
+      <div class="code"><code>${esc(c)}</code><button type="button" data-copy="${i}">${esc(UI.copy)}</button></div></div></li>`).join("")}</ol>
+    <p class="alt">${esc(UI.plugin)} <code>/plugin marketplace add sahmett/vibe-receipts</code> <code>/plugin install vibe-receipts@vibe-receipts</code></p>
+    <p class="alt ask-more"><a href="#sor">${esc(UI.askMore)}</a></p>
+    <footer class="sf"><span>${esc(UI.privacy)}</span><a href="${esc(SITE.github)}" target="_blank" rel="noopener">${esc(UI.github)} ↗</a></footer>`;
+  document.querySelector('nav a[data-view="sor"]').hidden=false;
+  // each card's command: shown short, copied whole (the path is where the install step puts the skill)
+  const RUN="python3 ~/.claude/skills/vibe-receipts/scripts/receipts.py", ARGS={r:".",v:". --video",b:". --board",i:"--invoice Northwind --rate 85",w:"--wrapped",s:". --share"};
+  const SHOWN={i:"--invoice Northwind"};   // what fits on the card; the copy is always the whole command
+  const words=t=>("receipts.py "+t).split(" ").map(w=>`<i>${esc(w)}</i>`).join(" ");
+  const COPY_ICON=`<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.2" y="5.2" width="8.3" height="8.3" rx="2"/><path d="M10.8 5.2V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5.3A1.5 1.5 0 0 0 4 10.8h1.2"/></svg>`;
+  const DONE_ICON=`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8.4l3 3 6.6-6.8"/></svg>`;
+  const asksEl=document.getElementById("asks");
+  asksEl.innerHTML=UI.asks.map(([k,q,d,c])=>`<li class="ask"><div class="art"><div class="pv" aria-hidden="true">${(SITE.art||{})[k]||""}</div>
+    <div class="cmd" data-cmd="${esc(RUN+" "+ARGS[k])}"><code><b>$</b>${words(SHOWN[k]||ARGS[k])}</code><button type="button">${COPY_ICON}<span>${esc(UI.copy)}</span></button></div></div>
+    <div class="tx"><q>${esc(q)}</q><span class="d">${esc(d)}</span><code>${esc(c)}</code></div></li>`).join("");
+  asksEl.addEventListener("click",async e=>{
+    const bar=e.target.closest(".cmd"); if(!bar) return;
+    const btn=bar.querySelector("button"), label=btn.querySelector("span");
+    try{await navigator.clipboard.writeText(bar.dataset.cmd);}
+    catch(err){const r=document.createRange(); r.selectNodeContents(bar.querySelector("code")); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); return;}
+    bar.classList.add("done"); btn.innerHTML=DONE_ICON+`<span>${esc(UI.copied)}</span>`;
+    clearTimeout(bar.t); bar.t=setTimeout(()=>{bar.classList.remove("done"); btn.innerHTML=COPY_ICON+`<span>${esc(UI.copy)}</span>`;},1600);
+  });
+  const toStart=document.getElementById("toStart"); toStart.textContent=UI.toStart;
+  toStart.addEventListener("click",e=>{e.preventDefault(); goStart=true; location.hash="#yazici";});   // the printer page, at its install steps
+  st.querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",async()=>{
+    const code=b.previousElementSibling;
+    try{await navigator.clipboard.writeText(UI.steps[+b.dataset.copy][2]); b.textContent=UI.copied; setTimeout(()=>b.textContent=UI.copy,1600);}
+    catch(e){const r=document.createRange(); r.selectNodeContents(code); const s=getSelection(); s.removeAllRanges(); s.addRange(r);}
+  }));
+  // to the start section: in the middle of the window when it fits, else its top just under the nav
+  more.addEventListener("click",()=>st.scrollIntoView({behavior:still.matches?"auto":"smooth",block:st.offsetHeight<innerHeight?"center":"start"}));
+  lang.addEventListener("click",()=>{location.href=location.pathname+"?lang="+(LANG==="tr"?"en":"tr")+location.hash;});
+}
+
+// a receipt in its own run's language and units, the layout receipts.py prints
+function receipt(r){
+  const L=r.L, f=m=>`${Math.floor(m/60)}${L.h} ${String(m%60).padStart(2,"0")}${L.m}`;
+  const rows=r.items.map(([q,l,m])=>`<span>${Number(q).toLocaleString("en-US")}</span><span>${esc(l)}</span><span class="r">${f(m)}</span>`).join("");
+  const stats=r.stats.map(s=>s?`<div class="row"><span>${esc(s[0])}</span><span>${esc(s[1])}</span></div>`:`<div class="sp"></div>`).join("");
+  return `<div class="rc"><div class="tear t"></div><div class="paper">
+    <div class="hd"><div class="t">VIBE RECEIPTS</div><div class="mu">github.com/sahmett/vibe-receipts</div><div class="mu ls">${esc(L.kind)}</div></div>
+    <div class="hr"></div>
+    <div class="row"><span>${esc(L.project)}</span><span class="nm">${esc(r.name)}</span></div>
+    ${r.built?`<div class="row"><span>${esc(L.built)}</span><span class="nm">${esc(r.built.toUpperCase())}</span></div>`:""}
+    <div class="row"><span>${esc(L.period)}</span><span>${esc(r.period)}</span></div>
+    ${r.active?`<div class="row"><span>${esc(L.active)}</span><span>${esc(r.active)}</span></div>`:""}
+    <div class="hr"></div>
+    <div class="items"><span class="h">${esc(L.qty)}</span><span class="h">${esc(L.item)}</span><span class="h r">${esc(L.time)}</span>${rows}</div>
+    <div class="hr"></div>${stats}<div class="hr2"></div>
+    ${r.value_text?`<div class="val"><span>${esc(L.value)}</span><span>${esc(r.value_text)}</span></div>`:""}
+    <div class="tot"><span>${esc(L.total)}</span><span>${f(r.min)}</span></div>
+    <div class="hr"></div>
+    <div class="row thr"><span>${esc(r.thr[0])}</span><b>${esc(r.thr[1])}</b></div>${r.thr[2]?`<div class="mu">${esc(r.thr[2])}</div>`:""}
+    <div class="ft"><div class="s">* SHOW THE RECEIPTS *</div><div class="bc"></div><div class="mu bn">${esc(r.name.toUpperCase())} · ${esc(r.end)}</div><div class="ty">THANK YOU FOR VIBING</div></div>
+  </div><div class="tear b"></div></div>`;
+}
+const count=r=>r.estimate?`${r.commits} ${UI.commits}`:`${r.prompts.toLocaleString("en-US")} ${UI.prompts}`;
+
+// ---- printer view: the printer, a floor of earlier receipts around it, and the receipt it prints. ----
+// Every sheet is one receipt laid in the printer's 3D world, bent along its length: drawn as horizontal strips,
+// each a flat piece of the bend. The printed receipt leaves the slot leaning back, curls over under its own
+// weight, is torn off, tips back over the printer and drops onto the floor behind it, where it stays.
+const G=PR.geo, VS=2.4, RW=34.67*15, WD=G.world;    // video px per viewBox unit; a receipt's own width in px; the printer's sizes
+const q=G.paperW/RW;                                 // world units per receipt px (every receipt is 80 mm wide)
+const fig=document.getElementById("fig"), readout=document.getElementById("readout"), rtext=readout.querySelector("span");
+const labelFig=()=>fig.setAttribute("aria-label",UI.figLabel(R[0].name,fmt(R[0].min)));   // R[0] is the newest; no title tooltip, it would sit over the caption
+labelFig();
+const cap=document.querySelector(".cap");
+let VB, S=1, lamps=[], LY={}, built=false;
+
+// world (x across, y toward the viewer, z up) to video px
+const sp=p=>[G.zero[0]+p[0]*G.u[0]+p[1]*G.y[0]+p[2]*G.z[0],G.zero[1]+p[0]*G.u[1]+p[1]*G.y[1]+p[2]*G.z[1]];
+const sv=d=>[d[0]*G.u[0]+d[1]*G.y[0]+d[2]*G.z[0],d[0]*G.u[1]+d[1]*G.y[1]+d[2]*G.z[1]];
+const add=(a,b,k=1)=>[a[0]+b[0]*k,a[1]+b[1]*k,a[2]+b[2]*k];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const turn=(t,n,a)=>{const c=Math.cos(a),s=Math.sin(a); return [t[0]*c+n[0]*s,t[1]*c+n[1]*s,t[2]*c+n[2]*s];};
+const rz=(d,a)=>{const c=Math.cos(a),s=Math.sin(a); return [d[0]*c-d[1]*s,d[0]*s+d[1]*c,d[2]];};
+const lerp=(a,b,k)=>a+(b-a)*k, lerp3=(a,b,k)=>[lerp(a[0],b[0],k),lerp(a[1],b[1],k),lerp(a[2],b[2],k)];
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)), smooth=k=>k*k*(3-2*k), easeOut=k=>1-(1-k)*(1-k);
+const RAD=Math.PI/180, LIGHT=(()=>{const l=[-.35,.55,.76], n=Math.hypot(...l); return l.map(x=>x/n);})();
+
+// A sheet: a receipt, its strips, and a pose: base point B (the receipt's bottom-left corner), X across it,
+// T0 up it at the base, N0 the way it bends, bend(s) the angle at s world units from the base, and off,
+// how far up from the base the receipt's top is (less than its length while it is still in the printer).
+function makeSheet(r,layer,band,scale=1){   // scale < 1: a smaller receipt, for the floor in the background
+  const el=document.createElement("div"); el.className="sheet3"; layer.appendChild(el);
+  el.innerHTML=`<div class="strip">${receipt(r)}<i></i></div>`;
+  const sq=q*scale, H=el.querySelector(".rc").getBoundingClientRect().height||900, L=H*sq, html=el.innerHTML;
+  const bands=band(H,L,sq); el.innerHTML=bands.map(()=>html).join("");
+  const strips=[...el.children].map((s,i)=>({el:s,shade:s.querySelector("i"),j0:bands[i][0],j1:bands[i][1]}));
+  return {r,el,H,L,q:sq,W:G.paperW*scale,strips,pose:null};
+}
+const uniform=h=>(H)=>Array.from({length:Math.ceil(H/h)},(_,i)=>[i*h,Math.min(H,(i+1)*h)]);
+function endBands(lift){   // a flat sheet on the floor: one strip for the flat part, fine strips where its end lifts or rolls
+  return (H,L,sq)=>{const jl=Math.min(H,lift/sq), out=[]; for(let j=0;j<jl;j+=22) out.push([j,Math.min(jl,j+22)]); if(jl<H) out.push([jl,H]); return out;};
+}
+function place(sh){
+  const {B,X,T0,N0,bend,off,clip}=sh.pose, q=sh.q, k=S/VS, ox=VB[0]*S, oy=VB[1]*S;
+  const n=Math.max(1,Math.ceil(off)), P=[B];
+  for(let i=0;i<n;i++) P.push(add(P[i],turn(T0,N0,bend(i+.5))));
+  const at=s=>{if(s<=0) return add(B,T0,s); const i=Math.min(n-1,Math.floor(s)), f=s-i; return lerp3(P[i],P[i+1],f);};
+  const dX=sv(X), out=off/q;
+  for(const st of sh.strips){
+    if(clip&&st.j0>=out){st.el.style.visibility="hidden"; continue;}
+    st.el.style.visibility="";
+    const jm=(st.j0+st.j1)/2, sm=off-jm*q, Tm=turn(T0,N0,bend(Math.max(0,sm))), Pm=at(sm), p=sp(Pm), dT=sv(Tm);
+    const a=q*dX[0], b=q*dX[1], c=-q*dT[0], d=-q*dT[1];
+    st.el.style.transform=`matrix(${a*k},${b*k},${c*k},${d*k},${(p[0]+jm*q*dT[0])*k-ox},${(p[1]+jm*q*dT[1])*k-oy})`;
+    const lo=Math.max(0,st.j0-.8), hi=Math.min(sh.H,clip?Math.min(st.j1+.8,out):st.j1+.8);
+    st.el.style.clipPath=`inset(${lo}px 0 ${Math.max(0,sh.H-hi)}px 0)`;
+    const front=a*d-b*c>0, nrm=cross(Tm,X), lit=dot(front?nrm:nrm.map(v=>-v),LIGHT);   // the face we see, and how much light it gets
+    st.el.classList.toggle("back",!front);
+    const slot=sh.pose.slotShade?Math.max(0,1-Math.max(0,sm)/8)*.3:0;
+    st.shade.style.opacity=(clamp((.86-lit)*.55,0,.3)+slot).toFixed(3);
+    st.el.style.zIndex=Math.round(500+dot(add(Pm,X,sh.W/2),G.view)*2);
+  }
+}
+
+// the floor around the printer: real receipts, near it and up to about a quarter of the window away
+const FLOOR=[   // centre (world), heading in degrees (-90 = its top points away from you), how its end lifts
+  {c:[-150,58],h:-118,end:"lift"}, {c:[160,40],h:-58,end:"roll"}, {c:[-196,-62],h:-102,end:"lift"},
+  {c:[206,-84],h:-74,end:"roll"}, {c:[-270,8],h:-152,end:"lift"}, {c:[282,-30],h:-28,end:"lift"},
+];
+const FLOOR_SCALE=.46;   // the floor is the background: smaller receipts, a little dimmer
+function floorPose(sh,cx,cy,headDeg,end){
+  const h=headDeg*RAD, T0=[Math.cos(h),Math.sin(h),0], X=[-Math.sin(h),Math.cos(h),0], L=sh.L;
+  const B=add(add([cx,cy,.6],T0,-L/2),X,-sh.W/2);
+  const R0=3.4, Lr=2*Math.PI*R0*1.25;   // a roll: about one and a quarter turns at the top end
+  const bend=end==="roll"?(s=>s>L-Lr?(s-(L-Lr))/R0:0):(s=>.32*smooth(clamp((s-(L-12))/12)));
+  return {B,X,T0,N0:[0,0,1],bend,off:L,clip:false};
+}
+const behind=sh=>dot(add(sh.pose.B,sh.pose.T0,sh.L/2),G.view)<dot([0,-10,0],G.view);   // drawn behind the printer or in front of it
+
+// The printed receipt. Thermal paper keeps the curl of its roll: it leaves the slot nearly upright, runs straight
+// for a few centimetres along the paper guide, then curls back with the roll's radius into a loose tube that
+// tightens a little as it wraps (so its turns never lie on each other). The tip traces that curl as the paper
+// feeds, and the receipt stays there, curled on the printer, as on a real one.
+const SLOT=[-G.paperW/2,WD.slotY,WD.top], LEAN=10*RAD, STRAIGHT=38, R0=26, TIGHT=.035;
+const curlAt=s=>s<=STRAIGHT?0:-Math.log(Math.max(.2,1-TIGHT*(s-STRAIGHT)/R0))/TIGHT;   // the turn so far: the integral of 1/radius
+function printPose(sh,o){
+  const T0=[0,-Math.sin(LEAN),Math.cos(LEAN)], N0=[0,-Math.cos(LEAN),-Math.sin(LEAN)];   // up the paper, and back over the printer
+  return {B:SLOT,X:[1,0,0],T0,N0,bend:curlAt,off:o,clip:true,slotShade:true};
+}
+
+let floor=[], current=null, queue=[], printed=0;
+function buildFigure(){
+  fig.innerHTML=`<div class="layer floorlayer" id="lyBack"></div>`+PR.back+`<div class="layer" id="lyMid"></div>`+PR.front+
+    `<div class="layer floorlayer" id="lyFront"></div>`+G.leds.slice(0,2).map(()=>`<span class="lamp"></span>`).join("");
+  LY={back:fig.querySelector("#lyBack"),mid:fig.querySelector("#lyMid"),front:fig.querySelector("#lyFront")};
+  lamps=[...fig.querySelectorAll(".lamp")];
+  // the floor: the receipts after the newest one, as many as there are spots (repeating if the archive is small)
+  const others=SOURCE==="shared"?EXAMPLES:R.length>1?R.slice(1):R;   // a shared receipt prints among the examples
+  floor=FLOOR.map((spot,i)=>{const sh=makeSheet(others[i%others.length],LY.back,endBands(spot.end==="roll"?34:12),FLOOR_SCALE); sh.pose=floorPose(sh,spot.c[0],spot.c[1],spot.h,spot.end); sh.el.classList.add("floor","far"); return sh;});
+  floor.forEach(sh=>{if(!behind(sh)) LY.front.appendChild(sh.el);});
+  queue=[...R];
+  // the box: the printer and its curled receipt; the floor in the background may run off the sides
+  VB=null; current=makeSheet(queue[0],LY.mid,uniform(14));
+  let top=Infinity, bottom=1868/VS;
+  const probe=(pose,sh)=>{sh.pose=pose; const {B,T0,N0,bend,off}=pose; let p=B; for(let s=0;s<off;s+=6){p=add(p,turn(T0,N0,bend(s+3)),6); top=Math.min(top,sp(p)[1]/VS); top=Math.min(top,sp(add(p,pose.X,G.paperW))[1]/VS);}};
+  probe(printPose(current,current.L),current);
+  top-=10;
+  VB=[26,top,1080/VS-52,bottom-top];
+  fig.querySelectorAll("svg").forEach(s=>{s.setAttribute("viewBox",VB.join(" ")); s.removeAttribute("width"); s.removeAttribute("height"); s.setAttribute("preserveAspectRatio","xMidYMid meet");});
+  current.pose=printPose(current,0);
+  built=true; size();
+  if(!buildFigure.wired){addEventListener("resize",size); buildFigure.wired=true;}
+}
+function size(){
+  const room=innerHeight-104-cap.offsetHeight-28;   // nav and padding above, the caption below
+  const w=Math.max(200,Math.min(innerWidth-32,600,room*VB[2]/VB[3]));
+  S=w/VB[2]; fig.style.width=w+"px"; fig.style.height=(VB[3]*S)+"px"; paintAll();
+}
+let feed=0;
+function paintAll(){
+  if(!built) return;
+  floor.forEach(place); if(current) place(current);
+  lamps.forEach((el,i)=>{const [x,y]=G.leds[i]; el.style.left=((x/VS-VB[0])*S)+"px"; el.style.top=((y/VS-VB[1])*S)+"px"; el.style.setProperty("--on",i?feed:1);});
+}
+
+// one print: the paper feeds and curls, then stays; a click prints the next receipt in its place
+const ACC=.14, feedAt=x=>{const a=ACC, k=1/(1-a); return x<a?k*x*x/(2*a):x>1-a?1-k*(1-x)*(1-x)/(2*a):k*(x-a/2);};
+let t0=0, raf=0, DP=4, printing=false;
+function say(text,live){rtext.textContent=text; readout.classList.toggle("live",!!live);}
+const done=sh=>`${fmt(sh.r.min)} · ${count(sh.r)}`;
+function run(now){
+  const t=(now-t0)/1000, idle=.5, end=idle+DP, sh=current;
+  feed=0;
+  if(t<idle){sh.pose=printPose(sh,0); say(UI.ready);}
+  else if(t<end){const x=feedAt((t-idle)/DP); sh.pose=printPose(sh,sh.L*x); feed=.75+.25*Math.sin(t*44); say(`${UI.printing} · %${Math.round(x*100)}`,true);}   // the readout has a fixed width and grows to the right only
+  else {sh.pose=printPose(sh,sh.L); paintAll(); say(done(sh)); printing=false; return;}
+  paintAll(); raf=requestAnimationFrame(run);
+}
+function startPrint(){
+  if(still.matches){current.pose=printPose(current,current.L); paintAll(); say(done(current)); return;}
+  if(printing) return;
+  printing=true; DP=Math.min(6,Math.max(3.4,2.2+current.r.items.length*.35));
+  t0=performance.now(); cancelAnimationFrame(raf); raf=requestAnimationFrame(run);
+}
+fig.addEventListener("click",()=>{   // the next receipt replaces the curled one
+  if(printing||still.matches) return;
+  printed++; current.el.remove(); current=makeSheet(queue[printed%queue.length],LY.mid,uniform(14)); current.pose=printPose(current,0); paintAll(); startPrint();
+});
+
+// ---- board view ----
+const COLS=[{k:"due",dot:"half"},{k:"paid",dot:"full"},{k:"personal",dot:"dash"}];
+// A status changed here is kept in this browser, until a run with --status sets a new one for that receipt.
+const SAVE="vr-board-status";
+let saved={}; try{saved=JSON.parse(localStorage.getItem(SAVE)||"{}")||{};}catch(e){saved={};}
+const applyStatuses=()=>R.forEach(r=>{const s=saved[r.key]; r.shown=s&&s.base===r.status?s.s:r.status;});
+applyStatuses();
+function setStatus(r,k){r.shown=k; saved[r.key]={s:k,base:r.status}; try{localStorage.setItem(SAVE,JSON.stringify(saved));}catch(e){}}
+// The order of the cards in each column, as you left them by dragging; cards never placed keep their date order after them.
+const ORDER="vr-board-order";
+let order={}; try{order=JSON.parse(localStorage.getItem(ORDER)||"{}")||{};}catch(e){order={};}
+const ranked=(items,k)=>{const o=order[k]||[], at=r=>{const i=o.indexOf(r.key); return i<0?1e6+items.indexOf(r):i;}; return [...items].sort((a,b)=>at(a)-at(b));};
+let period="q";
+const daysAgo=n=>{const d=new Date(TODAY+"T12:00:00"); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10);};
+const inPeriod=r=>period==="all"?true:period==="month"?r.end>=TODAY.slice(0,7)+"-01":r.end>=daysAgo(90);
+const periodsEl=document.getElementById("periods");
+periodsEl.setAttribute("aria-label",UI.period);
+periodsEl.innerHTML=UI.periods.map(([k,l])=>`<button type="button" data-p="${k}" aria-pressed="${k===period}">${esc(l)}</button>`).join("");
+function setPeriod(k){period=k; periodsEl.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.p===k)));}
+periodsEl.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{setPeriod(b.dataset.p); closeSheet(true); board(true);}));
+
+function card(r,i){
+  const mx=Math.max(1,...r.items.map(x=>x[2]));
+  const bars=r.items.slice(-12).map(x=>`<i style="height:${Math.max(12,x[2]/mx*100)}%"></i>`).join("");
+  return `<button class="tk" type="button" draggable="true" data-key="${esc(r.key)}" style="--i:${i}" aria-label="${esc(r.name)}, ${fmt(r.min)}, ${UI.open}"><div class="face">
+    <div class="top"><span class="nm">${esc(r.name)}</span>${r.client?`<span class="cl">${esc(r.client)}</span>`:""}</div>
+    <div class="pd">${esc(r.period)}</div>
+    <div class="mid"><span class="hrs">${fmt(r.min)}</span><span class="bars" aria-hidden="true">${bars}</span></div>
+    <div class="meta"><span>${r.estimate?UI.est:count(r)}</span><span>${r.value_text?esc(r.value_text):"—"}</span></div>
+  </div></button>`;
+}
+const colsEl=document.getElementById("cols");
+function board(enter){
+  const list=R.filter(inPeriod), sum=k=>list.filter(r=>r.shown===k).reduce((s,r)=>s+r.min,0);
+  const vals=[fmt(list.reduce((s,r)=>s+r.min,0)),fmt(sum("due")),usd(list.reduce((s,r)=>s+(r.value||0),0)),String(list.length)];
+  document.getElementById("metrics").innerHTML=UI.metrics.map((l,i)=>`<div><span>${esc(l)}</span><b>${vals[i]}</b></div>`).join("");
+  let i=0;
+  colsEl.innerHTML=COLS.map(c=>{
+    const items=ranked(list.filter(r=>r.shown===c.k),c.k);
+    return `<section class="col" data-k="${c.k}" aria-label="${esc(UI.cols[c.k])}"><div class="colh"><span class="dot ${c.dot}"></span>${esc(UI.cols[c.k])}<span class="n">${items.length}</span><span class="h">${fmt(items.reduce((s,r)=>s+r.min,0))}</span></div>
+      <div class="stack">${items.length?items.map(r=>card(r,i++)).join(""):`<div class="empty">${esc(UI.empty)}</div>`}</div></section>`;
+  }).join("");
+  colsEl.classList.toggle("enter",!!enter&&!still.matches);
+  if(sheet) document.querySelector(`.tk[data-key="${CSS.escape(sheet.key)}"]`)?.classList.add("away");
+  wire();
+}
+let dragKey=null, dragEl=null, slot=null, dropped=false;
+const fine=matchMedia("(hover:hover) and (pointer:fine)");
+// moves cards with a short glide instead of a jump: where they were, the change, then from there to where they are now
+function flip(change){
+  const els=[...colsEl.querySelectorAll(".tk:not(.lifted)")], was=new Map(els.map(e=>[e,e.getBoundingClientRect().top]));
+  change();
+  if(still.matches) return;
+  els.forEach(e=>{const d=was.get(e)-e.getBoundingClientRect().top; if(Math.abs(d)>.5) e.animate([{transform:`translateY(${d}px)`},{transform:"none"}],{duration:220,easing:"cubic-bezier(.2,.8,.2,1)"});});
+}
+const nextCard=n=>{n=n.nextElementSibling; while(n&&!(n.matches(".tk")&&!n.classList.contains("lifted"))) n=n.nextElementSibling; return n;};
+function placeSlot(col,y){   // the slot goes before the first card whose middle is below the pointer
+  const stack=col.querySelector(".stack"), cards=[...stack.querySelectorAll(".tk:not(.lifted)")];
+  const before=cards.find(c=>{const b=c.getBoundingClientRect(); return y<b.top+b.height/2;})||null;
+  if(slot.parentNode===stack&&nextCard(slot)===before) return;
+  const fresh=slot.parentNode!==stack;
+  flip(()=>{colsEl.querySelectorAll(".stack.has-slot").forEach(x=>x.classList.remove("has-slot")); stack.insertBefore(slot,before); stack.classList.add("has-slot");});
+  if(fresh&&!still.matches) slot.animate([{opacity:0,transform:"scale(.97)"},{opacity:1,transform:"none"}],{duration:180,easing:"ease-out"});
+}
+function wire(){
+  colsEl.querySelectorAll(".tk").forEach(el=>{
+    el.addEventListener("click",()=>openSheet(el));
+    el.addEventListener("dragstart",e=>{
+      closeSheet(true); el.style.transform=""; dragKey=el.dataset.key; dragEl=el; dropped=false;
+      e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain",dragKey);
+      slot=document.createElement("div"); slot.className="slot"; slot.style.height=el.offsetHeight+"px"; slot.setAttribute("aria-hidden","true");
+      // the browser has taken its picture of the card by the next frame: then the card lifts out and its place stays open
+      requestAnimationFrame(()=>{if(dragEl!==el) return; el.parentNode.insertBefore(slot,el); el.classList.add("lifted"); el.parentNode.classList.add("has-slot");});
+    });
+    el.addEventListener("dragend",()=>{   // let go anywhere but a column: the card goes back where it was
+      if(!dropped&&dragEl===el) flip(()=>{slot?.remove(); el.classList.remove("lifted"); colsEl.querySelectorAll(".stack.has-slot").forEach(x=>x.classList.remove("has-slot"));});
+      colsEl.querySelectorAll(".col.over").forEach(c=>c.classList.remove("over")); slot=null; dragEl=null; dragKey=null;
+    });
+    // a slight tilt toward the pointer, like picking up a slip of paper
+    el.addEventListener("pointermove",e=>{
+      if(!fine.matches||still.matches||dragKey) return;
+      const b=el.getBoundingClientRect(), x=(e.clientX-b.left)/b.width-.5, y=(e.clientY-b.top)/b.height-.5;
+      el.style.transform=`rotateX(${(-y*6).toFixed(2)}deg) rotateY(${(x*8).toFixed(2)}deg) translateZ(6px)`;
+    });
+    el.addEventListener("pointerleave",()=>{el.style.transform="";});
+  });
+  colsEl.querySelectorAll(".col").forEach(col=>{
+    col.addEventListener("dragover",e=>{if(dragKey&&slot){e.preventDefault(); e.dataTransfer.dropEffect="move"; col.classList.add("over"); placeSlot(col,e.clientY);}});
+    col.addEventListener("dragleave",e=>{if(!col.contains(e.relatedTarget)) col.classList.remove("over");});
+    col.addEventListener("drop",e=>{
+      e.preventDefault(); col.classList.remove("over");
+      const key=dragKey||e.dataTransfer.getData("text/plain"), r=R.find(x=>x.key===key); if(!r||!slot) return;
+      dropped=true; const k=col.dataset.k, stack=col.querySelector(".stack");
+      if(slot.parentNode!==stack) placeSlot(col,e.clientY);
+      // the column's order is now what is on screen, the receipt in the slot; it leaves every other column's order
+      const keys=[]; [...stack.children].forEach(n=>{if(n===slot) keys.push(key); else if(n.matches(".tk")&&!n.classList.contains("lifted")) keys.push(n.dataset.key);});
+      Object.keys(order).forEach(c=>{if(c!==k) order[c]=order[c].filter(x=>x!==key);});
+      order[k]=[...keys,...(order[k]||[]).filter(x=>!keys.includes(x))]; try{localStorage.setItem(ORDER,JSON.stringify(order));}catch(err){}
+      if(r.shown!==k) setStatus(r,k);
+      board(false);
+      const placed=colsEl.querySelector(`.tk[data-key="${CSS.escape(key)}"]`);   // it settles into the slot
+      if(placed&&!still.matches) placed.animate([{transform:"translateY(-6px) scale(1.025)"},{transform:"none"}],{duration:340,easing:"cubic-bezier(.2,.9,.25,1.12)"});
+    });
+  });
+}
+
+// ---- the receipt flips out of its card and floats beside it; it flips back in on close ----
+let sheet=null;   // {key, el, cardEl}
+const P="perspective(1400px)";
+function fitSheet(el){
+  let fs=11.4; el.querySelector(".rc").style.setProperty("--fs",fs+"px");
+  const h=el.getBoundingClientRect().height, w=34.67*fs, room=innerHeight-56;
+  const k=Math.min(1,room/h,(innerWidth-32)/w); fs*=k; el.querySelector(".rc").style.setProperty("--fs",fs+"px");
+  el.style.width=(34.67*fs)+"px";
+  return el.getBoundingClientRect();
+}
+function placeFor(card,b){   // the middle of the window
+  const c=card.getBoundingClientRect();
+  return {left:Math.max(16,(innerWidth-b.width)/2),top:Math.max(16,(innerHeight-b.height)/2),c};
+}
+const veil=document.createElement("div"); veil.className="veil"; veil.setAttribute("aria-hidden","true"); document.body.appendChild(veil);
+["wheel","touchmove"].forEach(n=>veil.addEventListener(n,e=>e.preventDefault(),{passive:false}));   // the page stays put behind it, with no scrollbar change
+// A spring follows the pointer: up to 9° left and right, 6° up and down; the shadow moves the other way.
+function tiltable(el){
+  if(!fine.matches||still.matches) return null;
+  const tw=el.querySelector(".tilt"), sh=el.querySelector(".sheet"), paper=el.querySelector(".paper");
+  paper.insertAdjacentHTML("beforeend",`<div class="shade"></div><div class="gloss"></div>`);
+  const shade=paper.querySelector(".shade"), gloss=paper.querySelector(".gloss");
+  let tx=0,ty=0,x=0,y=0,vx=0,vy=0,gx=.5,gy=.3,raf=0,on=false;
+  const step=()=>{
+    vx=(vx+(tx-x)*.12)*.74; vy=(vy+(ty-y)*.12)*.74; x+=vx; y+=vy;
+    tw.style.transform=`perspective(1000px) rotateX(${y.toFixed(2)}deg) rotateY(${x.toFixed(2)}deg)`;
+    sh.style.setProperty("--sx",(-x*1.6).toFixed(1)+"px"); sh.style.setProperty("--sy",(28+y*1.4).toFixed(1)+"px");
+    const a=Math.min(.16,Math.abs(x)*.016);
+    shade.style.background=`linear-gradient(90deg,rgba(0,0,0,${x>0?a:0}),transparent 45%,transparent 55%,rgba(0,0,0,${x<0?a:0}))`;
+    gloss.style.background=`radial-gradient(70% 55% at ${(gx*100).toFixed(1)}% ${(gy*100).toFixed(1)}%,rgba(255,255,255,.9),rgba(255,255,255,0) 70%)`;
+    if(on||Math.abs(tx-x)+Math.abs(ty-y)+Math.abs(vx)+Math.abs(vy)>.02) raf=requestAnimationFrame(step); else {raf=0; tw.style.transform="";}
+  };
+  const kick=()=>{if(!raf) raf=requestAnimationFrame(step);};
+  el.addEventListener("pointermove",e=>{
+    const b=el.getBoundingClientRect(), px=(e.clientX-b.left)/b.width, py=(e.clientY-b.top)/b.height;
+    if(px<0||px>1||py<0||py>1) return;
+    on=true; el.classList.add("tilting"); tx=(px-.5)*18; ty=-(py-.5)*12; gx=px; gy=py; kick();
+  });
+  el.addEventListener("pointerleave",()=>{on=false; el.classList.remove("tilting"); tx=0; ty=0; kick();});
+  return {stop(){on=false; cancelAnimationFrame(raf); raf=0; tw.style.transform=""; el.classList.remove("tilting");}};
+}
+function openSheet(cardEl){
+  const key=cardEl.dataset.key, r=R.find(x=>x.key===key);
+  if(sheet&&sheet.key===key){closeSheet(); return;}
+  closeSheet(true);
+  cardEl.style.transition="none"; cardEl.style.transform="";
+  const el=document.createElement("div"); el.className="float"; el.setAttribute("role","dialog"); el.setAttribute("aria-modal","true"); el.setAttribute("aria-label",r.name); el.tabIndex=-1;
+  el.innerHTML=`<div class="sheet"><div class="tilt">${receipt(r)}</div></div>`;
+  el.style.visibility="hidden"; document.body.appendChild(el);
+  const b=fitSheet(el), {left,top,c}=placeFor(cardEl,b);
+  el.style.left=left+"px"; el.style.top=top+"px"; el.style.visibility="";
+  sheet={key,el,cardEl,left,top,tilt:tiltable(el)};
+  veil.classList.add("on");
+  if(still.matches){cardEl.classList.add("away"); el.animate([{opacity:0},{opacity:1}],{duration:160}); el.focus({preventScroll:true}); return;}
+  // 1) the card turns away on its own axis; 2) the receipt turns in from the card's spot, growing to full size
+  const from=`translate(${c.left-left}px,${c.top-top}px) scale(${c.width/b.width},${c.height/b.height})`;
+  cardEl.animate([{transform:`${P} rotateY(0deg)`},{transform:`${P} rotateY(90deg)`}],{duration:200,easing:"cubic-bezier(.5,0,.9,.5)",fill:"forwards"})
+    .finished.then(()=>{cardEl.classList.add("away"); cardEl.getAnimations().forEach(a=>a.cancel());});
+  el.animate([   // per-step easing, so the sheet waits edge-on until the card has turned away (200 ms)
+    {transform:`${from} ${P} rotateY(-90deg)`,offset:0},
+    {transform:`${from} ${P} rotateY(-90deg)`,offset:.26,easing:"cubic-bezier(.2,.8,.25,1)"},
+    {transform:`translate(0,0) scale(1) ${P} rotateY(10deg) rotateZ(-1.2deg)`,offset:.8,easing:"ease-in-out"},
+    {transform:`translate(0,0) scale(1) ${P} rotateY(0deg) rotateZ(0deg)`,offset:1}],
+    {duration:760});
+  setTimeout(()=>el.focus({preventScroll:true}),400);
+}
+function closeSheet(instant,byKey){
+  if(!sheet) return;
+  const {el,key,tilt}=sheet; sheet=null; if(tilt) tilt.stop();
+  veil.classList.remove("on");
+  const cardEl=document.querySelector(`.tk[data-key="${CSS.escape(key)}"]`);
+  const done=()=>{el.remove(); if(cardEl){cardEl.classList.remove("away"); cardEl.style.transition="";}};
+  if(instant||still.matches||!cardEl){done(); return;}
+  const b=el.getBoundingClientRect(), c=cardEl.getBoundingClientRect();
+  const to=`translate(${c.left-b.left}px,${c.top-b.top}px) scale(${c.width/b.width},${c.height/b.height})`;
+  el.animate([{transform:`translate(0,0) scale(1) ${P} rotateY(0deg)`},{transform:`${to} ${P} rotateY(90deg)`}],{duration:380,easing:"cubic-bezier(.6,0,.7,.4)",fill:"forwards"})
+    .finished.then(()=>{
+      el.remove(); cardEl.classList.remove("away");
+      cardEl.animate([{transform:`${P} rotateY(-90deg)`},{transform:`${P} rotateY(6deg)`,offset:.7},{transform:`${P} rotateY(0deg)`}],{duration:320,easing:"cubic-bezier(.2,.8,.3,1)"})
+        .finished.then(()=>{cardEl.style.transition="";});
+      if(byKey) cardEl.focus({preventScroll:true});   // back to the card for keyboard users; a click leaves no focus ring
+    });
+}
+addEventListener("pointerdown",e=>{if(sheet&&!sheet.el.contains(e.target)) closeSheet();});   // a click anywhere off the receipt closes it
+addEventListener("keydown",e=>{if(e.key==="Escape"&&sheet) closeSheet(false,true);});
+addEventListener("resize",()=>{   // keep the open receipt in the middle, sized to the new window
+  if(!sheet) return; const b=fitSheet(sheet.el), {left,top}=placeFor(sheet.cardEl,b);
+  sheet.el.style.left=left+"px"; sheet.el.style.top=top+"px";
+});
+
+// ---- the public site: your own receipts, read in this browser, or one shared receipt carried in the link ----
+// Nothing is uploaded. Dropped files are read here and kept in this browser's storage until "back to examples".
+// A shared receipt is in the link: after #r= (--link: browsers never send it to the server) or after /r/
+// (--share: the server reads it to draw the link's preview, and stores nothing).
+const MINE="vr-mine";
+const today=()=>{const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
+const txt=(v,n)=>String(v??"").slice(0,n), num=v=>{const x=Number(v); return Number.isFinite(x)?x:0;}, day=v=>/^\d{4}-\d{2}-\d{2}$/.test(v)?v:"";
+// a receipt from outside (a file, a link) in the archive's shape, every field the type the page expects
+function clean(r){
+  if(!r||typeof r!=="object"||!Array.isArray(r.items)||!r.items.length||!r.L||typeof r.L!=="object") return null;
+  const end=day(r.end)||day(r.start); if(!end) return null;
+  const start=day(r.start)||end, name=txt(r.name,80)||"receipt", L={};
+  ["kind","project","built","period","active","qty","item","time","value","total","h","m"].forEach(k=>L[k]=txt(r.L[k],40));
+  const items=r.items.slice(0,400).filter(Array.isArray).map(i=>[Math.max(0,Math.round(num(i[0]))),txt(i[1],60),Math.max(0,Math.round(num(i[2])))]);
+  const status=["due","paid","personal"].includes(r.status)?r.status:r.client?"due":"personal";
+  return {key:txt(r.key,200)||`${name}_${start}_${end}`,name,built:r.built?txt(r.built,60):null,period:txt(r.period,80),active:r.active?Math.round(num(r.active)):null,
+    start,end,items,min:Math.round(num(r.min))||items.reduce((s,i)=>s+i[2],0),prompts:Math.round(num(r.prompts)),commits:Math.round(num(r.commits)),estimate:!!r.estimate,
+    stats:(Array.isArray(r.stats)?r.stats:[]).slice(0,20).map(x=>Array.isArray(x)?[txt(x[0],40),txt(x[1],80)]:null),
+    value:r.value==null?null:num(r.value),value_text:r.value_text?txt(r.value_text,30):null,thr:[0,1,2].map(i=>txt((Array.isArray(r.thr)?r.thr:[])[i],120)),
+    client:r.client?txt(r.client,60):null,status,lang:r.lang==="tr"?"tr":"en",made:txt(r.made,30),L};
+}
+const newest=list=>list.sort((a,b)=>(b.end+b.start+b.made).localeCompare(a.end+a.start+a.made));
+let note="";   // a one-off message in the source bar: nothing found, a broken link
+function use(list,source){
+  R=list; SOURCE=source; TODAY=source==="example"?SITE.today:today();
+  if(source==="mine"){try{localStorage.setItem(MINE,JSON.stringify(list));}catch(e){}}
+  if(source==="example"){try{localStorage.removeItem(MINE);}catch(e){}}
+  applyStatuses(); labelFig();
+  setPeriod(source==="shared"||!R.some(inPeriod)?"all":"q");   // never open on an empty board
+  const badge=document.getElementById("badge"), chip=document.getElementById("shared"), more=document.getElementById("more");
+  badge.textContent=source==="mine"?UI.mine:source==="shared"?UI.sharedBadge:UI.example;
+  const own=source==="example"&&R[0]&&R[0].self;   // the site's own receipt, measured with Slipt itself
+  chip.hidden=!(source==="shared"||own); chip.textContent=source==="shared"?UI.sharedChip(R[0].name):own?UI.selfChip:"";
+  more.querySelector("span").firstChild.textContent=source==="shared"?UI.own:UI.more;
+  srcBar();
+}
+function srcBar(){
+  const el=document.getElementById("src"); el.hidden=false;
+  const msg=SOURCE==="mine"?esc(UI.srcMine(R.length)):SOURCE==="shared"?esc(UI.srcShared(R[0].name)):esc(UI.srcExample).replace("{code}","<code>~/vibe-receipts/archive</code>");
+  const acts=SOURCE==="mine"?`<button type="button" data-a="pick">${esc(UI.add)}</button><button type="button" data-a="back">${esc(UI.back)}</button>`
+    :SOURCE==="shared"?`<button type="button" data-a="back">${esc(UI.back)}</button>`:`<button type="button" data-a="pick">${esc(UI.pick)}</button>`;
+  el.innerHTML=`<span>${note?`<span class="err">${esc(note)}</span> `:""}${msg}</span><span class="acts">${acts}</span>`;
+}
+function rebuild(){   // the visible view again, with the new receipts; the printer starts over
+  cancelAnimationFrame(raf); printing=false; printed=0; closeSheet(true);
+  if(built){built=false; current=null; floor=[];}
+  boardShown=false; route();
+}
+async function readFiles(files){
+  const got=[];
+  for(const f of files){
+    if(!/\.json$/i.test(f.name)||f.size>2e6) continue;
+    try{const r=clean(JSON.parse(await f.text())); if(r) got.push(r);}catch(e){}
+  }
+  if(!got.length){note=UI.none; srcBar(); return;}
+  const keep=new Map((SOURCE==="mine"?R:[]).map(r=>[r.key,r]));   // adding to your own receipts; a newer run of the same range wins
+  got.forEach(r=>{const o=keep.get(r.key); if(!o||r.made>=o.made) keep.set(r.key,r);});
+  note=""; if(SOURCE==="shared") leaveShared("#pano");
+  use(newest([...keep.values()]),"mine"); rebuild();
+}
+// a dropped folder: every .json in it and its subfolders (the archive folder, or ~/vibe-receipts itself)
+async function entries(items){
+  const out=[], walk=async(en,depth)=>{
+    if(en.isFile){if(/\.json$/i.test(en.name)) out.push(await new Promise((ok,no)=>en.file(ok,no)).catch(()=>null));}
+    else if(en.isDirectory&&depth<3){const rd=en.createReader(); let batch;
+      do{batch=await new Promise((ok,no)=>rd.readEntries(ok,no)).catch(()=>[]); for(const e of batch) await walk(e,depth+1);}while(batch.length);}
+  };
+  for(const en of items) if(en) await walk(en,0);
+  return out.filter(Boolean);
+}
+const sharedPath=()=>location.pathname.match(/^\/r\/([A-Za-z0-9_-]{8,20000})\/?$/);
+function leaveShared(hash){history.replaceState(null,"",(sharedPath()?"/":location.pathname)+location.search+hash);}   // the address no longer names the receipt
+const unpack=async b64=>{
+  const bin=atob(b64.replace(/-/g,"+").replace(/_/g,"/")), bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
+  const text=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+  return clean(JSON.parse(text.slice(0,2e5)));
+};
+async function openSite(){
+  const m=location.hash.match(/^#r=([A-Za-z0-9_-]{8,20000})$/)||sharedPath();
+  if(m){
+    let r=null; try{if("DecompressionStream" in window) r=await unpack(m[1]);}catch(e){}
+    if(r){r.client=null; r.status="personal"; use([r],"shared"); return;}
+    note=UI.badLink;
+  }
+  let mine=null; try{mine=JSON.parse(localStorage.getItem(MINE)||"null");}catch(e){}
+  const list=Array.isArray(mine)?mine.map(clean).filter(Boolean):[];
+  use(list.length?newest(list):EXAMPLES,list.length?"mine":"example");
+}
+if(SITE){
+  const input=Object.assign(document.createElement("input"),{type:"file",multiple:true,accept:".json,application/json",hidden:true});
+  document.body.appendChild(input);
+  input.addEventListener("change",()=>{readFiles([...input.files]); input.value="";});
+  document.getElementById("src").addEventListener("click",e=>{
+    const a=e.target.closest("button")?.dataset.a;
+    if(a==="pick") input.click();
+    if(a==="back"){note=""; if(SOURCE==="shared") leaveShared(location.hash.startsWith("#r=")?"":location.hash); use(EXAMPLES,"example"); rebuild();}
+  });
+  // files dragged in from outside the page; a card dragged between columns carries no files and is left alone
+  const drop=document.createElement("div"); drop.className="drop"; drop.setAttribute("aria-hidden","true"); drop.innerHTML=`<span>${esc(UI.dropHere)}</span>`;
+  document.body.appendChild(drop);
+  const hasFiles=e=>[...(e.dataTransfer?.types||[])].includes("Files");
+  let depth=0;
+  addEventListener("dragenter",e=>{if(!hasFiles(e)) return; depth++; drop.classList.add("on");});
+  addEventListener("dragleave",e=>{if(!hasFiles(e)) return; if(--depth<=0){depth=0; drop.classList.remove("on");}});
+  addEventListener("dragover",e=>{if(hasFiles(e)){e.preventDefault(); e.dataTransfer.dropEffect="copy";}});
+  addEventListener("drop",async e=>{
+    if(!hasFiles(e)) return; e.preventDefault(); depth=0; drop.classList.remove("on");
+    const items=[...e.dataTransfer.items].filter(i=>i.kind==="file"), en=items.map(i=>i.webkitGetAsEntry?.());
+    readFiles(en.some(Boolean)?await entries(en):[...e.dataTransfer.files]);
+  });
+}
+
+// ---- the two views; the pill slides to the current one ----
+const pill=document.querySelector("nav .pill");
+function movePill(a){pill.style.left=a.offsetLeft+"px"; pill.style.width=a.offsetWidth+"px";}
+new ResizeObserver(()=>{const a=document.querySelector('nav a[aria-current="page"]'); if(a) movePill(a);}).observe(document.querySelector("nav"));   // the tabs shrink to icons on a narrow window
+let boardShown=false, goStart=false;   // goStart: land on the install steps, not the top
+function route(){
+  const v=location.hash==="#pano"?"pano":location.hash==="#sor"&&SITE?"sor":"yazici";
+  closeSheet(true);
+  ["yazici","pano","sor"].forEach(k=>document.getElementById("v-"+k).hidden=v!==k);
+  document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.view===v){a.setAttribute("aria-current","page"); movePill(a);} else a.removeAttribute("aria-current");});
+  if(v==="yazici"){if(!built){buildFigure(); startPrint();} else size();}
+  else if(v==="pano"){cancelAnimationFrame(raf); board(!boardShown); boardShown=true;}
+  else cancelAnimationFrame(raf);
+  scrollTo(0,0);
+  if(goStart&&v==="yazici"){goStart=false; document.getElementById("start").scrollIntoView({block:"start"});}
+}
+addEventListener("hashchange",route);
+function fontsReady(){   // system faces are there at once; this only waits for the document to settle
+  return document.fonts?Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,300))]):Promise.resolve();
+}
+Promise.all([fontsReady(),SITE?openSite():null]).then(()=>{
+  try{route();}                                         // builds and measures the visible view, still hidden
+  finally{requestAnimationFrame(()=>{
+    root.classList.remove("boot");
+    requestAnimationFrame(()=>document.querySelector("nav").classList.add("ready"));   // the pill only slides from now on
+  });}
+  // a face that arrives after the reveal: measure again, so the receipt's strips and the pill match the text
+  if(document.fonts) document.fonts.addEventListener("loadingdone",()=>{
+    const a=document.querySelector('nav a[aria-current="page"]'); if(a) movePill(a);
+  });
+  new ResizeObserver(()=>{if(built) size();}).observe(cap);
+});
+</script>
