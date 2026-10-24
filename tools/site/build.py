@@ -44,7 +44,7 @@ def main():
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     own = {l: json.load(open(os.path.join(HERE, 'real', f'slipt.{l}.json'), encoding='utf-8')) for l in ('tr', 'en')}
-    site = dict(github='https://github.com/sercanylmzzz/vibe-receipts', today=max(example.TODAY, own['en']['end']),
+    site = dict(github='https://github.com/sahmett/vibe-receipts', today=max(example.TODAY, own['en']['end']),
                 receipts={l: [own[l]] + example.receipts(l) for l in ('tr', 'en')}, art=art.cards())
     page = receipts.board_page(site['receipts']['tr'], 'tr', site=site, head=head(a.url.rstrip('/')))
     with open(os.path.join(a.out, 'index.html'), 'w', encoding='utf-8') as f: f.write(page)

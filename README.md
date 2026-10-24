@@ -1,13 +1,10 @@
 # 🧾 vibe-receipts
 
-[![MIT license](https://img.shields.io/github/license/sercanylmzzz/vibe-receipts)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/sercanylmzzz/vibe-receipts)](https://github.com/sercanylmzzz/vibe-receipts/stargazers)
+[![MIT license](https://img.shields.io/github/license/sahmett/vibe-receipts)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/sahmett/vibe-receipts)](https://github.com/sahmett/vibe-receipts/stargazers)
 ![Claude Code skill · plugin](https://img.shields.io/badge/Claude%20Code-skill%20%C2%B7%20plugin-D97757)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB)
 ![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
-
-> A fork of [sahmett/vibe-receipts](https://github.com/sahmett/vibe-receipts) by sahmett (MIT), grown into Slipt: the printer and its video,
-> the board, [the site](https://slipt-phi.vercel.app), share links, invoices, Wrapped and the share kit.
 
 **How long did that "2-hour project" actually take?**
 vibe-receipts turns your Claude Code history into a shareable work-time receipt: the hours you really
@@ -43,7 +40,7 @@ a claude.ai chat, because it reads the Claude Code logs on your machine.
 ### As a skill (copy one folder)
 
 ```bash
-git clone --depth 1 https://github.com/sercanylmzzz/vibe-receipts /tmp/vibe-receipts
+git clone --depth 1 https://github.com/sahmett/vibe-receipts /tmp/vibe-receipts
 mkdir -p ~/.claude/skills && cp -r /tmp/vibe-receipts/skills/vibe-receipts ~/.claude/skills/
 ```
 
@@ -53,7 +50,7 @@ project's `.claude/skills/` instead.
 ### Or as a plugin (easy updates)
 
 ```
-/plugin marketplace add sercanylmzzz/vibe-receipts
+/plugin marketplace add sahmett/vibe-receipts
 /plugin install vibe-receipts@vibe-receipts
 ```
 
@@ -73,7 +70,7 @@ and tells you the headline number, your rhythm, the busiest days, and what got d
 ## Or run it directly
 
 ```bash
-git clone https://github.com/sercanylmzzz/vibe-receipts
+git clone https://github.com/sahmett/vibe-receipts
 python3 vibe-receipts/receipts.py ~/code/my-project
 ```
 
@@ -95,7 +92,7 @@ name, handy for client work.
 Every run prints a `Share:` line, a ready-made caption for the PNG:
 
 ```
-“It's a 2-hour project.” 11h 5m later, $138.14 of tokens. 🧾 github.com/sercanylmzzz/vibe-receipts #vibereceipts
+“It's a 2-hour project.” 11h 5m later, $138.14 of tokens. 🧾 github.com/sahmett/vibe-receipts #vibereceipts
 ```
 
 Post it with **#vibereceipts**. We'd love to see yours.

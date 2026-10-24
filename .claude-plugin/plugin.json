@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "Receipts for your vibe coding — how many hours did you really work with Claude? Measured from your own prompts, with commits as proof.",
   "author": { "name": "sahmett" },
-  "repository": "https://github.com/sercanylmzzz/vibe-receipts",
+  "repository": "https://github.com/sahmett/vibe-receipts",
   "license": "MIT",
   "keywords": ["time-tracking", "productivity", "git", "vibe-coding", "report"]
 }
