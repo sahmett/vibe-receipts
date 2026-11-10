@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# HTML raporu tam sayfa JPEG'e çevirir (retina 2x, alttaki boşluğu kırpar).
-# Kullanım: bash to_jpg.sh output/<repo>-rapor.html
-# Gereksinim: macOS + Google Chrome, python3 + Pillow (pip3 install pillow)
+# Turns the HTML report into a full-page JPEG (retina 2x, empty space at the bottom cropped).
+# Usage: bash to_jpg.sh ~/vibe-receipts/<repo>-report.html
+# Needs: macOS + Google Chrome, python3 + Pillow (pip3 install pillow)
 set -euo pipefail
 HTML="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 OUT="${HTML%.html}.jpg"
