@@ -38,18 +38,25 @@ CODE_W = {'code':1.0, 'config':0.4, 'arch':0.0, 'doc':0.0, 'vendor':0.0, 'gen':0
 # Token value: Anthropic API list prices, $ per million tokens (input, output, cache read).
 # Cache writes cost 1.25x input (5-minute cache) or 2x input (1-hour cache); fast mode doubles everything.
 # Responses from models not listed here are left out of the value (the receipt then shows it as "≥").
-PRICES_AS_OF = '2026-09'
+PRICES_AS_OF = '2026-11'   # from platform.claude.com/docs/en/about-claude/pricing
 PRICES = {
-    'claude-fable-5-1':(10,50,0.25), 'claude-mythos-5-1':(10,50,0.25), 'claude-fable-5':(10,50,1.0),
+    'claude-fable-5-2':(8,40,0.20), 'claude-mythos-5-2':(8,40,0.20),
+    'claude-fable-5-1':(10,50,0.25), 'claude-mythos-5-1':(10,50,0.25), 'claude-fable-5':(10,50,1.0), 'claude-mythos-5':(10,50,1.0),
     'claude-opus-5-5':(4,20,0.20), 'claude-opus-5':(5,25,0.50), 'claude-opus-4-8':(5,25,0.50),
-    'claude-opus-4-7':(5,25,0.50), 'claude-opus-4-6':(5,25,0.50),
-    'claude-sonnet-5-5':(2,10,0.20), 'claude-sonnet-5':(2,10,0.20), 'claude-sonnet-4-6':(3,15,0.30),
-    'claude-haiku-4-5':(1,5,0.10),
+    'claude-opus-4-7':(5,25,0.50), 'claude-opus-4-6':(5,25,0.50), 'claude-opus-4-5':(5,25,0.50),
+    'claude-opus-4-1':(15,75,1.50), 'claude-opus-4':(15,75,1.50),
+    'claude-sonnet-5-5':(2,10,0.10), 'claude-sonnet-5':(2,10,0.20), 'claude-sonnet-4-6':(3,15,0.30),
+    'claude-sonnet-4-5':(3,15,0.30), 'claude-sonnet-4':(3,15,0.30),
+    'claude-haiku-5-5':(0.10,0.50,0.01), 'claude-haiku-4-5':(1,5,0.10),
 }
+# Models with a higher price for long prompts: (prompt tokens above which it applies, the prices then).
+# The prompt is everything the response read: input + cache writes + cache reads.
+PRICES_LONG = {'claude-haiku-5-5':(100_000,(0.50,2.50,0.05))}
 
 # Bulk-copied/moved static content — excluded. Extend for your project.
-VENDOR_RE=re.compile(r'(^|/)(prototypes/|_archive/|vendor/|third_party/)|(^|/)(src/)?ui/.*\.(html|css|js)$')
-GEN_RE=re.compile(r'(pnpm-lock|package-lock|yarn\.lock|poetry\.lock|Cargo\.lock|payload-types|/migrations/|\.min\.(js|css)$)')
+VENDOR_RE=re.compile(r'(^|/)(prototypes|_archive|vendor|third_party|node_modules)/')
+# Lock files, build output, snapshots, generated types, and drawings/notebooks (not typed line by line). Paths are lower-cased first.
+GEN_RE=re.compile(r'(pnpm-lock|package-lock|\.lock$|(^|/)go\.sum$|payload-types|/migrations/|(^|/)(dist|build)/|\.min\.(js|css)$|\.snap$|\.(svg|ipynb)$)')
 
 def kind(path):
     p=path.lower()
@@ -85,7 +92,7 @@ L={
    fb_title='No Claude session logs — estimated from commits',
    fb_note='Estimated from your commit sessions.',
    k_est='Commit estimate',
-   p_repo='Repo',p_range='Range',p_time='Working time',p_prompts='Prompts',p_commits='Commits',p_code='Effective code',p_lines='lines',
+   p_repo='Repo',p_range='Range',p_logs='Logs',p_time='Working time',p_prompts='Prompts',p_commits='Commits',p_code='Effective code',p_lines='lines',
    p_rhythm='Rhythm',rh='Q1 (1st quartile) {q1} · median (P50) {med} · Q3 (3rd quartile) {q3} · IQR (interquartile range) {iqr} · P90 {p90} · Tukey upper fence (Q3+1.5·IQR) {tk}  ({n} gaps)',p_est='Commit estimate (fallback)',p_none='No prompts in range — using the commit estimate.',
    e_none='No commits or prompts found in this range.',
    p_left_out='from your prompts; {n} older/newer commits left out, use --since/--until to include them',
@@ -128,7 +135,7 @@ L={
    fb_title="Claude oturum kaydı yok — commit'lerden tahmin",
    fb_note="Commit oturumlarından tahmin.",
    k_est='Commit tahmini',
-   p_repo='Repo',p_range='Aralık',p_time='Çalışma süresi',p_prompts='Prompt',p_commits='Commit',p_code='Etkin kod',p_lines='satır',
+   p_repo='Repo',p_range='Aralık',p_logs='Kayıtlar',p_time='Çalışma süresi',p_prompts='Prompt',p_commits='Commit',p_code='Etkin kod',p_lines='satır',
    p_rhythm='Ritim',rh='Q1 (1. çeyrek) {q1} · medyan (P50) {med} · Q3 (3. çeyrek) {q3} · IQR (çeyrekler arası aralık) {iqr} · P90 {p90} · Tukey üst çiti (Q3+1,5·IQR) {tk}  ({n} aralık)',p_est='Commit tahmini (yedek)',p_none='Aralıkta prompt yok — commit tahmini kullanılıyor.',
    e_none='Bu aralıkta commit ya da prompt bulunamadı.',
    p_left_out="prompt'larından alındı; dışında kalan {n} commit dahil edilmedi, eklemek için --since/--until kullan",
@@ -200,21 +207,27 @@ def parse_ts(o):
     try: return datetime.datetime.fromisoformat(t.replace('Z','+00:00')).timestamp()
     except Exception: return None
 
-def text_of(c):
-    if isinstance(c,str): return c
-    if isinstance(c,list): return ' '.join(x.get('text','') for x in c if isinstance(x,dict) and x.get('type')=='text')
-    return ''
+def typed_text(c):
+    """The text you typed. One message can hold several text blocks; the ones the harness put in
+    (see NOISE_TAG) are dropped block by block, so a system reminder in front of your prompt does not hide it."""
+    if isinstance(c,str): c=[{'type':'text','text':c}]
+    if not isinstance(c,list): return ''
+    return ' '.join(x.get('text') or '' for x in c if isinstance(x,dict) and x.get('type')=='text' and not NOISE_TAG.search(x.get('text') or '')).strip()
+
+def read_log(tf,only=None):
+    """The records of one session log (only the lines that contain `only`, when given)."""
+    with open(tf,encoding='utf-8',errors='ignore') as f:
+        for ln in f:
+            if only and only not in ln: continue
+            try: o=json.loads(ln)
+            except Exception: continue
+            if isinstance(o,dict): yield o
 
 def load_prompts(dirs,since,until):
     """Timestamps of what YOU put in: typed messages + answers to Claude's AskUserQuestion.
     Tool results, Claude's replies, subagent traffic, compaction summaries, IDE/system
     injections and interrupt markers are not prompts."""
-    recs=[]
-    for d in dirs:
-        for tf in glob.glob(os.path.join(d,'*.jsonl')):
-            for ln in open(tf,errors='ignore'):
-                try: recs.append(json.loads(ln))
-                except Exception: continue
+    recs=[o for d in dirs for tf in glob.glob(os.path.join(d,'*.jsonl')) for o in read_log(tf)]
     ask_ids=set()
     for o in recs:
         if o.get('type')=='assistant':
@@ -233,8 +246,8 @@ def load_prompts(dirs,since,until):
         if results:
             if any(x.get('tool_use_id') in ask_ids for x in results): out.add(ts)   # your decision
             continue                                                                 # tool output
-        t=text_of(c)
-        if not t.strip() or 'Request interrupted' in t or NOISE_TAG.search(t): continue
+        t=typed_text(c)
+        if not t or t.startswith('[Request interrupted'): continue
         out.add(ts)
     return sorted(out)
 
@@ -251,10 +264,7 @@ def load_usage(dirs,since,until):
     for d in dirs:
         for tf in glob.glob(os.path.join(d,'**','*.jsonl'),recursive=True):
             sub=f'{os.sep}subagents{os.sep}' in tf
-            for ln in open(tf,errors='ignore'):
-                if '"usage"' not in ln: continue
-                try: o=json.loads(ln)
-                except Exception: continue
+            for o in read_log(tf,only='"usage"'):
                 m=o.get('message')
                 if o.get('type')!='assistant' or not isinstance(m,dict) or not isinstance(m.get('usage'),dict): continue
                 ts=parse_ts(o)
@@ -289,7 +299,9 @@ def token_value(per,mid_model,w1h,fast):
         if not mm: continue                                                   # <synthetic> / no model
         k=re.sub(r'(-\d{8})?([\[@].*)?$','',mm)                              # drop date / [1m] / @version suffixes
         if k not in PRICES: v['unpriced']+=1; continue
-        inp,out,rd=(x/1e6*(2 if mid in fast else 1) for x in PRICES[k])
+        prompt=p['input_tokens']+p['cache_creation_input_tokens']+p['cache_read_input_tokens']
+        price=PRICES_LONG[k][1] if k in PRICES_LONG and prompt>PRICES_LONG[k][0] else PRICES[k]
+        inp,out,rd=(x/1e6*(2 if mid in fast else 1) for x in price)
         w1=min(w1h.get(mid,0),p['cache_creation_input_tokens']); w5=p['cache_creation_input_tokens']-w1
         v['input']+=p['input_tokens']*inp; v['cache_write']+=w5*inp*1.25+w1*inp*2
         v['cache_read']+=p['cache_read_input_tokens']*rd; v['output']+=p['output_tokens']*out
@@ -306,14 +318,25 @@ def short(n):
             v=n/div; return (f'{v:.2f}'.rstrip('0').rstrip('.') if v<10 else f'{v:.1f}'.rstrip('0').rstrip('.') if v<100 else f'{v:.0f}')+suf
     return str(int(n))
 
+def day_arg(s):
+    try: return datetime.datetime.strptime(s,'%Y-%m-%d').strftime('%Y-%m-%d')
+    except ValueError: raise argparse.ArgumentTypeError(f'{s!r} is not a day like 2026-06-01')
+
+def break_arg(s):
+    if s.strip().lower()=='auto': return 'auto'
+    try: v=float(s)
+    except ValueError: v=0
+    if not 0<v<float('inf'): raise argparse.ArgumentTypeError(f'{s!r} is not a number of minutes above 0 (or "auto")')
+    return v
+
 def main():
     ap=argparse.ArgumentParser(description='Working time from your Claude Code prompts (+ git commits for context)')
     ap.add_argument('repo',nargs='?',help='folder to analyse, git repo or not (default: .; leave it out with --board to only rebuild the board)')
-    ap.add_argument('--since',default='0000-00-00',help='first day YYYY-MM-DD')
-    ap.add_argument('--until',default='9999-99-99',help='last day YYYY-MM-DD')
+    ap.add_argument('--since',type=day_arg,help='first day YYYY-MM-DD')
+    ap.add_argument('--until',type=day_arg,help='last day YYYY-MM-DD')
     ap.add_argument('--author',help='only commits by this author (git --author pattern)')
     ap.add_argument('--transcripts',action='append',help='Claude log folder (overrides auto-detection, repeatable)')
-    ap.add_argument('--break','--idle',dest='idle',metavar='MIN',default='auto',help=f'break threshold in minutes (--idle is the old name); default "auto" = your own Tukey threshold (Q3+1.5·IQR), at most {CAP} min')
+    ap.add_argument('--break','--idle',dest='idle',metavar='MIN',type=break_arg,default='auto',help=f'break threshold in minutes (--idle is the old name); default "auto" = your own Tukey threshold (Q3+1.5·IQR), at most {CAP} min')
     ap.add_argument('--lang',choices=sorted(L),default=default_lang(),help='report language (default: from $LANG, else en)')
     ap.add_argument('--name',help='project name shown in the report (default: repo folder name)')
     ap.add_argument('--out',default=os.path.expanduser('~/vibe-receipts'),help='output folder (default ~/vibe-receipts)')
@@ -337,6 +360,7 @@ def main():
     ap.add_argument('--wrapped',metavar='YEAR',nargs='?',const=str(datetime.date.today().year),help='with no repo: your year from the archive as a story, <out>/wrapped-<year>.html and a 1080x1920 wrapped-<year>.png (default: this year)')
     a=ap.parse_args()
     a.out=os.path.abspath(os.path.expanduser(a.out))
+    since,until=a.since or '0000-00-00',a.until or '9999-99-99'
     T=L[a.lang]; e=html.escape
     if a.wrapped and a.repo is None:   # the year in review, from the archive
         import sys; sys.path.insert(0,os.path.dirname(os.path.abspath(__file__))); import wrapped
@@ -348,7 +372,7 @@ def main():
         return
     if a.invoice and a.repo is None:   # an invoice from the archive, no new run
         import sys; sys.path.insert(0,os.path.dirname(os.path.abspath(__file__))); import invoice
-        htmlp,pdf,recs=invoice.build_invoice(a.out,a.invoice,a.lang,find_chrome(),status=a.status or 'due',since=a.since,until=a.until,
+        htmlp,pdf,recs=invoice.build_invoice(a.out,a.invoice,a.lang,find_chrome(),status=a.status or 'due',since=since,until=until,
             rate=a.rate,currency=a.currency,tax=a.tax,bill_from=a.bill_from,bill_to=a.bill_to,number=a.number,mark_billed=a.mark_billed)
         mins=sum(r['min'] for r in recs)
         print(f"Invoice: {len(recs)} receipts, {mins//60}{T['h']} {mins%60:02d}{T['m']}"+(f", rate {a.rate:g}" if a.rate else " (timesheet, no rate)"))
@@ -360,26 +384,27 @@ def main():
         print("Board:",build_board(a.out,a.lang)); return
     a.repo=a.repo or '.'
 
-    def hm(s):
-        mm=int(round(s/60)); return f"{mm//60}{T['h']} {mm%60:02d}{T['m']}"
+    def hmm(mm): return f"{mm//60}{T['h']} {mm%60:02d}{T['m']}"
+    def hm(s): return hmm(int(round(s/60)))
     def mins(x): return f"{x:.1f} {'dk' if a.lang=='tr' else 'min'}".replace('.',',' if a.lang=='tr' else '.')
     def dow(d): return T['dow'][datetime.date.fromisoformat(d).weekday()]
 
     repo=os.path.realpath(a.repo)
     name=a.name or os.path.basename(repo)
+    fname=re.sub(r'[\\/:\x00-\x1f]+','-',name).strip('. ') or 'project'   # the name as a file name
     dirs=a.transcripts or claude_dirs(repo)
-    prompts=load_prompts(dirs,a.since,a.until)
-    try: commits=load_commits(repo,a.author,a.since,a.until)
+    prompts=load_prompts(dirs,since,until)
+    try: commits=load_commits(repo,a.author,since,until)
     except subprocess.CalledProcessError: commits=[]   # not a git repo, or no commits yet
     except FileNotFoundError: commits=[]               # git is not installed
     # No range given: the prompts set it, so the receipt's period, commits and lines cover the same days as the hours
     left_out=0
-    if prompts and a.since=='0000-00-00' and a.until=='9999-99-99':
+    if prompts and not a.since and not a.until:
         p0,p1=day_of(prompts[0]),day_of(prompts[-1])
         kept=[c for c in commits if p0<=day_of(c['t'])<=p1]; left_out=len(commits)-len(kept); commits=kept
     gitst='ok' if commits else ('nogit' if not shutil.which('git') else 'norepo' if subprocess.run(['git','-C',repo,'rev-parse','--git-dir'],capture_output=True).returncode else 'none')
     gitmsg=f"{T['g_why'][gitst]}. {T['g_tail']}" if gitst!='ok' else ''
-    tok,runs,subagents,mix,subtypes,val=load_usage(dirs,a.since,a.until)
+    tok,runs,subagents,mix,subtypes,val=load_usage(dirs,since,until)
     vtxt=('≥ ' if val['unpriced'] else '')+usd(val['total'])                                     # token value as shown
     tread=tok['input_tokens']+tok['cache_creation_input_tokens']+tok['cache_read_input_tokens']   # context Claude processed
     twrote=tok['output_tokens']                                                                     # what Claude wrote
@@ -389,7 +414,7 @@ def main():
     gaps=sorted((prompts[i]-prompts[i-1])/60 for i in range(1,len(prompts)))
     med,q1,q3,p90=pctl(gaps,50),pctl(gaps,25),pctl(gaps,75),pctl(gaps,90)
     tukey=q3+1.5*(q3-q1)
-    if a.idle.strip().lower()!='auto': mode,idle='fixed',float(a.idle)
+    if a.idle!='auto':                 mode,idle='fixed',a.idle
     elif len(gaps)>=MIN_GAPS:          mode,idle=('capped',float(CAP)) if tukey>CAP else ('auto',round(tukey,1))
     else:                              mode,idle='few',float(IDLE)
     modetxt=T['mode_'+mode].format(tk=mins(tukey),cap=mins(CAP))
@@ -431,6 +456,10 @@ def main():
     dprompt={}
     for t in prompts: dprompt[day_of(t)]=dprompt.get(day_of(t),0)+1
     days=sorted(set(dcom)|set(dprompt))
+    # whole minutes per day that add up to the total, so the daily table, the CSV and the archive match the headline
+    wmin=dict(zip(days,split_minutes([dwork.get(d,0) for d in days],work)))
+    emin=dict(zip(days,split_minutes([dest.get(d,0) for d in days],est)))
+    dmin=wmin if has_p else emin
     d0,d1=days[0],days[-1]
     span=(datetime.date.fromisoformat(d1)-datetime.date.fromisoformat(d0)).days+1   # calendar days
     active_days=len(dprompt if has_p else dcom)                                       # days you actually worked
@@ -441,6 +470,7 @@ def main():
 
     print(f"{T['p_repo']:<15}: {repo}")
     print(f"{T['p_range']:<15}: {d0} → {d1}"+(f"   ({T['p_left_out'].format(n=left_out)})" if left_out else ''))
+    if dirs: print(f"{T['p_logs']:<15}: "+', '.join(d.replace(os.path.expanduser('~'),'~',1) for d in dirs))
     if has_p:
         print(f"{T['p_time']:<15}: {hm(work)}   ({len(prompts)} {T['prompts']}, {len(dirs)} dir)")
         print(f"{T['k_thr']}: {mins(idle)}   ({modetxt})")
@@ -533,7 +563,7 @@ def main():
     for d in days:
         w=dtotal.get(d,0); l=dcode.get(d,0)
         P.append(f'<tr><td>{d[5:]}</td><td>{dow(d)}</td>'+(f'<td class="r">{dprompt.get(d,0)}</td>' if has_p else '')
-                 +f'<td><div style="display:flex;align-items:center;gap:8px">{bar(w,mx,"#a78bfa")}<span style="width:64px;text-align:right">{hm(w)}</span></div></td>'
+                 +f'<td><div style="display:flex;align-items:center;gap:8px">{bar(w,mx,"#a78bfa")}<span style="width:64px;text-align:right">{hmm(dmin[d])}</span></div></td>'
                  +(f'<td class="r">{dcom.get(d,0)}</td><td class="r" style="color:#86efac">+{l:,.0f}</td><td class="r">{(l/(w/3600)) if w else 0:,.0f}</td>' if commits else '')+'</tr>')
     P.append(f'<tr class="tot"><td colspan="2">{T["tot"]}</td>'+(f'<td class="r">{len(prompts):,}</td>' if has_p else '')
              +f'<td>{hm(total)}</td>'+(f'<td class="r">{len(commits)}</td><td class="r">+{code:,.0f}</td><td class="r">{lph:,.0f}</td>' if commits else '')+'</tr>')
@@ -543,7 +573,7 @@ def main():
         P.append(f'<h2>{T["s_sum"]}</h2>')
         for d in sorted(dsubj):
             items=''.join(f'<li>{e(s)}</li>' for s in dsubj[d])
-            P.append(f'<div class="dayblk"><h3>{d[5:]} · {dow(d)} <span class="hrs">{hm(dtotal.get(d,0))} · {dcom[d]} {T["commits"]}</span></h3><ul>{items}</ul></div>')
+            P.append(f'<div class="dayblk"><h3>{d[5:]} · {dow(d)} <span class="hrs">{hmm(dmin[d])} · {dcom[d]} {T["commits"]}</span></h3><ul>{items}</ul></div>')
 
     P.append(f'<div class="foot">🧾 vibe-receipts · {e(name)} · {datetime.date.today()}</div></div></body></html>')
 
@@ -579,9 +609,9 @@ def main():
     value=(T['rc_value'],vtxt) if val['total'] else None
     rargs=(T,a.lang,name,a.built,period,span,active_days,d1,items,stats,hm(total),value,thr)
     card,H=receipt_html(*rargs)
-    cardp=os.path.join(a.out,f'{name}-receipt.html')
+    cardp=os.path.join(a.out,f'{fname}-receipt.html')
     open(cardp,'w',encoding='utf-8').write(card)
-    pngp=os.path.join(a.out,f'{name}-receipt.png')
+    pngp=os.path.join(a.out,f'{fname}-receipt.png')
     if a.no_png: pass
     elif render_png(cardp,pngp,CARD_W,H): print("PNG :",pngp)
     else: print(f"PNG : skipped, no Chrome/Chromium found (set CHROME=/path/to/chrome). Card HTML: {cardp}")
@@ -594,7 +624,7 @@ def main():
             paperh,PH=receipt_html(*rargs,bare=True)
             open(os.path.join(tmp,'paper.html'),'w',encoding='utf-8').write(paperh)
             ok=render_png(os.path.join(tmp,'paper.html'),os.path.join(tmp,'paper.png'),520,PH,scale=3,transparent=True)
-            vid=ok and render_video(os.path.join(tmp,'paper.png'),os.path.join(a.out,f'{name}-receipt.mp4'),
+            vid=ok and render_video(os.path.join(tmp,'paper.png'),os.path.join(a.out,f'{fname}-receipt.mp4'),
                 dict(quote=quote,later=T['vid_later'].format(t=T['share_t'](m//60,m%60)),cta=T['vid_cta'],
                      url=SITE_URL.split('//')[1],tag='#vibereceipts'))
         finally: shutil.rmtree(tmp,ignore_errors=True)
@@ -614,7 +644,7 @@ def main():
              stats=stats,value=round(val['total'],2) if val['total'] else None,value_text=vtxt if val['total'] else None,thr=list(thr),
              client=client,status=a.status or old.get('status') or ('due' if client else 'personal'),
              # for --wrapped: minutes and prompts per day, prompts per weekday x hour (local time), tokens and the model mix
-             days={d:round(dtotal.get(d,0)/60) for d in days if dtotal.get(d,0)},dprompts=dict(sorted(dprompt.items())),
+             days={d:dmin[d] for d in days if dtotal.get(d,0)},dprompts=dict(sorted(dprompt.items())),
              clock=clock_of(prompts),tokens=[tread,twrote],models=[[f,pc] for f,pc in mix],
              lang=a.lang,made=datetime.datetime.now().isoformat(timespec='seconds'),
              L=dict(kind=T['rc_kind'],project=T['rc_project'],built=T['rc_built'],period=T['rc_period'],active=T['rc_active'],qty=T['rc_qty'],
@@ -627,17 +657,17 @@ def main():
         P.insert(-1,f'<h2>{T["s_receipt"]}</h2><div class="card rcpt"><img src="data:image/png;base64,{b64}" alt="{e(name)} receipt">'
                     f'<div class="note">{T["rc_share_note"]}</div><div class="share">{e(share)}</div></div>')
 
-    out=os.path.join(a.out,f'{name}-report.html')
+    out=os.path.join(a.out,f'{fname}-report.html')
     open(out,'w',encoding='utf-8').write('\n'.join(P))
-    csvp=os.path.join(a.out,f'{name}-daily.csv')
+    csvp=os.path.join(a.out,f'{fname}-daily.csv')
     with open(csvp,'w',encoding='utf-8') as f:
         f.write('date,prompts,work_min,commits,effective_lines,added,deleted,commit_estimate_min\n')
         for d in days:
-            f.write(f'{d},{dprompt.get(d,0)},{dwork.get(d,0)/60:.0f},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{dest.get(d,0)/60:.0f}\n')
+            f.write(f'{d},{dprompt.get(d,0)},{wmin[d]},{dcom.get(d,0)},{dcode.get(d,0):.0f},{dadd.get(d,0)},{ddel.get(d,0)},{emin[d]}\n')
     # the share kit: a ready post per platform with this receipt's numbers, next to the PNG (and the MP4)
     import sys; sys.path.insert(0,os.path.dirname(os.path.abspath(__file__))); import share as sharekit
     plink=share_link(rec,preview=True) if a.share else SITE_URL
-    kitp=os.path.join(a.out,f'{name}-share.md')
+    kitp=os.path.join(a.out,f'{fname}-share.md')
     with open(kitp,'w',encoding='utf-8') as f:
         f.write(sharekit.kit(rec,a.lang,quote,plink,SITE_URL,png=pngp if os.path.exists(pngp) and not a.no_png else None,mp4=vid or None))
     print("HTML:",out); print("CSV :",csvp); print("JSON:",archp); print("Kit :",kitp)
